@@ -7,6 +7,9 @@
 //   rathena-migrate [--plan] [--apply] [--md5-challenge-shim] [--legacy-pass-scheme=plain|md5]
 //                   [--grace-days=N] [--gate-char-reached-mail] [--gate-no-legacy-writers]
 //                   [--baseline=<fingerprint>]...
+//
+// The unmodified legacy baselines (main.sql, main.sql + web.sql at d4b8e7b) are built in;
+// --baseline accepts an additional, operator-verified fingerprint.
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -15,27 +18,13 @@
 #include "rathena/persistence/db_config.hpp"
 #include "rathena/persistence/errors.hpp"
 #include "rathena/persistence/migrate/migrator.hpp"
+#include "rathena/persistence/migrate/mysql_target.hpp"
 #include "rathena/persistence/mysql.hpp"
 
 namespace mig = rathena::persistence::migrate;
 using namespace rathena::persistence;
 
 namespace {
-
-/// MySQL-backed MigrationTarget. Pending: needs the MySQL client wiring in MysqlConnection.
-class MysqlMigrationTarget final : public mig::MigrationTarget {
-public:
-	explicit MysqlMigrationTarget(MysqlConnection& c) : conn_(c) {}
-	mig::SchemaSnapshot inspect_schema() override { throw NotImplemented("information_schema inspection"); }
-	std::vector<std::string> applied_versions() override { throw NotImplemented("schema_migrations read"); }
-	mig::OrphanReport orphan_report() override { throw NotImplemented("orphan report queries"); }
-	void apply(std::string_view, const std::vector<Statement>& st) override {
-		if (!conn_.execute_in_transaction(st)) throw RepositoryError("migration step failed");
-	}
-
-private:
-	MysqlConnection& conn_;
-};
 
 void print_plan() {
 	for (const auto& s : mig::migration_plan())
@@ -47,6 +36,7 @@ void print_plan() {
 
 int main(int argc, char** argv) {
 	mig::MigrationOptions opts;
+	opts.known_baselines = mig::known_legacy_baselines(); // --baseline= adds to these
 	for (int i = 1; i < argc; ++i) {
 		const std::string_view a = argv[i];
 		if (a == "--plan") {
@@ -80,7 +70,7 @@ int main(int argc, char** argv) {
 		std::cerr << "target: " << cfg.main.redacted() << (opts.dry_run ? " (dry run)" : "") << "\n";
 		MysqlConnection conn(cfg.main);
 		conn.connect();
-		MysqlMigrationTarget target(conn);
+		mig::MysqlMigrationTarget target(conn, opts.tables);
 		const auto run = mig::Migrator(target, opts).run();
 		for (const auto& s : run.steps)
 			std::cout << mig::to_string(s.id) << ": " << mig::to_string(s.outcome)

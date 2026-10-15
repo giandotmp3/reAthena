@@ -37,6 +37,7 @@ add_library(rathena_persistence
   src/migrate/schema.cpp
   src/migrate/plan.cpp
   src/migrate/migrator.cpp
+  src/migrate/mysql_target.cpp
 )
 add_library(rathena::persistence ALIAS rathena_persistence)
 
