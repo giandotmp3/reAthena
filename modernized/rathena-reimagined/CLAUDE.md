@@ -26,9 +26,9 @@ This is a hybrid. **login-server** and **web-server** are full C++20 rebuilds: d
 | `login-server/` | Auth order, refusal codes, tickets (30 s), online state, IP ban + failure counter independent of the log, web token (retry ≤ 20), Argon2id password hashing (PHC strings, OWASP default cost, lazy rehash of plaintext/MD5/weaker rows) on a bounded worker pool, char-server registry, client handler stubs | BR-LOGIN-001…039 (004 → "Removed"), BR-INTER-004, 005, 006, 014, 017 | 91 (6) |
 | `web-server/` | 16 POST routes, WebToken required on **all** routes including `*/load`, nlohmann/json only, emblem validation including the transparency limit, config merge semantics, party booking, CORS | BR-WEB-001…017 | 104 (2) |
 | `char-rules/` | charlife, PIN, party, guild, mail (RODEX only), registry, clan, GM (authority re-check), session rules, **save→auth barrier per char_id** | BR-CHAR-001…055, BR-INTER-008, 009, 015, 018, 019 | 121 (9) |
-| `map-rules/` | combat, progression, economy, trade, skills, anticheat; renewal + pre-renewal; property tests; `manifest/map_modules.tsv` (each `src/map/*.cpp` → one module); golden vectors in `tests/golden/` | BR-MAP-001…061 | 119 (0) |
+| `map-rules/` | combat, progression, economy, trade, skills, anticheat; renewal + pre-renewal; property tests; `manifest/map_modules.tsv` (each `src/map/*.cpp` → one module); golden vectors in `tests/golden/` | BR-MAP-001…061 | 120 (0) |
 
-**Totals: 818 tests. 795 pass and 23 skip as pending, 0 fail, when `RATHENA_TEST_PG_URL` is set; without it the 50 PostgreSQL tests skip too. The SQLite tests always run: they need no server.** All 191 rule IDs appear in at least one test.
+**Totals: 819 tests. 796 pass and 23 skip as pending, 0 fail, when `RATHENA_TEST_PG_URL` is set; without it the 50 PostgreSQL tests skip too. The SQLite tests always run: they need no server.** All 191 rule IDs appear in at least one test.
 
 Pending tests are `GTEST_SKIP() << "PENDING <BR-ID>"`. They are mostly waiting on golden vectors from an instrumented legacy build or verbatim packet headers. Pending rule IDs:
 BR-CHAR-022, 028, 031, 032, 034, 042, 047 · BR-INTER-001, 003, 006, 007, 010, 013, 017, 018 · BR-LOGIN-001, 036, 037, 039 · BR-WEB-010 (client-capture gate), 016 (httplib end-to-end).

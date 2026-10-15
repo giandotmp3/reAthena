@@ -34,7 +34,15 @@ TEST(Economy, BR_MAP_003_BoxBlockedAtNinetyPercentOrTenFreeSlots) {
 	EXPECT_TRUE(ec::can_open_box(899, 1000, 50, re()));
 	EXPECT_FALSE(ec::can_open_box(0, 1000, 10, re()));
 	EXPECT_TRUE(ec::can_open_box(0, 1000, 11, re()));
-	EXPECT_TRUE(ec::can_open_box(900, 1000, 50, pre_re())); // weight gate is renewal-only
+	EXPECT_TRUE(ec::can_open_box(1799, 2000, 50, re())) << "89.95% truncates to 89";
+}
+
+TEST(Economy, BR_MAP_003_PreRenewalBoxWeightGateIsSeventyPercent) {
+	// pc_isUseitem checks open_box_weight_rate in both modes; pre-renewal ships 70.
+	const auto pre = mr::BattleConfig::shipped(mr::Mode::PreRenewal);
+	EXPECT_FALSE(ec::can_open_box(700, 1000, 50, pre));
+	EXPECT_TRUE(ec::can_open_box(699, 1000, 50, pre));
+	EXPECT_FALSE(ec::can_open_box(900, 1000, 50, pre));
 }
 
 TEST(Economy, BR_MAP_035_LinearDropScalingClamped) {

@@ -31,7 +31,10 @@ bool can_open_box(std::int32_t weight, std::int32_t max_w, std::int32_t free_slo
 	if (free_slots <= 10) {
 		return false;
 	}
-	if (cfg.mode == Mode::Renewal && static_cast<std::int64_t>(weight) * 100 >= static_cast<std::int64_t>(max_w) * 90) {
+	// Both modes check the weight; only the threshold differs (the earlier renewal-only gate was
+	// wrong: legacy applies open_box_weight_rate unconditionally).
+	const std::int64_t percent = static_cast<std::int64_t>(weight) * 100 / std::max<std::int64_t>(max_w, 1);
+	if (percent >= cfg.open_box_weight_rate) {
 		return false;
 	}
 	return true;

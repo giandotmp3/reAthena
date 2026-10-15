@@ -23,7 +23,9 @@ enum class WeightState : std::uint8_t { Normal, Weight50, Weight90 };
 /// BR-MAP-002: >= 70% (RE) / 50% (pre-RE) -> WEIGHT50; >= 90% -> WEIGHT90.
 WeightState weight_state(std::int32_t weight, std::int32_t max_weight, const BattleConfig& cfg);
 
-/// BR-MAP-003: opening a box is blocked at >= 90% weight (RE only) or <= 10 free inventory slots.
+/// BR-MAP-003: opening a box (or using a cash item) is blocked when the weight percentage
+/// ([weight x 100 / max_weight], as pc_getpercentweight) is >= open_box_weight_rate (shipped: 90
+/// renewal, 70 pre-renewal), or with <= 10 free inventory slots. pc.cpp pc_isUseitem.
 bool can_open_box(std::int32_t weight, std::int32_t max_weight, std::int32_t free_slots, const BattleConfig& cfg);
 
 // --- Drops ------------------------------------------------------------------------------------
