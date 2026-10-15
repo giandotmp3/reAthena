@@ -16,6 +16,7 @@
 #include "socket.hpp"
 #include "timer.hpp"
 #include "sql.hpp"
+#include "tickstats.hpp"
 #endif
 
 #ifndef _WIN32
@@ -384,6 +385,7 @@ int32 Core::start( int32 argc, char **argv ){
 #endif
 	timer_init();
 	socket_init();
+	tickstats_init();
 #endif
 
 	this->set_status( e_core_status::CORE_INITIALIZED );
@@ -407,6 +409,7 @@ int32 Core::start( int32 argc, char **argv ){
 				this->handle_main( next );
 			}
 		}
+		tickstats_final();
 #endif
 		this->set_status( e_core_status::STOPPING );
 	}

@@ -45,6 +45,7 @@
 #include "mmo.hpp"
 #include "showmsg.hpp"
 #include "strlib.hpp"
+#include "tickstats.hpp"
 #include "timer.hpp"
 
 // Reuseable global packet buffer to prevent too many allocations
@@ -920,7 +921,13 @@ int32 do_sockets(t_tick next)
 	timeout.tv_usec = (long)(next%1000*1000);
 
 	memcpy(&rfd, &readfds, sizeof(rfd));
+#ifndef MINICORE
+	tickstats_wait_begin();
+#endif
 	ret = sSelect(fd_max, &rfd, nullptr, nullptr, &timeout);
+#ifndef MINICORE
+	tickstats_wait_end();
+#endif
 
 	if( ret == SOCKET_ERROR )
 	{
@@ -934,7 +941,13 @@ int32 do_sockets(t_tick next)
 #else
 	// Epoll based Event Dispatcher
 
+#ifndef MINICORE
+	tickstats_wait_begin();
+#endif
 	ret = epoll_wait( epfd, epevents, epoll_maxevents, next );
+#ifndef MINICORE
+	tickstats_wait_end();
+#endif
 
 	if( ret == SOCKET_ERROR ){
 		if( sErrno != S_EINTR ){

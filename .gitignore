@@ -157,4 +157,5 @@ generated
 /smoke-logs
 /build-golden
 /corpus-run
+/build-simtick
 /.claude/worktrees/

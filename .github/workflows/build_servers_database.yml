@@ -2,7 +2,8 @@ name: Servers on SQLite and PostgreSQL
 # build_servers_database.yml
 # Builds the servers with both database backends, runs the Sql/SqlStmt contract tests on SQLite
 # and PostgreSQL, then drives a full login -> char -> map session (tools/ci/smoke.sh) on each,
-# and finally runs the script buildin corpus through the real VM (tools/ci/script_corpus.sh).
+# runs the script buildin corpus through the real VM (tools/ci/script_corpus.sh)
+# and takes a small sim-tick measurement (tools/ci/simtick.sh, 50 bots; informational).
 
 concurrency:
   group: ${{ github.repository }}-${{ github.workflow }}-${{ github.ref }}
@@ -96,6 +97,13 @@ jobs:
       - name: Script buildin corpus (headless VM)
         run: tools/ci/script_corpus.sh
 
+      # Map-server main-loop time under 50 walking/chatting bots (the NFR is p99 <= 50 ms at
+      # 1,000 CCU; see modernized/rathena-reimagined/PERFORMANCE.md). Shared runners are noisy,
+      # so the threshold is generous and a failure does not fail the workflow.
+      - name: Sim-tick measurement (50 bots)
+        continue-on-error: true
+        run: tools/ci/simtick.sh --bin . --ccu 50 --ramp 10 --settle 5 --duration 30 --max-p99-ms 200
+
       - name: Server logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -104,6 +112,9 @@ jobs:
           path: |
             smoke-logs/
             corpus-run/map.log
+            build-simtick/run-*/logs/
+            build-simtick/run-*/result.json
+            build-simtick/run-*/tickstats.jsonl
           if-no-files-found: ignore
 
   # The other platforms: build with the embedded SQLite engine and run the contract tests.

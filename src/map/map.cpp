@@ -19,6 +19,7 @@
 #include <common/showmsg.hpp>
 #include <common/socket.hpp> // WFIFO*()
 #include <common/strlib.hpp>
+#include <common/tickstats.hpp>
 #include <common/timer.hpp>
 #include <common/utilities.hpp>
 #include <common/utils.hpp>
@@ -5328,6 +5329,7 @@ bool MapServer::initialize( int32 argc, char *argv[] ){
 	mapgenerator_get_options(argc, argv);
 #endif
 	cli_get_options(argc,argv);
+	tickstats_set_users_callback( map_usercount );
 
 	map_config_read(MAP_CONF_NAME);
 
