@@ -27,7 +27,10 @@
 #include "mob.hpp"
 #include "pc.hpp"
 #include "pc_groups.hpp"
+#include "rules_bridge.hpp"
 #include "trade.hpp"
+
+#include <rathena/map_rules/progression.hpp>
 
 static DBMap* party_db; // int32 party_id -> struct party_data* (releases data)
 static DBMap* party_booking_db; // uint32 char_id -> struct party_booking_ad_info* (releases data) // Party Booking [Spiria]
@@ -1257,17 +1260,15 @@ void party_exp_share(struct party_data* p, block_list* src, t_exp base_exp, t_ex
 	if (c < 1)
 		return;
 
-	base_exp/=c;
-	job_exp/=c;
+	// BR-MAP-028 (map-rules): exp / c each, then the even share bonus (100 + bonus*(c-1))% in double,
+	// capped at MAX_EXP.
+	base_exp = rules::progression::even_share( base_exp, c, MAX_EXP, rules_config() );
+	job_exp = rules::progression::even_share( job_exp, c, MAX_EXP, rules_config() );
 	zeny/=c;
 
 	if (battle_config.party_even_share_bonus && c > 1) {
 		double bonus = 100 + battle_config.party_even_share_bonus*(c-1);
 
-		if (base_exp)
-			base_exp = (t_exp) cap_value(base_exp * bonus/100, 0, MAX_EXP);
-		if (job_exp)
-			job_exp = (t_exp) cap_value(job_exp * bonus/100, 0, MAX_EXP);
 		if (zeny)
 			zeny = (uint32)cap_value(zeny * bonus/100, INT_MIN, INT_MAX);
 	}

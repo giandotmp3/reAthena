@@ -19,19 +19,25 @@ namespace rathena::map_rules::economy {
 std::int32_t max_weight(std::int32_t job_base_weight, std::int32_t str, std::int32_t enlarge_weight_lv,
                         std::int32_t modifiers = 0);
 
+/// BR-MAP-002/003: pc_getpercentweight, bit for bit: [weight x 100 / max(max_weight, 1)] computed in
+/// uint32 (legacy sd->weight and sd->max_weight are uint32; the product wraps) and truncated to uint16.
+std::uint16_t weight_percent(std::int32_t weight, std::int32_t max_weight);
+
 enum class WeightState : std::uint8_t { Normal, Weight50, Weight90 };
-/// BR-MAP-002: >= 70% (RE) / 50% (pre-RE) -> WEIGHT50; >= 90% -> WEIGHT90.
+/// BR-MAP-002 (pc_updateweightstatus): weight_percent >= major_overweight_rate (90) -> WEIGHT90;
+/// >= natural_heal_weight_rate (70 RE / 50 pre-RE) -> WEIGHT50.
 WeightState weight_state(std::int32_t weight, std::int32_t max_weight, const BattleConfig& cfg);
 
-/// BR-MAP-003: opening a box (or using a cash item) is blocked when the weight percentage
-/// ([weight x 100 / max_weight], as pc_getpercentweight) is >= open_box_weight_rate (shipped: 90
-/// renewal, 70 pre-renewal), or with <= 10 free inventory slots. pc.cpp pc_isUseitem.
+/// BR-MAP-003: opening a box (or using a cash item) is blocked when weight_percent is
+/// >= open_box_weight_rate (shipped: 90 renewal, 70 pre-renewal), or with <= 10 free inventory
+/// slots. pc.cpp pc_isUseitem.
 bool can_open_box(std::int32_t weight, std::int32_t max_weight, std::int32_t free_slots, const BattleConfig& cfg);
 
 // --- Drops ------------------------------------------------------------------------------------
 
 /// BR-MAP-035: global rate scaling (item_rate_*), linear or logarithmic, clamped to [min, max].
-/// Rates are in 1/10000 (100 = 1%).
+/// Rates are in 1/10000 (100 = 1%). The clamp is legacy cap_value (the max bound is tested first,
+/// so a misconfigured min > max yields max) and the result is converted as (uint32)rate.
 std::int32_t drop_adjust(std::int32_t base_rate, std::int32_t rate_adjust, std::int32_t rate_min,
                          std::int32_t rate_max, const BattleConfig& cfg);
 
@@ -91,7 +97,8 @@ std::int64_t vending_tax(std::int64_t total, const BattleConfig& cfg);
 
 // --- Stacks, NPC prices, storage --------------------------------------------------------------
 
-/// BR-MAP-046: an inventory stack can hold at most 30,000.
+/// BR-MAP-046: an inventory stack can hold at most 30,000: a positive `add` fits when
+/// current + add <= 30,000 (legacy `amount > MAX_AMOUNT - current` refuses).
 bool can_add_to_stack(std::int32_t current, std::int32_t add);
 
 /// BR-MAP-047: Discount (MC_DISCOUNT 5+2lv, -1 at lv10; RG_COMPULSION 5+4lv; best wins), min min_shop_buy.

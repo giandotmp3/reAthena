@@ -30,6 +30,9 @@
 #include "pc.hpp"
 #include "pc_groups.hpp"
 #include "pet.hpp"
+#include "rules_bridge.hpp"
+
+#include <rathena/map_rules/economy.hpp>
 #include "script.hpp" // script_config
 #include "storage.hpp"
 
@@ -1568,11 +1571,17 @@ void chrif_parse_ack_vipActive(int32 fd) {
 			sd->vip.enabled = 1;
 			sd->vip.time = vip_time;
 			// Increase storage size for VIP.
+#if MIN_STORAGE == 300 && MAX_STORAGE == 600
+			// BR-MAP-050 (map-rules): MIN_STORAGE + vip_storage_increase, at most MAX_STORAGE. With
+			// VIP_ENABLE the knob's range is [0, MAX_STORAGE-MIN_STORAGE], so the cap never fires.
+			sd->storage.max_amount = static_cast<uint16>( rules::economy::storage_capacity( true, rules_config() ) );
+#else
 			sd->storage.max_amount = battle_config.vip_storage_increase + MIN_STORAGE;
 			if (sd->storage.max_amount > MAX_STORAGE) {
 				ShowError("intif_parse_ack_vipActive: Storage size for player %s (%d:%d) is larger than MAX_STORAGE. Storage size has been set to MAX_STORAGE.\n", sd->status.name, sd->status.account_id, sd->status.char_id);
 				sd->storage.max_amount = MAX_STORAGE;
 			}
+#endif
 			sd->special_state.no_gemstone = battle_config.vip_gemstone;
 		} else if (sd->vip.enabled) {
 			sd->vip.enabled = 0;

@@ -40,6 +40,10 @@
 #include "pc.hpp"
 #include "pet.hpp"
 #include "quest.hpp"
+#include "rules_bridge.hpp"
+
+#include <rathena/map_rules/economy.hpp>
+#include <rathena/map_rules/progression.hpp>
 
 using namespace rathena;
 
@@ -3099,8 +3103,8 @@ int32 mob_dead(mob_data *md, block_list *src, int32 type)
 			if(i<MAX_PC_FEELHATE && (temp=pc_checkskill(sd,sg_info[i].bless_id)))
 				bonus += (i==2?20:10)*temp;
 		}
-		if(battle_config.mobs_level_up && md->level > md->db->lv) // [Valaris]
-			bonus += (md->level-md->db->lv)*battle_config.mobs_level_up_exp_rate;
+		// BR-MAP-032 (map-rules): (level - db level) x mobs_level_up_exp_rate for a levelled monster [Valaris]
+		bonus += rules::progression::mob_level_up_exp_bonus( md->level, md->db->lv, rules_config() );
 
 		for( i = 0; i < md->dmglog.size(); i++ ){
 			const s_dmglog& entry = md->dmglog[i];
@@ -4807,17 +4811,10 @@ int32 mob_clone_delete(mob_data *md){
 //Adjusts the drop rate of item according to the criteria given. [Skotlex]
 static uint32 mob_drop_adjust(int32 baserate, int32 rate_adjust, uint16 rate_min, uint16 rate_max)
 {
-	double rate = baserate;
-
-	if (battle_config.logarithmic_drops && rate_adjust > 0 && rate_adjust != 100 && baserate > 0) //Logarithmic drops equation by Ishizu-Chan
-		//Equation: Droprate(x,y) = x * (5 - log(x)) ^ (ln(y) / ln(5))
-		//x is the normal Droprate, y is the Modificator.
-		rate = rate * pow((5.0 - log10(rate)), (log(rate_adjust/100.) / log(5.0))) + 0.5;
-	else
-		//Classical linear rate adjustment.
-		rate = rate * rate_adjust/100;
-
-	return (uint32)cap_value(rate,rate_min,rate_max);
+	// BR-MAP-035 (map-rules): logarithmic drops (Ishizu-Chan: x * (5 - log10(x)) ^ (ln(y) / ln(5)) + 0.5)
+	// or the classical linear x * y / 100, in double; then cap_value(rate, rate_min, rate_max) and
+	// (uint32). The rule returns that uint32 as int32, so the round trip keeps every bit.
+	return static_cast<uint32>( rules::economy::drop_adjust( baserate, rate_adjust, rate_min, rate_max, rules_config() ) );
 }
 
 /**

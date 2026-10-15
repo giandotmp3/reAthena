@@ -36,6 +36,9 @@ struct BattleConfig {
 	std::int32_t natural_heal_skill_interval = 10000; // BR-MAP-055
 	std::int32_t bone_drop = 0;             // BR-MAP-033 (0 off, 1 PvP maps only, 2 everywhere)
 	std::int32_t open_box_weight_rate = 90; // BR-MAP-049 (%; pre-renewal 70, conf line commented out)
+	// progression/economy (Phase 4 delegation)
+	std::int32_t natural_heal_weight_rate = 70; // BR-MAP-002 (%; pre-renewal 50, conf line commented out)
+	std::int32_t major_overweight_rate = 90;    // BR-MAP-002 (%)
 
 	// battle.conf
 	std::int32_t min_hitrate = 5;     // BR-MAP-011
@@ -106,6 +109,7 @@ struct BattleConfig {
 		c.mode = mode;
 		if (mode == Mode::PreRenewal) {
 			c.open_box_weight_rate = 70; // battle.cpp battle_data[] #else RENEWAL
+			c.natural_heal_weight_rate = 50; // battle.cpp battle_data[] #else RENEWAL
 		}
 		return c;
 	}

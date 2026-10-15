@@ -84,8 +84,13 @@ struct GuildTaxSplit {
 /// BR-MAP-027: tax percent clamped to [0, guild_exp_limit]. 1000 at 10% -> 900 / 100.
 GuildTaxSplit guild_tax(std::int64_t exp, std::int32_t tax_pct, const BattleConfig& cfg);
 
-/// BR-MAP-028: even share among eligible members, plus party_even_share_bonus x (n-1)%.
-std::int64_t even_share(std::int64_t exp, std::int32_t eligible_members, const BattleConfig& cfg);
+/// BR-MAP-028 (party.cpp party_exp_share): each of the n eligible members gets exp / n; then, when
+/// party_even_share_bonus is set and n > 1, a non-zero share becomes
+/// (t_exp)cap_value(share x (100 + bonus x (n-1)) / 100, 0, max_exp) in double (the bonus factor is
+/// legacy uint32 arithmetic). `max_exp` is legacy MAX_EXP (INT64_MAX, or INT32_MAX before
+/// PACKETVER 20170830). n = 0 gives 0 (legacy returns before sharing).
+std::uint64_t even_share(std::uint64_t exp, std::uint32_t eligible_members, std::uint64_t max_exp,
+                         const BattleConfig& cfg);
 
 /// Static data: level_penalty.yml bucket for one race/type; rate_pct indexed by
 /// (mob_level - player_level) + max_diff, clamped to the table edges.
@@ -114,7 +119,8 @@ struct DeathPenalty {
 /// than the current exp. Novices, GvG and insurance are exempt.
 DeathPenalty death_penalty(const DeathPenaltyInput& in, const BattleConfig& cfg);
 
-/// BR-MAP-031: Super Novice guardian angel at >= 99.0% of next-level exp, once per level.
+/// BR-MAP-031: Super Novice guardian angel at >= 99.0% of next-level exp, once per level. The
+/// percentage is legacy get_percentage_exp: floor(100.0 x ((double)exp / (double)next)) >= 99.
 bool super_novice_angel(std::int64_t exp, std::int64_t next, bool already_triggered_this_level);
 
 // --- Death of a player (pc.cpp pc_dead) --------------------------------------------------------
@@ -133,7 +139,8 @@ struct MobLevelUp {
 	bool refresh_name = false; // show_mob_info & 4: the shown name carries the level
 };
 /// BR-MAP-032: with mobs_level_up on, a living, non-guardian, non-summoned monster that kills a
-/// player gains one level while its level is below the victim's max base level.
+/// player gains one level while its level is below the victim's max base level (compared as legacy
+/// `(uint32)md->level < pc_maxbaselv(sd)`, so a negative level never levels).
 MobLevelUp mob_level_after_kill(const MobKillLevelUpInput& in, const BattleConfig& cfg);
 
 /// BR-MAP-032: HP healed right after the level-up: status_percent_heal(mob, 10, 0), which is 10%

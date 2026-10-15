@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <cstdint>
 #include <optional>
 #include <vector>
 
@@ -106,7 +107,23 @@ TEST(Progression, BR_MAP_027_GuildTaxWorkedExample) {
 
 TEST(Progression, BR_MAP_028_EvenShareWorkedExample) {
 	// 3,000 exp, 3 members -> 1,000 each.
-	EXPECT_EQ(pg::even_share(3000, 3, re()), 1000);
+	constexpr std::uint64_t kMaxExp = INT64_MAX;
+	EXPECT_EQ(pg::even_share(3000, 3, kMaxExp, re()), 1000u);
+	EXPECT_EQ(pg::even_share(3000, 0, kMaxExp, re()), 0u);
+}
+
+TEST(Progression, BR_MAP_028_EvenShareDividesBeforeTheBonus) {
+	// party_exp_share: exp / n first, then x (100 + bonus x (n-1)) / 100 in double, truncated.
+	auto cfg = re();
+	cfg.party_even_share_bonus = 10;
+	constexpr std::uint64_t kMaxExp = INT64_MAX;
+	EXPECT_EQ(pg::even_share(10, 3, kMaxExp, cfg), 3u); // 10/3 = 3; 3 x 1.2 = 3.6 -> 3 (not 12/3 = 4)
+	EXPECT_EQ(pg::even_share(3000, 3, kMaxExp, cfg), 1200u);
+	EXPECT_EQ(pg::even_share(3000, 1, kMaxExp, cfg), 3000u); // no bonus alone
+	EXPECT_EQ(pg::even_share(2, 3, kMaxExp, cfg), 0u);
+	// Capped at MAX_EXP (INT32_MAX before PACKETVER 20170830).
+	cfg.party_even_share_bonus = 100;
+	EXPECT_EQ(pg::even_share(4000000000ull, 2, INT32_MAX, cfg), static_cast<std::uint64_t>(INT32_MAX));
 }
 
 TEST(Progression, BR_MAP_029_LevelPenaltyBucketsRenewalOnly) {
@@ -136,6 +153,14 @@ TEST(Progression, BR_MAP_031_SuperNoviceAngelAt99PercentOncePerLevel) {
 	EXPECT_TRUE(pg::super_novice_angel(990, 1000, false));
 	EXPECT_FALSE(pg::super_novice_angel(989, 1000, false));
 	EXPECT_FALSE(pg::super_novice_angel(999, 1000, true));
+}
+
+TEST(Progression, BR_MAP_031_PercentageIsLegacyDouble) {
+	// get_percentage_exp works in double: 98,999,999,999,999,999 converts to 99e15 exactly, so the
+	// ratio is 0.99 and the angel triggers although the integer ratio is just below 99%.
+	EXPECT_TRUE(pg::super_novice_angel(98999999999999999LL, 100000000000000000LL, false));
+	EXPECT_FALSE(pg::super_novice_angel(98, 99, false));
+	EXPECT_TRUE(pg::super_novice_angel(5000, 1000, false)); // above 100% too
 }
 
 // --- BR-MAP-032: pc.cpp pc_dead (case BL_MOB), status.cpp status_calc_mob_, mob.cpp mob_dead ----
@@ -170,6 +195,8 @@ TEST(Progression, BR_MAP_032_MobLevelUpCappedByVictimMaxLevelGuardiansAndSummons
 	EXPECT_EQ(r.level, 99);
 	EXPECT_TRUE(pg::mob_level_after_kill({.mob_level = 99, .mob_hp = 1, .victim_max_base_level = 200}, cfg).levelled);
 	EXPECT_FALSE(pg::mob_level_after_kill({.mob_level = 10, .mob_hp = 0}, cfg).levelled); // md->status.hp == 0
+	// (uint32)md->level: a negative level compares as huge and never levels.
+	EXPECT_FALSE(pg::mob_level_after_kill({.mob_level = -1, .mob_hp = 1, .victim_max_base_level = 99}, cfg).levelled);
 	EXPECT_FALSE(pg::mob_level_after_kill({.mob_level = 10, .mob_hp = 1, .guardian = true}, cfg).levelled);
 	const auto summon = pg::mob_level_after_kill({.mob_level = 10, .mob_hp = 1, .summoned_ai = true}, cfg);
 	EXPECT_FALSE(summon.levelled);

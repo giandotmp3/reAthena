@@ -21,12 +21,32 @@ TEST(Economy, BR_MAP_001_MaxWeightWorkedExample) {
 }
 
 TEST(Economy, BR_MAP_002_WeightThresholdsRenewalAndPreRenewal) {
+	const auto pre = mr::BattleConfig::shipped(mr::Mode::PreRenewal); // natural_heal_weight_rate 50
 	EXPECT_EQ(ec::weight_state(699, 1000, re()), ec::WeightState::Normal);
 	EXPECT_EQ(ec::weight_state(700, 1000, re()), ec::WeightState::Weight50);
-	EXPECT_EQ(ec::weight_state(500, 1000, pre_re()), ec::WeightState::Weight50);
-	EXPECT_EQ(ec::weight_state(499, 1000, pre_re()), ec::WeightState::Normal);
+	EXPECT_EQ(ec::weight_state(500, 1000, pre), ec::WeightState::Weight50);
+	EXPECT_EQ(ec::weight_state(499, 1000, pre), ec::WeightState::Normal);
 	EXPECT_EQ(ec::weight_state(900, 1000, re()), ec::WeightState::Weight90);
-	EXPECT_EQ(ec::weight_state(900, 1000, pre_re()), ec::WeightState::Weight90);
+	EXPECT_EQ(ec::weight_state(900, 1000, pre), ec::WeightState::Weight90);
+}
+
+TEST(Economy, BR_MAP_002_ThresholdsAreTheLegacyKnobs) {
+	// pc_updateweightstatus compares against natural_heal_weight_rate and major_overweight_rate.
+	auto cfg = re();
+	cfg.natural_heal_weight_rate = 60;
+	cfg.major_overweight_rate = 80;
+	EXPECT_EQ(ec::weight_state(599, 1000, cfg), ec::WeightState::Normal);
+	EXPECT_EQ(ec::weight_state(600, 1000, cfg), ec::WeightState::Weight50);
+	EXPECT_EQ(ec::weight_state(800, 1000, cfg), ec::WeightState::Weight90);
+}
+
+TEST(Economy, BR_MAP_002_PercentIsPcGetpercentweightBitForBit) {
+	EXPECT_EQ(ec::weight_percent(1799, 2000), 89); // truncates
+	// max_weight 0 divides by 1 (std::max<uint32>(max_weight, 1)), so an empty bag is Normal.
+	EXPECT_EQ(ec::weight_percent(5, 0), 500);
+	EXPECT_EQ(ec::weight_state(0, 0, re()), ec::WeightState::Normal);
+	// uint32 product wraps (5e9 mod 2^32 = 0x2A05F200), then the uint16 cast keeps 0xF200.
+	EXPECT_EQ(ec::weight_percent(50000000, 1), 0xF200);
 }
 
 TEST(Economy, BR_MAP_003_BoxBlockedAtNinetyPercentOrTenFreeSlots) {
@@ -50,6 +70,13 @@ TEST(Economy, BR_MAP_035_LinearDropScalingClamped) {
 	EXPECT_EQ(ec::drop_adjust(100, 200, 1, 10000, cfg), 200);
 	EXPECT_EQ(ec::drop_adjust(8000, 200, 1, 10000, cfg), 10000);
 	EXPECT_EQ(ec::drop_adjust(1, 10, 1, 10000, cfg), 1);
+}
+
+TEST(Economy, BR_MAP_035_ClampIsLegacyCapValue) {
+	// cap_value tests the max bound first: with a misconfigured min > max the result is max
+	// (std::clamp would return min).
+	EXPECT_EQ(ec::drop_adjust(5000, 100, 9000, 100, re()), 100);
+	EXPECT_EQ(ec::drop_adjust(50, 100, 9000, 100, re()), 9000); // below max, at most min
 }
 
 TEST(Economy, BR_MAP_035_LogarithmicDropScaling) {
@@ -147,6 +174,10 @@ TEST(Economy, BR_MAP_046_StackLimitThirtyThousand) {
 	EXPECT_TRUE(ec::can_add_to_stack(29999, 1));
 	EXPECT_FALSE(ec::can_add_to_stack(30000, 1));
 	EXPECT_FALSE(ec::can_add_to_stack(0, 0));
+	EXPECT_FALSE(ec::can_add_to_stack(0, 30001)); // pc_additem: amount > MAX_AMOUNT
+	// Legacy `amount > MAX_AMOUNT - current` has no guard for a (corrupt) negative stack.
+	EXPECT_TRUE(ec::can_add_to_stack(-5, 30005));
+	EXPECT_FALSE(ec::can_add_to_stack(-5, 30006));
 }
 
 TEST(Economy, BR_MAP_047_DiscountAndOvercharge) {

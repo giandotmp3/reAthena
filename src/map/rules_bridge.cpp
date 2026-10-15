@@ -93,6 +93,9 @@ void rules_config_snapshot(){
 	c.duel_allow_teleport = battle_config.duel_allow_teleport != 0;
 	c.guild_exp_limit = static_cast<std::int32_t>( battle_config.guild_exp_limit );
 	c.party_even_share_bonus = static_cast<std::int32_t>( battle_config.party_even_share_bonus );
+	// progression/economy (BR-MAP-001..003, 021..037, 045..050)
+	c.natural_heal_weight_rate = static_cast<std::int32_t>( battle_config.natural_heal_weight_rate );
+	c.major_overweight_rate = static_cast<std::int32_t>( battle_config.major_overweight_rate );
 	snapshot = c;
 }
 

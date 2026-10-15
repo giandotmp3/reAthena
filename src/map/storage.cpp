@@ -23,6 +23,9 @@
 #include "packets.hpp"
 #include "pc.hpp"
 #include "pc_groups.hpp"
+#include "rules_bridge.hpp"
+
+#include <rathena/map_rules/economy.hpp>
 
 using namespace rathena;
 
@@ -264,7 +267,8 @@ static int32 storage_additem(map_session_data* sd, struct s_storage *stor, struc
 	if( itemdb_isstackable2(data) ) { // Stackable
 		for( i = 0; i < stor->max_amount; i++ ) {
 			if( compare_item(&stor->u.items_storage[i], it) ) { // existing items found, stack them
-				if( amount > MAX_AMOUNT - stor->u.items_storage[i].amount || ( data->stack.storage && amount > data->stack.amount - stor->u.items_storage[i].amount ) )
+				// BR-MAP-046 (map-rules): amount > 0 here, so this is `amount > MAX_AMOUNT - stack amount`.
+				if( !rules::economy::can_add_to_stack( stor->u.items_storage[i].amount, amount ) || ( data->stack.storage && amount > data->stack.amount - stor->u.items_storage[i].amount ) )
 					return 2;
 
 				stor->u.items_storage[i].amount += amount;
@@ -754,7 +758,8 @@ bool storage_guild_additem(map_session_data* sd, struct s_storage* stor, struct 
 	if(itemdb_isstackable2(id)) { //Stackable
 		for(i = 0; i < stor->max_amount; i++) {
 			if(compare_item(&stor->u.items_guild[i], item_data)) {
-				if( amount > MAX_AMOUNT - stor->u.items_guild[i].amount || ( id->stack.guild_storage && amount > id->stack.amount - stor->u.items_guild[i].amount ) )
+				// BR-MAP-046 (map-rules): amount > 0 here, so this is `amount > MAX_AMOUNT - stack amount`.
+				if( !rules::economy::can_add_to_stack( stor->u.items_guild[i].amount, amount ) || ( id->stack.guild_storage && amount > id->stack.amount - stor->u.items_guild[i].amount ) )
 					return false;
 
 				stor->u.items_guild[i].amount += amount;

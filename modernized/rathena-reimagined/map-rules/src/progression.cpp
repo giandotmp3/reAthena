@@ -137,12 +137,23 @@ ExpGain gain_exp(const ExpGainInput& in, const BattleConfig& cfg) {
 	return g;
 }
 
-std::int64_t even_share(std::int64_t exp, std::int32_t members, const BattleConfig& cfg) {
-	if (members <= 0 || exp <= 0) {
+std::uint64_t even_share(std::uint64_t exp, std::uint32_t members, std::uint64_t max_exp,
+                         const BattleConfig& cfg) {
+	if (members == 0) {
 		return 0;
 	}
-	const std::int64_t bonus = static_cast<std::int64_t>(cfg.party_even_share_bonus) * (members - 1);
-	return exp * (100 + bonus) / 100 / members;
+	std::uint64_t share = exp / members;
+	if (cfg.party_even_share_bonus != 0 && members > 1 && share != 0) {
+		// `100 + party_even_share_bonus*(c-1)` with c uint32: unsigned arithmetic, then double.
+		const double bonus =
+		    static_cast<double>(100u + static_cast<std::uint32_t>(cfg.party_even_share_bonus) * (members - 1));
+		const double scaled = static_cast<double>(share) * bonus / 100;
+		// cap_value(scaled, 0, MAX_EXP) is a double expression; the bound converts to double too.
+		share = static_cast<std::uint64_t>(scaled >= static_cast<double>(max_exp) ? static_cast<double>(max_exp)
+		                                   : scaled <= 0                          ? 0.0
+		                                                                          : scaled);
+	}
+	return share;
 }
 
 std::int32_t level_penalty_pct(const LevelPenaltyTable& table, std::int32_t mob_level, std::int32_t player_level,
@@ -176,7 +187,9 @@ bool super_novice_angel(std::int64_t exp, std::int64_t next, bool already_trigge
 	if (already_triggered_this_level || next <= 0) {
 		return false;
 	}
-	return exp * 1000 / next >= 990;
+	// get_percentage_exp(exp, next) >= 99: floor(x) >= 99 <=> x >= 99 (and its UINT32_MAX clamp is
+	// above 99 too).
+	return 100.0 * (static_cast<double>(exp) / static_cast<double>(next)) >= 99.0;
 }
 
 MobLevelUp mob_level_after_kill(const MobKillLevelUpInput& in, const BattleConfig& cfg) {
@@ -184,8 +197,9 @@ MobLevelUp mob_level_after_kill(const MobKillLevelUpInput& in, const BattleConfi
 	r.level = in.mob_level;
 	// pc_dead: mobs_level_up && md->status.hp && (uint32)md->level < pc_maxbaselv(sd)
 	//          && !md->guardian_data && !md->special_state.ai
-	if (!cfg.mobs_level_up || in.mob_hp == 0 || in.mob_level >= in.victim_max_base_level || in.guardian ||
-	    in.summoned_ai) {
+	if (!cfg.mobs_level_up || in.mob_hp == 0 ||
+	    static_cast<std::uint32_t>(in.mob_level) >= static_cast<std::uint32_t>(in.victim_max_base_level) ||
+	    in.guardian || in.summoned_ai) {
 		return r;
 	}
 	r.levelled = true;

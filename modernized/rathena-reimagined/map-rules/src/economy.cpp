@@ -12,29 +12,33 @@ std::int32_t max_weight(std::int32_t job_base_weight, std::int32_t str, std::int
 	return static_cast<std::int32_t>(std::clamp<std::int64_t>(w, 0, kMaxZeny));
 }
 
+std::uint16_t weight_percent(std::int32_t weight, std::int32_t max_w) {
+	// pc_getpercentweight: static_cast<uint16>(weight * 100 / std::max<uint32>(max_weight, 1)) on uint32.
+	const auto w = static_cast<std::uint32_t>(weight);
+	const auto m = std::max<std::uint32_t>(static_cast<std::uint32_t>(max_w), 1u);
+	return static_cast<std::uint16_t>(w * 100u / m);
+}
+
 WeightState weight_state(std::int32_t weight, std::int32_t max_w, const BattleConfig& cfg) {
-	if (max_w <= 0) {
+	// pc_updateweightstatus: the thresholds are knobs (natural_heal_weight_rate ships 70 renewal,
+	// 50 pre-renewal; major_overweight_rate 90), tested against the truncated percentage.
+	const std::int32_t percent = weight_percent(weight, max_w);
+	if (percent >= cfg.major_overweight_rate) {
 		return WeightState::Weight90;
 	}
-	const std::int64_t pct100 = static_cast<std::int64_t>(weight) * 100;
-	if (pct100 >= static_cast<std::int64_t>(max_w) * 90) {
-		return WeightState::Weight90;
-	}
-	const std::int64_t w50 = (cfg.mode == Mode::Renewal) ? 70 : 50;
-	if (pct100 >= static_cast<std::int64_t>(max_w) * w50) {
+	if (percent >= cfg.natural_heal_weight_rate) {
 		return WeightState::Weight50;
 	}
 	return WeightState::Normal;
 }
 
 bool can_open_box(std::int32_t weight, std::int32_t max_w, std::int32_t free_slots, const BattleConfig& cfg) {
-	if (free_slots <= 10) {
-		return false;
-	}
 	// Both modes check the weight; only the threshold differs (the earlier renewal-only gate was
 	// wrong: legacy applies open_box_weight_rate unconditionally).
-	const std::int64_t percent = static_cast<std::int64_t>(weight) * 100 / std::max<std::int64_t>(max_w, 1);
-	if (percent >= cfg.open_box_weight_rate) {
+	if (weight_percent(weight, max_w) >= cfg.open_box_weight_rate) {
+		return false;
+	}
+	if (free_slots <= 10) {
 		return false;
 	}
 	return true;
@@ -48,8 +52,14 @@ std::int32_t drop_adjust(std::int32_t base_rate, std::int32_t rate_adjust, std::
 	} else {
 		rate = rate * rate_adjust / 100.0;
 	}
-	rate = std::clamp(rate, static_cast<double>(rate_min), static_cast<double>(rate_max));
-	return static_cast<std::int32_t>(rate);
+	// cap_value(rate, rate_min, rate_max): the max bound is tested first.
+	if (rate >= rate_max) {
+		rate = rate_max;
+	} else if (rate <= rate_min) {
+		rate = rate_min;
+	}
+	// mob_drop_adjust returns (uint32)rate.
+	return static_cast<std::int32_t>(static_cast<std::uint32_t>(rate));
 }
 
 std::int32_t drop_rate_with_modifiers(const DropModifierInput& in, const BattleConfig& cfg) {
@@ -155,7 +165,7 @@ VendingBuyResult vending_buy(const VendingPurchase& p, const BattleConfig& cfg) 
 }
 
 bool can_add_to_stack(std::int32_t current, std::int32_t add) {
-	if (add <= 0 || current < 0) {
+	if (add <= 0) {
 		return false;
 	}
 	return static_cast<std::int64_t>(current) + add <= kMaxStackAmount;

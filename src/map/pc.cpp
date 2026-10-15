@@ -56,6 +56,11 @@
 #include "pc_groups.hpp"
 #include "pet.hpp" // pet_unlocktarget()
 #include "quest.hpp"
+#include "rules_bridge.hpp"
+
+#include <rathena/map_rules/domain.hpp>
+#include <rathena/map_rules/economy.hpp>
+#include <rathena/map_rules/progression.hpp>
 #include "skill.hpp" // skill_isCopyable()
 #include "script.hpp" // struct script_reg, struct script_regstr
 #include "searchstore.hpp"  // struct s_search_store_info
@@ -1772,23 +1777,12 @@ static bool pc_job_can_use_item( const map_session_data* sd, const item_data* it
 	nullpo_retr( false, sd );
 	nullpo_retr( false, item );
 
-	// Calculate the required bit to check
-	uint64 job = 1ULL << ( sd->class_ & MAPID_FIRSTMASK );
+	// BR-MAP-049 (map-rules): bit (class_ & MAPID_FIRSTMASK) of class_base[base | 2-1 | 2-2].
+	// Every bit the check reads (MAPID_FIRSTMASK, JOBL_2_1, JOBL_2_2) is in the low 32 bits of class_.
+	rules::economy::UsableItem usable;
+	usable.class_base = { item->class_base[0], item->class_base[1], item->class_base[2] };
 
-	size_t index;
-
-	// 2-1
-	if( ( sd->class_ & JOBL_2_1 ) != 0 ){
-		index = 1;
-	// 2-2
-	}else if( ( sd->class_ & JOBL_2_2 ) != 0 ){
-		index = 2;
-	// Basejob
-	}else{
-		index = 0;
-	}
-
-	return ( item->class_base[index] & job ) != 0;
+	return rules::economy::job_can_use_item( usable, static_cast<uint32>( sd->class_ ) );
 }
 
 /*==========================================
@@ -1802,43 +1796,10 @@ static bool pc_job_can_use_item( const map_session_data* sd, const item_data* it
 		[Cydh] finishing :D
  *------------------------------------------*/
 static bool pc_isItemClass ( const map_session_data* sd, const item_data* item ) {
-	while (1) {
-		if (item->class_upper&ITEMJ_NORMAL && !(sd->class_&(JOBL_UPPER|JOBL_BABY|JOBL_THIRD|JOBL_FOURTH)))	//normal classes (no upper, no baby, no third, no fourth)
-			break;
-#ifndef RENEWAL
-		//allow third classes to use trans. class items
-		if (item->class_upper&ITEMJ_UPPER && sd->class_&(JOBL_UPPER|JOBL_THIRD))	//trans. classes
-			break;
-		//third-baby classes can use same item too
-		if (item->class_upper&ITEMJ_BABY && sd->class_&JOBL_BABY)	//baby classes
-			break;
-		//don't need to decide specific rules for third-classes?
-		//items for third classes can be used for all third classes
-		if (item->class_upper&(ITEMJ_THIRD|ITEMJ_THIRD_UPPER|ITEMJ_THIRD_BABY) && sd->class_&JOBL_THIRD)
-			break;
-#else
-		//trans. classes (exl. third-trans.)
-		if (item->class_upper&ITEMJ_UPPER && sd->class_&JOBL_UPPER && !(sd->class_&JOBL_THIRD))
-			break;
-		//baby classes (exl. third-baby)
-		if (item->class_upper&ITEMJ_BABY && sd->class_&JOBL_BABY && !(sd->class_&JOBL_THIRD))
-			break;
-		//third classes (exl. third-trans. and baby-third and fourth)
-		if (item->class_upper&ITEMJ_THIRD && sd->class_&JOBL_THIRD && !(sd->class_&(JOBL_UPPER|JOBL_BABY)) && !(sd->class_&JOBL_FOURTH))
-			break;
-		//trans-third classes (exl. fourth)
-		if (item->class_upper&ITEMJ_THIRD_UPPER && sd->class_&JOBL_THIRD && sd->class_&JOBL_UPPER && !(sd->class_&JOBL_FOURTH))
-			break;
-		//third-baby classes (exl. fourth)
-		if (item->class_upper&ITEMJ_THIRD_BABY && sd->class_&JOBL_THIRD && sd->class_&JOBL_BABY && !(sd->class_&JOBL_FOURTH))
-			break;
-		//fourth classes
-		if (item->class_upper&ITEMJ_FOURTH && sd->class_&JOBL_FOURTH)
-			break;
-#endif
-		return false;
-	}
-	return true;
+	// BR-MAP-049 (map-rules): pre-renewal lets third jobs use transcendent items and any third-job
+	// item; renewal matches each tier exactly. Only ITEMJ_* bits up to 0x40 and JOBL_* bits up to
+	// 0x200000 are tested, so the narrowing casts keep every bit the check reads.
+	return rules::economy::item_class_allows( static_cast<uint8>( item->class_upper ), static_cast<uint32>( sd->class_ ), rules_config().mode );
 }
 
 /*=================================================
@@ -3026,8 +2987,10 @@ uint16 pc_getpercentweight(const map_session_data& sd, uint32 weight)
 void pc_updateweightstatus(map_session_data& sd)
 {
 	uint8 old_overweight = (sd.sc.getSCE(SC_WEIGHT90) != nullptr) ? 2 : (sd.sc.getSCE(SC_WEIGHT50) != nullptr) ? 1 : 0;
-	uint16 overweight_percent = pc_getpercentweight(sd);
-	uint8 new_overweight = (overweight_percent >= battle_config.major_overweight_rate) ? 2 : (overweight_percent >= battle_config.natural_heal_weight_rate) ? 1 : 0;
+	// BR-MAP-002 (map-rules): pc_getpercentweight >= major_overweight_rate -> 2, >= natural_heal_weight_rate -> 1.
+	// The rule repeats the uint32 percentage bit for bit (weight and max_weight round-trip through int32).
+	const rules::economy::WeightState state = rules::economy::weight_state( static_cast<int32>( sd.weight ), static_cast<int32>( sd.max_weight ), rules_config() );
+	uint8 new_overweight = (state == rules::economy::WeightState::Weight90) ? 2 : (state == rules::economy::WeightState::Weight50) ? 1 : 0;
 
 	// No change
 	if( old_overweight == new_overweight )
@@ -5688,18 +5651,9 @@ int32 pc_identifyall(map_session_data *sd, bool identify_item)
  *------------------------------------------*/
 int32 pc_modifybuyvalue(const map_session_data* sd, int32 orig_value )
 {
-	int32 skill,val = orig_value,rate1 = 0,rate2 = 0;
-	if((skill=pc_checkskill(sd,MC_DISCOUNT))>0)	// merchant discount
-		rate1 = 5+skill*2-((skill==10)? 1:0);
-	if((skill=pc_checkskill(sd,RG_COMPULSION))>0)	 // rogue discount
-		rate2 = 5+skill*4;
-	if(rate1 < rate2) rate1 = rate2;
-	if(rate1)
-		val = (int32)((double)orig_value*(double)(100-rate1)/100.);
-	if(val < battle_config.min_shop_buy)
-		val = battle_config.min_shop_buy;
-
-	return val;
+	// BR-MAP-047 (map-rules): the better of Discount (5+2*lv, -1 at lv10) and Compulsion Discount
+	// (5+4*lv), (int32)(orig * (100-rate) / 100.) in double, at least min_shop_buy.
+	return rules::economy::npc_buy_price( orig_value, pc_checkskill( sd, MC_DISCOUNT ), pc_checkskill( sd, RG_COMPULSION ), rules_config() );
 }
 
 /*==========================================
@@ -5707,15 +5661,9 @@ int32 pc_modifybuyvalue(const map_session_data* sd, int32 orig_value )
  *------------------------------------------*/
 int32 pc_modifysellvalue( const map_session_data* sd, int32 orig_value )
 {
-	int32 skill,val = orig_value,rate = 0;
-	if((skill=pc_checkskill(sd,MC_OVERCHARGE))>0)	//OverCharge
-		rate = 5+skill*2-((skill==10)? 1:0);
-	if(rate)
-		val = (int32)((double)orig_value*(double)(100+rate)/100.);
-	if (val < battle_config.min_shop_sell)
-		val = battle_config.min_shop_sell;
-
-	return val;
+	// BR-MAP-047 (map-rules): Overcharge (5+2*lv, -1 at lv10), (int32)(orig * (100+rate) / 100.) in
+	// double, at least min_shop_sell.
+	return rules::economy::npc_sell_price( orig_value, pc_checkskill( sd, MC_OVERCHARGE ), rules_config() );
 }
 
 /*==========================================
@@ -5803,10 +5751,15 @@ char pc_payzeny(map_session_data *sd, int32 zeny, enum e_log_pick_type type, uin
 		return 1;
 	}
 
-	if( sd->status.zeny < zeny )
+	// BR-MAP-045 (map-rules): a debit never takes the balance below 0 (a corrupt negative balance
+	// fails the check, as `sd->status.zeny < zeny` did).
+	const std::optional<rules::Zeny> balance = rules::Zeny::checked( sd->status.zeny );
+	const std::optional<rules::Zeny> after = balance.has_value() ? balance->debited( zeny ) : std::nullopt;
+
+	if( !after.has_value() )
 		return 1; //Not enough.
 
-	sd->status.zeny -= zeny;
+	sd->status.zeny = after->value();
 	clif_updatestatus(*sd,SP_ZENY);
 
 	log_zeny(*sd, type, log_charid, -zeny);
@@ -5837,10 +5790,11 @@ char pc_getzeny(map_session_data *sd, int32 zeny, enum e_log_pick_type type, uin
 		return 1;
 	}
 
-	if( zeny > MAX_ZENY - sd->status.zeny )
-		zeny = MAX_ZENY - sd->status.zeny;
+	// BR-MAP-045 (map-rules): credits saturate at MAX_ZENY; `zeny` becomes the amount actually given.
+	const int32 balance = rules::Zeny::clamped( sd->status.zeny ).credited( zeny ).value();
+	zeny = static_cast<int32>( static_cast<int64>( balance ) - sd->status.zeny );
 
-	sd->status.zeny += zeny;
+	sd->status.zeny = balance;
 	clif_updatestatus(*sd,SP_ZENY);
 
 	log_zeny(*sd, type, log_charid, zeny);
@@ -5998,7 +5952,8 @@ enum e_additem_result pc_additem(map_session_data *sd,struct item *item,int32 am
 
 	if( item->nameid == 0 || amount <= 0 )
 		return ADDITEM_INVALID;
-	if( amount > MAX_AMOUNT )
+	// BR-MAP-046 (map-rules): with amount > 0, `amount > MAX_AMOUNT` is an empty stack refusing it.
+	if( !rules::economy::can_add_to_stack( 0, amount ) )
 		return ADDITEM_OVERAMOUNT;
 
 	id = itemdb_search(item->nameid);
@@ -6023,7 +5978,8 @@ enum e_additem_result pc_additem(map_session_data *sd,struct item *item,int32 am
 				sd->inventory.u.items_inventory[i].expire_time == 0 &&
 				sd->inventory.u.items_inventory[i].unique_id == item->unique_id &&
 				memcmp(&sd->inventory.u.items_inventory[i].card, &item->card, sizeof(item->card)) == 0 ) {
-				if( amount > MAX_AMOUNT - sd->inventory.u.items_inventory[i].amount || ( id->stack.inventory && amount > id->stack.amount - sd->inventory.u.items_inventory[i].amount ) )
+				// BR-MAP-046 (map-rules): amount > 0 here, so this is `amount > MAX_AMOUNT - stack amount`.
+				if( !rules::economy::can_add_to_stack( sd->inventory.u.items_inventory[i].amount, amount ) || ( id->stack.inventory && amount > id->stack.amount - sd->inventory.u.items_inventory[i].amount ) )
 					return ADDITEM_OVERAMOUNT;
 				// If the item is in the inventory already, but the player is not allowed to use that many slots anymore
 				if( i >= sd->status.inventory_slots ){
@@ -6391,26 +6347,26 @@ bool pc_isUseitem(map_session_data *sd,int32 n)
 
 	// Safe check type cash disappear when overweight [Napster]
 	if( item->flag.group || item->type == IT_CASH ){
-		// Check if the player is not overweighted
-		if (pc_getpercentweight(*sd) >= battle_config.open_box_weight_rate) {
-#ifdef RENEWAL
-			clif_msg_color( *sd, MSI_PICKUP_FAILED_ITEMCREATE, color_table[COLOR_RED] );
-#else
-			clif_msg_color( *sd, MSI_CANT_GET_ITEM_BECAUSE_WEIGHT, color_table[COLOR_RED] );
-#endif
-			return 0;
-		}
-
-		// Check if the player has enough free spaces in the inventory
+		// BR-MAP-003 (map-rules): blocked when the weight percentage is >= open_box_weight_rate or
+		// with <= 10 free slots.
 		// Official servers use 10 as the minimum amount of slots required to get the items
 		// The <= is intentional, as in official servers you actually need an extra empty slot
 		// TODO: Count the items the player will get and check for the actual inventory space required std::max<size_t>( count, 10 )
-		if (pc_inventoryblank(sd) <= 10) {
+		if( !rules::economy::can_open_box( static_cast<int32>( sd->weight ), static_cast<int32>( sd->max_weight ), pc_inventoryblank( sd ), rules_config() ) ){
+			// The weight is checked first: overweight wins the message.
+			if( rules::economy::weight_percent( static_cast<int32>( sd->weight ), static_cast<int32>( sd->max_weight ) ) >= rules_config().open_box_weight_rate ){
 #ifdef RENEWAL
-			clif_msg_color( *sd, MSI_PICKUP_FAILED_ITEMCREATE, color_table[COLOR_RED] );
+				clif_msg_color( *sd, MSI_PICKUP_FAILED_ITEMCREATE, color_table[COLOR_RED] );
 #else
-			clif_msg_color( *sd, MSI_CANT_GET_ITEM_BECAUSE_COUNT, color_table[COLOR_RED] );
+				clif_msg_color( *sd, MSI_CANT_GET_ITEM_BECAUSE_WEIGHT, color_table[COLOR_RED] );
 #endif
+			}else{
+#ifdef RENEWAL
+				clif_msg_color( *sd, MSI_PICKUP_FAILED_ITEMCREATE, color_table[COLOR_RED] );
+#else
+				clif_msg_color( *sd, MSI_CANT_GET_ITEM_BECAUSE_COUNT, color_table[COLOR_RED] );
+#endif
+			}
 			return 0;
 		}
 	}
@@ -6542,9 +6498,10 @@ int32 pc_useitem(map_session_data *sd,int32 n)
 	    potion_flag = 2; // Famous player's potions have 50% more efficiency
 
 	//Update item use time.
-	sd->canuseitem_tick = tick + battle_config.item_use_interval;
-	if( itemdb_group.item_exists(IG_CASH_FOOD, nameid) )
-		sd->canusecashfood_tick = tick + battle_config.cashfood_use_interval;
+	// BR-MAP-049 (map-rules): now + item_use_interval; cash food also now + cashfood_use_interval.
+	const rules::economy::ItemUseTicks use_ticks = rules::economy::after_item_use( tick, itemdb_group.item_exists( IG_CASH_FOOD, nameid ), sd->canusecashfood_tick, rules_config() );
+	sd->canuseitem_tick = use_ticks.can_use_item;
+	sd->canusecashfood_tick = use_ticks.can_use_cash_food;
 
 	// Save the old script the player was attached to
 	struct script_state* previous_st = sd->st;
@@ -6628,7 +6585,8 @@ enum e_additem_result pc_cart_additem(map_session_data *sd,struct item *item,int
 
 	if( i < MAX_CART )
 	{// item already in cart, stack it
-		if( amount > MAX_AMOUNT - sd->cart.u.items_cart[i].amount || ( data->stack.cart && amount > data->stack.amount - sd->cart.u.items_cart[i].amount ) )
+		// BR-MAP-046 (map-rules): amount > 0 here, so this is `amount > MAX_AMOUNT - stack amount`.
+		if( !rules::economy::can_add_to_stack( sd->cart.u.items_cart[i].amount, amount ) || ( data->stack.cart && amount > data->stack.amount - sd->cart.u.items_cart[i].amount ) )
 			return ADDITEM_OVERAMOUNT; // no slot
 
 		sd->cart.u.items_cart[i].amount += amount;
@@ -8795,13 +8753,16 @@ uint32 PlayerStatPointDatabase::pc_gets_trait_point(uint16 level) const{
 	}
 }
 
+// BR-MAP-021 (map-rules): the stat point cost formula follows RENEWAL_STAT (not RENEWAL), so the
+// mode is chosen here.
 #ifdef RENEWAL_STAT
-/// Renewal status point cost formula
-#define PC_STATUS_POINT_COST(low) (((low) < 100) ? (2 + ((low) - 1) / 10) : (16 + 4 * (((low) - 100) / 5)))
+/// Renewal status point cost formula: x<100 -> 2+(x-1)/10; x>=100 -> 16+4*((x-100)/5)
+static constexpr rules::Mode PC_STATUS_POINT_COST_MODE = rules::Mode::Renewal;
 #else
-/// Pre-Renewal status point cost formula
-#define PC_STATUS_POINT_COST(low) (( 1 + ((low) + 9) / 10 ))
+/// Pre-Renewal status point cost formula: 1+(x+9)/10
+static constexpr rules::Mode PC_STATUS_POINT_COST_MODE = rules::Mode::PreRenewal;
 #endif
+#define PC_STATUS_POINT_COST(low) rules::progression::stat_cost( (low), PC_STATUS_POINT_COST_MODE )
 
 /// Returns the number of stat points needed to change the specified stat by val.
 /// If val is negative, returns the number of stat points that would be needed to
@@ -9779,7 +9740,9 @@ int32 pc_dead(map_session_data *sd,block_list *src)
 	if (!sd->state.snovice_dead_flag && (sd->class_&MAPID_SECONDMASK) == MAPID_SUPER_NOVICE) {
 		t_exp exp = pc_nextbaseexp(sd);
 
-		if( exp && get_percentage_exp(sd->status.base_exp, exp) >= 99 ) {
+		// BR-MAP-031 (map-rules): get_percentage_exp(base_exp, next) >= 99, in double. t_exp stays <= MAX_EXP,
+		// so the int64 conversion is exact.
+		if( exp && rules::progression::super_novice_angel( static_cast<int64>( sd->status.base_exp ), static_cast<int64>( exp ), false ) ) {
 			sd->state.snovice_dead_flag = 1;
 			pc_setrestartvalue(sd,1);
 			status_percent_heal(sd, 100, 100);
@@ -9919,16 +9882,23 @@ int32 pc_dead(map_session_data *sd,block_list *src)
 			mob_data *md=(mob_data *)src;
 			if(md->target_id==sd->id)
 				mob_unlocktarget(md,tick);
-			if(battle_config.mobs_level_up && md->status.hp &&
-				(uint32)md->level < pc_maxbaselv(sd) &&
-				!md->guardian_data && !md->special_state.ai// Guardians/summons should not level. [Skotlex]
-			) { 	// monster level up [Valaris]
+			// BR-MAP-032 (map-rules): mobs_level_up && hp && (uint32)level < pc_maxbaselv(sd), no guardians
+			// or summons (Guardians/summons should not level. [Skotlex]). Every input is side-effect free.
+			rules::progression::MobKillLevelUpInput level_input;
+			level_input.mob_level = md->level;
+			level_input.mob_hp = static_cast<int32>( md->status.hp );
+			level_input.victim_max_base_level = static_cast<int32>( pc_maxbaselv( sd ) );
+			level_input.guardian = md->guardian_data != nullptr;
+			level_input.summoned_ai = md->special_state.ai != AI_NONE;
+			const rules::progression::MobLevelUp level_up = rules::progression::mob_level_after_kill( level_input, rules_config() );
+
+			if( level_up.levelled ) { 	// monster level up [Valaris]
 				clif_misceffect( *md, NOTIFYEFFECT_BASE_LEVEL_UP );
-				md->level++;
+				md->level = level_up.level;
 				status_calc_mob(md, SCO_NONE);
 				status_percent_heal(src,10,0);
 
-				if( battle_config.show_mob_info&4 )
+				if( level_up.refresh_name )
 				{// update name with new level
 					clif_name_area(md);
 				}
@@ -9978,18 +9948,18 @@ int32 pc_dead(map_session_data *sd,block_list *src)
 		}
 	}
 
-	if(battle_config.bone_drop==2
-		|| (battle_config.bone_drop==1 && mapdata->getMapFlag(MF_PVP)))
+	// BR-MAP-033 (map-rules): bone_drop 2 everywhere, 1 on PvP maps: a skull carrying the victim's char id.
+	if( const std::optional<rules::Item> skull = rules::progression::death_skull_drop( rules::CharId{ static_cast<int32>( sd->status.char_id ) }, mapdata->getMapFlag( MF_PVP ) != 0, rules_config() ); skull.has_value() )
 	{
 		struct item item_tmp;
 		memset(&item_tmp,0,sizeof(item_tmp));
-		item_tmp.nameid=ITEMID_SKULL_;
-		item_tmp.identify=1;
-		item_tmp.card[0]=CARD0_CREATE;
-		item_tmp.card[1]=0;
-		item_tmp.card[2]=GetWord(sd->status.char_id,0); // CharId
-		item_tmp.card[3]=GetWord(sd->status.char_id,1);
-		map_addflooritem(&item_tmp,1,sd->m,sd->x,sd->y,0,0,0,4,0);
+		item_tmp.nameid=skull->nameid;
+		item_tmp.identify=skull->identify;
+		item_tmp.card[0]=skull->card[0];
+		item_tmp.card[1]=skull->card[1];
+		item_tmp.card[2]=skull->card[2]; // CharId
+		item_tmp.card[3]=skull->card[3];
+		map_addflooritem(&item_tmp,skull->amount,sd->m,sd->x,sd->y,0,0,0,4,0);
 	}
 
 	//Remove bonus_script when dead
@@ -10058,54 +10028,39 @@ int32 pc_dead(map_session_data *sd,block_list *src)
 
 	if( mapdata->getMapFlag(MF_PVP_NIGHTMAREDROP) ) { // Moved this outside so it works when PVP isn't enabled and during pk mode [Ancyker]
 		for (const auto &it : mapdata->drop_list) {
-			int32 id = it.drop_id, per = it.drop_per;
-			enum e_nightmare_drop_type type = it.drop_type;
-
-			if(id == 0)
+			if(it.drop_id == 0)
 				continue;
-			if(id == -1){
-				int32 eq_num=0,eq_n[MAX_INVENTORY];
-				memset(eq_n,0,sizeof(eq_n));
-				for(i=0;i<MAX_INVENTORY;i++) {
-					if( sd->inventory.u.items_inventory[i].nameid == 0 ){
-						continue;
-					}
 
-					if( !pc_candrop( sd, &sd->inventory.u.items_inventory[i] ) ){
-						continue;
-					}
+			// BR-MAP-034 (map-rules): the rule walks the inventory and draws from the legacy stream
+			// exactly as before (rnd()%10000 < per, then rnd() % count for a random item; per slot,
+			// before the type check, for an item id). pc_candrop is side-effect free.
+			rules::progression::NightmareDropRule rule;
+			rule.drop_id = it.drop_id;
+			rule.drop_per = it.drop_per;
+			rule.type = static_cast<uint8>( it.drop_type );
 
-					if( (type&NMDT_INVENTORY && !sd->inventory.u.items_inventory[i].equip)
-						|| (type&NMDT_EQUIP && sd->inventory.u.items_inventory[i].equip)
-						||  type == NMDT_ALL)
-					{
-						eq_n[eq_num++] = i;
-					}
+			std::vector<rules::progression::NightmareSlot> slots( MAX_INVENTORY );
+			for( i = 0; i < MAX_INVENTORY; i++ ){
+				const struct item& inv = sd->inventory.u.items_inventory[i];
+
+				if( inv.nameid == 0 ){
+					continue;
 				}
-				if(eq_num > 0){
-					if(rnd()%10000 < per) {
-						int32 n = eq_n[rnd() % eq_num];
 
-						if(sd->inventory.u.items_inventory[n].equip)
-							pc_unequipitem(sd,n,3);
-						pc_dropitem(sd,n,1);
-					}
-				}
+				slots[i].nameid = static_cast<int32>( inv.nameid );
+				slots[i].amount = inv.amount;
+				slots[i].equipped = inv.equip != 0;
+				slots[i].droppable = pc_candrop( sd, &sd->inventory.u.items_inventory[i] );
 			}
-			else if(id > 0) {
-				for(i=0;i<MAX_INVENTORY;i++){
-					if(sd->inventory.u.items_inventory[i].nameid == id
-						&& pc_candrop( sd, &sd->inventory.u.items_inventory[i] )
-						&& rnd()%10000 < per
-						&& ((type&NMDT_INVENTORY && !sd->inventory.u.items_inventory[i].equip)
-							|| (type&NMDT_EQUIP && sd->inventory.u.items_inventory[i].equip)
-							|| type == NMDT_ALL) ){
-						if(sd->inventory.u.items_inventory[i].equip)
-							pc_unequipitem(sd,i,3);
-						pc_dropitem(sd,i,1);
-						break;
-					}
-				}
+
+			const std::optional<size_t> pick = rules::progression::nightmare_drop_pick( rule, slots, rules_rng() );
+
+			if( pick.has_value() ){
+				int32 n = static_cast<int32>( *pick );
+
+				if(sd->inventory.u.items_inventory[n].equip)
+					pc_unequipitem(sd,n,3);
+				pc_dropitem(sd,n,1);
 			}
 		}
 	}
