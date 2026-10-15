@@ -22,17 +22,30 @@ This is a hybrid. **login-server** and **web-server** are full C++20 rebuilds: d
 |---|---|---|---|
 | `core/` | Config with `import:` overlays, env secrets that refuse known defaults, injectable `Rng`, typed immutable `BattleConfig` (X-macro `knobs.def.hpp`, shipped defaults), logger with redaction | BR-INTER-016; S1/S2 parts of BR-WEB-017, BR-LOGIN-025, BR-CHAR-030 | 81 (1) |
 | `netproto/` | LE framing, length validation (S4), unknown-packet disconnect, inter-server length tables, handshakes 0x2710/0x2af8 + version, 0x2717 with widened `group_id`, stall and flood policies | BR-INTER-001, 002, 003, 007, 010–013 | 87 (6) |
-| `persistence/` | Single `Item` mapping (×6 tables), checked `Zeny`, repositories (MySQL + in-memory fake), `rathena-migrate` with gated steps M0…M3b | BR-LOGIN-008, 037; BR-CHAR-013 (cascade order); BR-MAP-045 | 103 (4 + 12 live-DB) |
+| `persistence/` | Single `Item` mapping (×6 tables), checked `Zeny`, repositories (MySQL + in-memory fake), `rathena-migrate` with gated steps M0…M3b | BR-LOGIN-008, 037; BR-CHAR-013 (cascade order); BR-MAP-045 | 120 (4 + 12 live-MySQL) |
 | `login-server/` | Auth order, refusal codes, tickets (30 s), online state, IP ban + failure counter independent of the log, web token (retry ≤ 20), Argon2id behind a bounded pool (stub), char-server registry, client handler stubs | BR-LOGIN-001…039 (004 → "Removed"), BR-INTER-004, 005, 006, 014, 017 | 80 (7) |
 | `web-server/` | 16 POST routes, WebToken required on **all** routes including `*/load`, nlohmann/json only, emblem validation including the transparency limit, config merge semantics, party booking, CORS | BR-WEB-001…017 | 104 (2) |
 | `char-rules/` | charlife, PIN, party, guild, mail (RODEX only), registry, clan, GM (authority re-check), session rules, **save→auth barrier per char_id** | BR-CHAR-001…055, BR-INTER-008, 009, 015, 018, 019 | 121 (9) |
 | `map-rules/` | combat, progression, economy, trade, skills, anticheat; renewal + pre-renewal; property tests; `manifest/map_modules.tsv` (each `src/map/*.cpp` → one module) | BR-MAP-001…061 | 95 (8) |
 
-**Totals: 672 tests. With a test database: 635 pass, 37 skipped as pending, 0 fail. Without `RATHENA_TEST_DATABASE_URL`, the 12 live-database tests also skip.** All 191 rule IDs appear in at least one test.
+**Totals: 688 tests. 651 pass and 37 skip as pending, 0 fail. The 12 MySQL live-database tests also skip unless `RATHENA_TEST_DATABASE_URL` is set. The SQLite tests always run: they need no server.** All 191 rule IDs appear in at least one test.
 
 Pending tests are `GTEST_SKIP() << "PENDING <BR-ID>"`. They are mostly waiting on golden vectors from an instrumented legacy build, a live MySQL, libsodium, or verbatim packet headers. Pending rule IDs:
 BR-CHAR-013, 022, 028, 031, 032, 034, 042, 047 · BR-INTER-001, 003, 006, 007, 010, 013, 017, 018 · BR-LOGIN-001, 036, 037, 039 · BR-MAP-015, 019, 032, 033, 034, 049, 053, 055 · BR-WEB-010 (client-capture gate), 016 (httplib end-to-end).
 Most of these also have passing tests for their pure logic; only the integration part is pending.
+
+## Database (read `analysis/rathena/DATABASE_DECISION.md`)
+
+- **PostgreSQL 16+** for servers, and **SQLite** (vendored and always built in) for local development, tests and single-host small servers. **MySQL/MariaDB is a transition backend only.** The legacy char-server and map-server still use it until their persistence is behind repositories.
+- Repositories are written against `SqlConnection` (`persistence/include/rathena/persistence/sql_connection.hpp`) in the portable SQL subset: double-quoted identifiers, `ON CONFLICT` upserts, `?` placeholders, integer UNIX times. Pick the backend with the URL: `sqlite::memory:`, `sqlite:dev/rathena.db`, `sqlite:///abs/path.db`, `mysql://…`. `postgres://…` comes with increment 2.
+- New databases start from the clean target schema (`target_schema.cpp`: FKs, CHECKs, `STRICT`), not from the legacy MyISAM schema.
+- **Local development with no server:**
+
+  ```sh
+  DATABASE_URL=sqlite:dev/rathena.db build/persistence/rathena-migrate --init-target-schema
+  ```
+
+  The target schema currently covers the login-owned tables. It grows as each repository is ported.
 
 ## How to build and test
 
@@ -65,7 +78,7 @@ Secrets come **only from the environment**, provisioned by the operator's deploy
 | Variable | Used by |
 |---|---|
 | `INTER_SERVER_USER`, `INTER_SERVER_PASS` | char → login and map → char registration |
-| `DATABASE_URL` (default for all), `LOGIN_DB_URL`, `CHAR_DB_URL`, `MAP_DB_URL`, `WEB_DB_URL`, `LOG_DB_URL` | persistence (log DB may be separate) |
+| `DATABASE_URL` (default for all), `LOGIN_DB_URL`, `CHAR_DB_URL`, `MAP_DB_URL`, `WEB_DB_URL`, `LOG_DB_URL` | persistence (log DB may be separate). Accepts `sqlite:` URLs (no credentials) or `mysql://` URLs; `postgres://` comes with increment 2. |
 | `WEB_BIND`, `WEB_PORT`, `WEB_ALLOWED_ORIGIN_CORS`, `WEB_ALLOW_GIFS`, `WEB_EMBLEM_TRANSPARENCY_LIMIT`, `WEB_VERIFY_CHAR_OWNERSHIP` | web-server (non-secret) |
 | `RATHENA_TEST_INTER_USER`, `RATHENA_TEST_INTER_PASS` | char-rules tests only (fake values by default) |
 | `RATHENA_TEST_DATABASE_URL` | persistence live-database tests only. It must point at a **disposable** database, because tables are dropped and recreated. |
@@ -113,7 +126,7 @@ The full file → module map for the map server is `map-rules/manifest/map_modul
 
 1. **Integrate the units.** Each one currently carries small local copies of `Rng`/`BattleConfig`/types so it can build standalone. On promotion into `src/`, replace them with `core`'s types. Every knob `map-rules` uses is now in `core/knobs.def.hpp`. A drift test (`core/tests/test_shipped_conf_parity.cpp`) checks every typed default against the legacy `conf/` files. The full knob list is still to be generated. Notes for the generator: `battle_data[]` in `src/map/battle.cpp` has **627** entries (not the 581 the architecture estimated). 265 of them have symbolic defaults or bounds (`BL_*` bitmasks such as `BL_PC|BL_PET`, `INT_MAX`, other macros). Some defaults differ under `#ifdef RENEWAL`. Several conf keys differ from the struct field name (e.g. `casting_rate` → `cast_rate`). The generator must evaluate the `BL_*` enum from `src/map/map.hpp` and emit separate renewal and pre-renewal defaults.
 2. **Golden vectors.** Legacy `src/common/random.{hpp,cpp}` now has `rnd_seed()` / `rnd_seed_from_env()`. Starting a legacy server with `RATHENA_RNG_SEED=<uint32>` makes its random stream reproducible (it logs a warning; tools built in minimal-core mode skip this). Next: build an instrumented legacy binary that dumps formula inputs and outputs, and capture vectors. That unblocks most of the pending tests (BR-MAP-015/019, BR-CHAR-013, …).
-3. `persistence` now has a real `MysqlConnection`, built on the MySQL/MariaDB C API with server-side prepared statements, plus a real `MysqlAccountRepository`. It is tested live against MariaDB, including the BR-LOGIN-037 ROLLBACK proof. A further test documents that legacy MyISAM tables ignore ROLLBACK, so M2 must run before the login rebuild relies on atomic deletes. `rathena-migrate` works against a live database (`MysqlMigrationTarget` in `persistence/src/migrate/mysql_target.cpp`). It has schema inspection through `information_schema`, `schema_migrations` history, the M1 orphan report (which treats `0` as "none") and step application. The M0 baselines for the shipped `main.sql`, and `main.sql` + `web.sql`, are built in and checked by a live test. A dry run against a freshly loaded legacy database stops correctly at the M7 gate. Databases on an older legacy revision must apply `sql-files/upgrades/` before M0 will accept them; per-upgrade fingerprints are not generated. Still to do: SQL for the character, party, guild and mail repositories (still `NotImplemented`), and vendoring libsodium for Argon2id. Legacy `login.group_id` is `tinyint` (−128..127), so a widened group id above 127 needs a column change before it can be stored.
+3. `persistence` now has a real `MysqlConnection`, built on the MySQL/MariaDB C API with server-side prepared statements, plus a real `MysqlAccountRepository`. It is tested live against MariaDB, including the BR-LOGIN-037 ROLLBACK proof. A further test documents that legacy MyISAM tables ignore ROLLBACK, so M2 must run before the login rebuild relies on atomic deletes. `rathena-migrate` works against a live database (`MysqlMigrationTarget` in `persistence/src/migrate/mysql_target.cpp`). It has schema inspection through `information_schema`, `schema_migrations` history, the M1 orphan report (which treats `0` as "none") and step application. The M0 baselines for the shipped `main.sql`, and `main.sql` + `web.sql`, are built in and checked by a live test. A dry run against a freshly loaded legacy database stops correctly at the M7 gate. Databases on an older legacy revision must apply `sql-files/upgrades/` before M0 will accept them; per-upgrade fingerprints are not generated. **Database move (DATABASE_DECISION.md):** increment 1 is done. That covers the SQLite backend, `SqlConnection`, the backend-neutral `SqlAccountRepository`, the clean target schema for the login-owned tables, `rathena-migrate --init-target-schema`, and SQLite tests on every CI platform. Next: increment 2 (PostgreSQL via libpq, plus a `postgres:16` CI job); then increment 3 (port the character, party, guild and mail repositories, which still throw `NotImplemented`, to the portable subset); then increment 4 (`rathena-migrate export/import`, MySQL to the new schema). Also still to do: vendoring libsodium for Argon2id. Legacy `login.group_id` is `tinyint` (−128..127), so a widened group id above 127 needs a column change before it can be stored.
 4. Replace `login-server/include/.../protocol/client_packets.hpp` with the verbatim legacy packet headers (K1).
 5. Before phase 2 ships, capture what real clients send on web `*/load` (BR-WEB-010 gate).
 6. CI: `.github/workflows/build_reimagined_units.yml` builds the superbuild on Linux gcc/clang (`-Werror`), Windows MSVC and macOS. Turn on `RATHENA_REIMAGINED_WERROR` for MSVC and macOS once they are clean.

@@ -14,6 +14,7 @@ using my_bool = bool;
 #endif
 
 #include <cstring>
+#include <memory>
 #include <string>
 #include <type_traits>
 #include <variant>
@@ -52,11 +53,12 @@ struct ParamBuffers {
 	std::vector<long long> ints;
 	std::vector<unsigned long long> uints;
 	std::vector<unsigned long> lengths;
-	std::vector<my_bool> nulls;
+	// Not std::vector<my_bool>: with MySQL 8 my_bool is bool, and vector<bool> has no addressable elements.
+	std::unique_ptr<my_bool[]> nulls;
 
 	explicit ParamBuffers(const std::vector<SqlValue>& params)
 	    : binds(params.size()), ints(params.size()), uints(params.size()), lengths(params.size()),
-	      nulls(params.size()) {
+	      nulls(std::make_unique<my_bool[]>(params.size())) {
 		for (std::size_t i = 0; i < params.size(); ++i) {
 			MYSQL_BIND& b = binds[i];
 			std::memset(&b, 0, sizeof b);
@@ -168,7 +170,7 @@ std::vector<Row> MysqlConnection::query(const Statement& st) {
 	std::vector<MYSQL_BIND> binds(ncols);
 	std::vector<std::string> buffers(ncols);
 	std::vector<unsigned long> lengths(ncols);
-	std::vector<my_bool> nulls(ncols);
+	auto nulls = std::make_unique<my_bool[]>(ncols); // see ParamBuffers: no vector<bool>
 	for (unsigned int c = 0; c < ncols; ++c) {
 		buffers[c].resize(fields[c].max_length + 1); // every column is fetched as text
 		std::memset(&binds[c], 0, sizeof binds[c]);

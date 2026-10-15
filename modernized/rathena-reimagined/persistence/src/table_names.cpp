@@ -1,4 +1,5 @@
 #include "rathena/persistence/table_names.hpp"
+#include "rathena/persistence/sql_connection.hpp"
 
 #include <array>
 #include <stdexcept>
@@ -72,9 +73,12 @@ bool is_safe_identifier(std::string_view name) noexcept {
 	return true;
 }
 
-std::string quote_identifier(std::string_view name) {
+std::string quote_identifier(std::string_view name) { return quote_identifier(name, SqlDialect::MySql); }
+
+std::string quote_identifier(std::string_view name, SqlDialect dialect) {
 	if (!is_safe_identifier(name)) throw std::invalid_argument("unsafe SQL identifier");
-	return "`" + std::string(name) + "`";
+	const char q = dialect == SqlDialect::MySql ? '`' : '"';
+	return q + std::string(name) + q;
 }
 
 } // namespace rathena::persistence

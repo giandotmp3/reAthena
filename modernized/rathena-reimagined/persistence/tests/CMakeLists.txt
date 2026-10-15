@@ -12,6 +12,7 @@ add_executable(rathena_persistence_tests
   rule_manifest_test.cpp
   mysql_integration_test.cpp
   mysql_migration_integration_test.cpp
+  sqlite_repository_test.cpp
 )
 target_link_libraries(rathena_persistence_tests PRIVATE rathena::persistence GTest::gtest_main)
 # Legacy DDL (read-only) for the live-database tests in mysql_integration_test.cpp

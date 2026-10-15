@@ -181,11 +181,13 @@ TEST_F(MysqlAccountIT, BR_LOGIN_037_WithoutM2LegacyMyIsamDeleteIsNotAtomic) {
 	MysqlAccountRepository repo(*conn_, TableNames{});
 	Account a = sample("myisam01");
 	ASSERT_TRUE(repo.create(a).ok());
+	repo.set_global_reg(a.id, GlobalRegNum{"##n", 0, 7});
 	TableNames broken;
-	broken.global_acc_reg_str = "missing_table_for_rollback_test";
+	broken.global_acc_reg_str = "missing_table_for_rollback_test"; // the 2nd of 3 deletes fails
 	MysqlAccountRepository failing(*conn_, broken);
 	EXPECT_FALSE(failing.remove(a.id));
-	EXPECT_FALSE(repo.find(a.id).has_value()) << "MyISAM kept the partial delete";
+	EXPECT_TRUE(repo.find(a.id).has_value());
+	EXPECT_TRUE(repo.global_regs_num(a.id).empty()) << "MyISAM kept the partial delete of the ## registry";
 }
 
 TEST(MysqlConnectionIT, ConnectFailureNeverEchoesThePassword) {

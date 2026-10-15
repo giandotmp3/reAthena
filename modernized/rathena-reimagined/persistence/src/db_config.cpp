@@ -86,9 +86,13 @@ DbConnectionConfig DbConnectionConfig::from_environment(const Environment& env, 
 	if (!main) main = non_empty(env, "DATABASE_URL");
 	if (!main) throw DbConfigError("DATABASE_URL is not set; database credentials are read from the environment only");
 	DbConnectionConfig cfg;
-	cfg.main = parse_db_url(*main);
+	cfg.main_url = *main;
 	const auto log = non_empty(env, "LOG_DB_URL");
-	cfg.log = log ? parse_db_url(*log) : cfg.main;
+	cfg.log_url = log ? *log : cfg.main_url;
+	// sqlite:/postgres:// URLs carry no credentials to split out; open them with open_connection().
+	auto is_mysql = [](const std::string& u) { return u.rfind("mysql://", 0) == 0; };
+	if (is_mysql(cfg.main_url)) cfg.main = parse_db_url(cfg.main_url);
+	if (is_mysql(cfg.log_url)) cfg.log = parse_db_url(cfg.log_url);
 	return cfg;
 }
 

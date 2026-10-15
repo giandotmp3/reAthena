@@ -164,9 +164,12 @@ TEST_F(BR_LOGIN_037_AtomicAccountDelete, BR_LOGIN_037_UnknownAccountIsNotRemoved
 TEST(BR_LOGIN_037_AtomicAccountDeleteSql, BR_LOGIN_037_MysqlStatementsCoverRowAndBothRegTables) {
 	const auto st = sql::remove_account(TableNames{}, AccountId{2'000'123});
 	ASSERT_EQ(st.size(), 3u);
-	EXPECT_EQ(st[0].sql, "DELETE FROM `login` WHERE `account_id` = ?");
-	EXPECT_EQ(st[1].sql, "DELETE FROM `global_acc_reg_num` WHERE `account_id` = ?");
-	EXPECT_EQ(st[2].sql, "DELETE FROM `global_acc_reg_str` WHERE `account_id` = ?");
+	// Children before the parent, so the delete also works once foreign keys exist.
+	EXPECT_EQ(st[0].sql, "DELETE FROM `global_acc_reg_num` WHERE `account_id` = ?");
+	EXPECT_EQ(st[1].sql, "DELETE FROM `global_acc_reg_str` WHERE `account_id` = ?");
+	EXPECT_EQ(st[2].sql, "DELETE FROM `login` WHERE `account_id` = ?");
+	const auto pg = sql::remove_account(TableNames{}, AccountId{2'000'123}, SqlDialect::Postgres);
+	EXPECT_EQ(pg[2].sql, "DELETE FROM \"login\" WHERE \"account_id\" = ?");
 	for (const auto& s : st) EXPECT_EQ(std::get<std::uint64_t>(s.params.at(0)), 2'000'123u);
 }
 

@@ -4,6 +4,7 @@
 // flags and no config-file defaults. Dry run is the default; --apply executes.
 //
 // Usage:
+//   rathena-migrate --init-target-schema      (sqlite: URLs; creates the clean target schema)
 //   rathena-migrate [--plan] [--apply] [--md5-challenge-shim] [--legacy-pass-scheme=plain|md5]
 //                   [--grace-days=N] [--gate-char-reached-mail] [--gate-no-legacy-writers]
 //                   [--baseline=<fingerprint>]...
@@ -20,6 +21,7 @@
 #include "rathena/persistence/migrate/migrator.hpp"
 #include "rathena/persistence/migrate/mysql_target.hpp"
 #include "rathena/persistence/mysql.hpp"
+#include "rathena/persistence/target_schema.hpp"
 
 namespace mig = rathena::persistence::migrate;
 using namespace rathena::persistence;
@@ -36,12 +38,15 @@ void print_plan() {
 
 int main(int argc, char** argv) {
 	mig::MigrationOptions opts;
+	bool init_target = false;
 	opts.known_baselines = mig::known_legacy_baselines(); // --baseline= adds to these
 	for (int i = 1; i < argc; ++i) {
 		const std::string_view a = argv[i];
 		if (a == "--plan") {
 			print_plan();
 			return EXIT_SUCCESS;
+		} else if (a == "--init-target-schema") {
+			init_target = true;
 		} else if (a == "--apply") {
 			opts.dry_run = false;
 		} else if (a == "--md5-challenge-shim") {
@@ -67,6 +72,25 @@ int main(int argc, char** argv) {
 	try {
 		const ProcessEnvironment env;
 		const auto cfg = DbConnectionConfig::from_environment(env, ServerProcess::Migrate);
+		if (cfg.main_url.rfind("mysql://", 0) != 0) {
+			// SQLite / PostgreSQL databases are created from the clean target schema, not migrated
+			// from the legacy MyISAM shape (DATABASE_DECISION.md).
+			if (!init_target) {
+				std::cerr << "rathena-migrate: this is not a MySQL database; use --init-target-schema to create the schema\n";
+				return 2;
+			}
+			auto conn = open_connection(cfg.main_url);
+			if (!create_target_schema(*conn, opts.tables)) {
+				std::cerr << "rathena-migrate: creating the target schema failed (nothing was changed)\n";
+				return 1;
+			}
+			std::cout << "target schema " << kTargetSchemaVersion << " is in place\n";
+			return EXIT_SUCCESS;
+		}
+		if (init_target) {
+			std::cerr << "rathena-migrate: --init-target-schema is for sqlite:/postgres:// databases; MySQL keeps the legacy schema\n";
+			return 2;
+		}
 		std::cerr << "target: " << cfg.main.redacted() << (opts.dry_run ? " (dry run)" : "") << "\n";
 		MysqlConnection conn(cfg.main);
 		conn.connect();

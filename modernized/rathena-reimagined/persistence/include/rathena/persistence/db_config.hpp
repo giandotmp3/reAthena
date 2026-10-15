@@ -57,8 +57,10 @@ DbEndpoint parse_db_url(std::string_view url);
 enum class ServerProcess { Login, Char, Map, Web, Migrate };
 
 struct DbConnectionConfig {
-	DbEndpoint main;
-	DbEndpoint log; ///< may be a separate DB (logs.sql tables are excluded from M2)
+	std::string main_url; ///< as given; open with open_connection() (any backend)
+	std::string log_url;  ///< LOG_DB_URL, or main_url when unset
+	DbEndpoint main;      ///< parsed only for mysql:// URLs (transition backend); empty otherwise
+	DbEndpoint log;       ///< may be a separate DB (logs.sql tables are excluded from M2)
 
 	/// Throws DbConfigError if DATABASE_URL (or the process override) is unset/empty/malformed.
 	static DbConnectionConfig from_environment(const Environment& env,

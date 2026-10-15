@@ -2,7 +2,7 @@
 # Each unit is also a standalone CMake project; this file only aggregates them so
 # one configure/build/ctest covers everything (and CI has a single entry point).
 cmake_minimum_required(VERSION 3.20)
-project(rathena_reimagined LANGUAGES CXX)
+project(rathena_reimagined LANGUAGES C CXX) # C: the vendored SQLite amalgamation
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
