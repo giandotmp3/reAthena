@@ -6,6 +6,7 @@
 # Owners for clif.cpp, map.cpp, mob.cpp and pc.cpp were confirmed on 2026-10-15 (architecture §3.1).
 # path	owner	secondary	note
 script.cpp	script	-	wrapped first behind ScriptHost (§3.2)
+script_host.cpp	script	-	ScriptHost seam (§3.2): typed facade over script.cpp, buildin registry from doc/script_buildins.tsv
 npc.cpp	script	-
 npc_chat.cpp	script	-
 mapreg.cpp	script	-	$ vars; cross-shard last-writer-wins (§3)

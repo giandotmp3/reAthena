@@ -26,9 +26,9 @@ This is a hybrid. **login-server** and **web-server** are full C++20 rebuilds: d
 | `login-server/` | Auth order, refusal codes, tickets (30 s), online state, IP ban + failure counter independent of the log, web token (retry ≤ 20), Argon2id password hashing (PHC strings, OWASP default cost, lazy rehash of plaintext/MD5/weaker rows) on a bounded worker pool, char-server registry, client handler stubs | BR-LOGIN-001…039 (004 → "Removed"), BR-INTER-004, 005, 006, 014, 017 | 91 (6) |
 | `web-server/` | 16 POST routes, WebToken required on **all** routes including `*/load`, nlohmann/json only, emblem validation including the transparency limit, config merge semantics, party booking, CORS | BR-WEB-001…017 | 104 (2) |
 | `char-rules/` | charlife, PIN, party, guild, mail (RODEX only), registry, clan, GM (authority re-check), session rules, **save→auth barrier per char_id** | BR-CHAR-001…055, BR-INTER-008, 009, 015, 018, 019 | 121 (9) |
-| `map-rules/` | combat, progression, economy, trade, skills, anticheat; renewal + pre-renewal; property tests; `manifest/map_modules.tsv` (each `src/map/*.cpp` → one module); golden vectors in `tests/golden/` | BR-MAP-001…061 | 120 (0) |
+| `map-rules/` | combat, progression, economy, trade, skills, anticheat; renewal + pre-renewal; property tests; `manifest/map_modules.tsv` (each `src/map/*.cpp` → one module); golden vectors in `tests/golden/` | BR-MAP-001…061 | 142 (0) |
 
-**Totals: 819 tests. 796 pass and 23 skip as pending, 0 fail, when `RATHENA_TEST_PG_URL` is set; without it the 50 PostgreSQL tests skip too. The SQLite tests always run: they need no server.** All 191 rule IDs appear in at least one test.
+**Totals: 841 tests. 818 pass and 23 skip as pending, 0 fail, when `RATHENA_TEST_PG_URL` is set; without it the 50 PostgreSQL tests skip too. The SQLite tests always run: they need no server.** All 191 rule IDs appear in at least one test.
 
 Pending tests are `GTEST_SKIP() << "PENDING <BR-ID>"`. They are mostly waiting on golden vectors from an instrumented legacy build or verbatim packet headers. Pending rule IDs:
 BR-CHAR-022, 028, 031, 032, 034, 042, 047 · BR-INTER-001, 003, 006, 007, 010, 013, 017, 018 · BR-LOGIN-001, 036, 037, 039 · BR-WEB-010 (client-capture gate), 016 (httplib end-to-end).
@@ -74,6 +74,39 @@ ctest --test-dir build --output-on-failure
 - `web-server`: the real HTTP transport is behind `-DRATHENA_WEB_WITH_HTTPLIB=ON`. Until the persistence wiring lands, the binary refuses to start unless `RATHENA_WEB_DEV_INMEMORY=1`.
 - Verified locally on gcc 13.3 and clang 18 with `-Werror`. CI also covers MSVC and macOS.
 - Generated code: `core/include/rathena/core/battle_knobs.gen.hpp` is written by `python3 tools/codegen/battle_knobs.py` (Python 3.10+, stdlib only). It reads `src/map/battle.cpp`, `conf/battle/*.conf` and a few legacy headers. Rerun it after changing any of those or the hand-typed knobs. `--check` fails when the file is stale; the `generated-battle-knobs` CI job and the core ctest `SPEC_5_6_GeneratedBattleKnobsUpToDate` both run it. `--report` prints the code-vs-conf differences.
+
+## Map server Phase 4 status (REIMAGINED_ARCHITECTURE.md §3.2)
+
+Phase 4 is complete. The legacy map server builds as C++20 (CMake, autotools and MSVC). It links `map-rules`, and its call sites delegate to the rules through `src/map/rules_bridge.{hpp,cpp}`. The exit criteria are met:
+- **BR-MAP green.** All map-rules tests pass; none are pending.
+- **Golden vectors pass.** Renewal ASPD and character delete re-capture byte-identically after delegation. The pre-renewal defense vectors are not byte-stable between captures (fight timing), so a fresh capture is checked by running the BR-MAP-015 tests on it.
+- **Sim-tick NFR met.** At 1,000 CCU the crowd p99 is 7.9 ms and the spread p99 is 0.7 ms, against 50 ms (`PERFORMANCE.md`).
+
+- **Bridge.**
+  - `rules_config()` is a `rules::BattleConfig` snapshot of the knobs the rules read (the X-macro `RULES_BRIDGE_KNOBS` in `rules_bridge.cpp`). `battle_config_read` takes it *before* `battle_adjust_conf`, so `max_aspd`, `max_third_aspd` and `min_hitrate` stay in conf units.
+  - `battle_set_value` (`@setbattleflag`, `setbattleflag`) calls `rules_config_refresh`, so runtime changes reach the rules. The three converted knobs are the exception: they keep their startup value.
+  - `rules_rng()` is the legacy `rnd()` stream (`next_u32() = rnd()`, so `below(n)` is `rnd()%n`). Draws through `rnd_value`/`rnd_chance` stay at the call site. Every delegation keeps the same draws in the same order.
+- **Delegated** (behaviour unchanged; each site was checked against the legacy expression with its legacy integer and float types):
+  - combat: BR-MAP-004–014, 015, 016, 019, 020;
+  - progression and economy: 002, 003, 021, 028, 031–035, 045–047, 049, 050;
+  - trade and skills: 038, 042, 044, 051–053, 061;
+  - anticheat: 056, 057, 059, 060.
+
+  The rule fixes these delegations needed are in the commit messages and the tests.
+- **Shipped [DEFECT] fix: BR-MAP-056.** A disconnecting character stayed in the world for a flat 10 s while combat-locked. It now stays until the lock ends, `prevent_logout` ms after its last combat action.
+- **Not delegated (on purpose).** The rule stays tested in map-rules, and the legacy site keeps its own code.
+  - Model mismatches: the rule's inputs or outputs do not match what the call site has, and adapting would cost more than it proves.
+    - BR-MAP-001, 022–027, 029, 030, 036, 037, 048 (progression/economy);
+    - 039–041, 043, 055, 058 (trade/skills/anticheat).
+  - Combat:
+    - BR-MAP-011 `hit_chance`: the call site interleaves skill modifiers;
+    - 017, 018;
+    - 019 `cap_aspd`: legacy caps after the status-change adjustments.
+  - BR-MAP-054 [DEFECT] (a full 20-entry cooldown list silently drops a new cooldown) is asserted corrected in the rule but not shipped. The list is the fixed `scd[MAX_SKILLCOOLDOWN]` that `mmo.hpp` structs and the char-server's save packets carry, so the fix changes the inter-server format and the char-server too.
+- **M3a/M3b are out of scope.** They were the in-place MySQL schema steps, and they were superseded by the database decision (MySQL retired, `rathena-migrate import`; see Database above). The foreign keys M3b would have added are `target_foreign_keys()` in the target schema.
+- **Follow-ups.**
+  - Move the remaining direct script-VM call sites (listed below) behind ScriptHost.
+  - Pin more rules with golden vectors (open item 2).
 
 ## Map server in place: ScriptHost and the buildin corpus (Phase 4, step 2)
 
@@ -130,7 +163,7 @@ The full file → module map for the map server is `map-rules/manifest/map_modul
   - unauthenticated web `*/load` (now 400 without a token);
   - plaintext/MD5 at rest (Argon2id; `use_MD5_passwords` is rejected as Removed; the MD5 challenge shim is opt-in and off by default).
 - **Argon2id implementation (S6/M6):** the architecture named libsodium; the login-server uses the P-H-C reference implementation instead (`github.com/P-H-C/phc-winner-argon2`, release 20190702, CC0/Apache-2.0), fetched as a SHA-256-pinned tarball and built as a small static C library (`rathena_argon2`, `ARGON2_NO_THREADS`, portable `ref.c`). It builds on every CI toolchain without autotools, and its strings are the format libsodium's `crypto_pwhash_str{,_verify}` reads and writes (`$argon2id$v=19$m=…,t=…,p=…$salt$hash`, 16-byte salt, 32-byte tag). Code: `login-server/include/rathena/login/argon2id.hpp` (raw function, strict PHC parser with parameter caps, OS CSPRNG `os_random_bytes`) and `password.hpp` (`Argon2idHasher`, `submit_password_check`). Defaults are OWASP's (`argon2_memory_kib: 19456`, `argon2_iterations: 2`, `argon2_parallelism: 1`). After a successful login, a Plain/MD5 row, or an Argon2id row with less memory, fewer passes or a shorter salt/tag than configured, is rehashed on the pool worker (`PasswordOutcome::new_argon2id_hash`) for the caller to save. Verification is constant-time in the tag and fails closed on anything malformed.
-- **Confirmed (HITL #2):** `use_sql_db` dropped (YAML only); D4/D5/D6 schema consolidation deferred until after M3b.
+- **Confirmed (HITL #2):** `use_sql_db` dropped (YAML only); D4/D5/D6 schema consolidation deferred (M3b itself is superseded; see the Phase 4 status below).
 - **[DEFECT] rules assert the corrected behavior:** BR-LOGIN-023, 034; BR-CHAR-029, 055; BR-WEB-006, 010, 017; BR-MAP-054, 056; BR-INTER-003, 013.
 - **Hardening beyond legacy:** a wrong-id ticket verify consumes the ticket; the PIN gate also covers forced-NEW sessions; the flood guard rejects the 6th connection (legacy off-by-one); peers on protocol version 0 are refused by default.
 
@@ -154,5 +187,5 @@ The full file → module map for the map server is `map-rules/manifest/map_modul
 3. **Database move (DATABASE_DECISION.md):** increments 1–4 are done. Increment 3: `SqlCharacterRepository`, `SqlPartyRepository`, `SqlGuildRepository`, `SqlMailRepository` and a new `SqlStorageRepository` (account storage) run on the extended target schema; `Guild` gained `GuildMember`/`GuildPosition`, `PartyRepository` gained `members()`; `CharacterRepository::remove` executes the BR-CHAR-013 plan step by step in one transaction (divorce + the partner's ring, de-adopt, party leave/dissolve, pets incl. eggs, companions, friends both ways, items, registries, skills, mail, SC, quests, achievements, guild break or leave) on the fake and on SQL; `repositories_test.cpp` is the contract over in-memory/SQLite/PostgreSQL. Not yet ported: clan, homunculus/pet/elemental/mercenary data, registries and the other char tables have no repository (the delete plan only deletes their rows). Earlier increments: SQLite backend, `SqlConnection`, the backend-neutral `SqlAccountRepository` and the clean target schema for the login-owned tables (increment 1); `PostgresConnection` over libpq with the account-repository contract tests run on both backends, including the BR-LOGIN-037 ROLLBACK proof (increment 2); `rathena-migrate import` from MySQL (increment 4, live-tested MariaDB → PostgreSQL 16 and → SQLite). MySQL is gone as a runtime backend and the in-place MySQL migrator (M1…M3b, `MysqlMigrationTarget`) was removed; the foreign keys M3b would have added live on as `target_foreign_keys()` (`persistence/include/rathena/persistence/foreign_keys.hpp`) for the target schema. Next: increment 5 (wire the repositories into the servers). Argon2id itself is done (see Decisions); what remains is calling `submit_password_check` from the login handler (BR-LOGIN-001 orchestration) and saving `new_argon2id_hash` through `AccountRepository::save`. Legacy `login.group_id` is `tinyint` (−128..127), so a widened group id above 127 needs a column change before it can be stored.
 4. Replace `login-server/include/.../protocol/client_packets.hpp` with the verbatim legacy packet headers (K1).
 5. Before phase 2 ships, capture what real clients send on web `*/load` (BR-WEB-010 gate).
-6. **Sim-tick NFR (Phase 4 exit).** The legacy baseline is measured; see `PERFORMANCE.md`. Legacy reaches p99 7.9 ms at 1,000 CCU in the worst-case crowd and 0.7 ms with the bots spread out, against the 50 ms budget. The tools are `tools/ci/simtick.sh` + `tools/ci/loadgen.py`, and `RATHENA_TICKSTATS` enables the instrumentation in `src/common/tickstats.*`. Measure the reimagined map service with the same load generator and the same definition (work between two socket waits) before closing Phase 4.
+6. **Sim-tick NFR (Phase 4 exit, met).** Measured on the delegated legacy map server; see `PERFORMANCE.md`. It reaches p99 7.9 ms at 1,000 CCU in the worst-case crowd and 0.7 ms with the bots spread out, against the 50 ms budget. The tools are `tools/ci/simtick.sh` + `tools/ci/loadgen.py`, and `RATHENA_TICKSTATS` enables the instrumentation in `src/common/tickstats.*`. Re-measure with the same load generator and the same definition (work between two socket waits) after any change to the tick loop.
 7. CI: `.github/workflows/build_reimagined_units.yml` builds the superbuild with warnings as errors on Linux gcc/clang, Windows MSVC and macOS. The superbuild defines `_CRT_SECURE_NO_WARNINGS` for MSVC (the units read the environment with `std::getenv` at startup); a unit built on its own with MSVC and `/WX` needs the same.
