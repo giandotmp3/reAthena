@@ -107,7 +107,7 @@ typedef uint32 t_itemid;
 #define MAX_GUILDSKILL	15 ///Max Guild skills
 #endif
 #define MAX_GUILDLEVEL 50 ///Max Guild level
-#define MAX_GUARDIANS 8	///Local max per castle. If this value is increased, need to add more fields on MySQL `guild_castle` table [Skotlex]
+#define MAX_GUARDIANS 8	///Local max per castle. If this value is increased, need to add more fields on the `guild_castle` table [Skotlex]
 #define MAX_QUEST_OBJECTIVES 3 ///Max quest objectives for a quest
 #define MAX_PC_BONUS_SCRIPT 50 ///Max bonus script can be fetched from `bonus_script` table on player load [Cydh]
 #define MAX_ITEM_RDM_OPT 5	 /// Max item random option [Napster]

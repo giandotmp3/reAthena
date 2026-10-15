@@ -541,29 +541,29 @@ void party_join( map_session_data& sd, int32 party_id ){
 bool party_booking_load( uint32 account_id, uint32 char_id, struct s_party_booking_requirement* booking ){
 	char world_name[NAME_LENGTH * 2 + 1];
 
-	Sql_EscapeString( mmysql_handle, world_name, charserver_name );
+	Sql_EscapeString( map_db_handle, world_name, charserver_name );
 
-	if( Sql_Query( mmysql_handle, "SELECT `minimum_level`, `maximum_level` FROM `%s` WHERE `world_name` = '%s' AND `account_id` = '%u' AND `char_id` = '%u'", partybookings_table, world_name, account_id, char_id ) != SQL_SUCCESS) {
-		Sql_ShowDebug( mmysql_handle );
+	if( Sql_Query( map_db_handle, "SELECT `minimum_level`, `maximum_level` FROM `%s` WHERE `world_name` = '%s' AND `account_id` = '%u' AND `char_id` = '%u'", partybookings_table, world_name, account_id, char_id ) != SQL_SUCCESS) {
+		Sql_ShowDebug( map_db_handle );
 
 		return false;
 	}
 
-	if( Sql_NextRow( mmysql_handle ) != SQL_SUCCESS ){
-		Sql_FreeResult( mmysql_handle );
+	if( Sql_NextRow( map_db_handle ) != SQL_SUCCESS ){
+		Sql_FreeResult( map_db_handle );
 
 		return false;
 	}
 
 	char* data;
 
-	Sql_GetData( mmysql_handle, 0, &data, nullptr );
+	Sql_GetData( map_db_handle, 0, &data, nullptr );
 	booking->minimum_level = (uint16)strtoul( data, nullptr, 10 );
 
-	Sql_GetData( mmysql_handle, 1, &data, nullptr );
+	Sql_GetData( map_db_handle, 1, &data, nullptr );
 	booking->maximum_level = (uint16)strtoul( data, nullptr, 10 );
 
-	Sql_FreeResult( mmysql_handle );
+	Sql_FreeResult( map_db_handle );
 
 	return true;
 }

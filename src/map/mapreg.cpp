@@ -14,7 +14,7 @@
 #include <common/strlib.hpp>
 #include <common/timer.hpp>
 
-#include "map.hpp" // mmysql_handle
+#include "map.hpp" // map_db_handle
 #include "script.hpp"
 
 static struct eri *mapreg_ers;
@@ -86,9 +86,9 @@ bool mapreg_setreg(int64 uid, int64 val)
 
 			if (name[1] != '@' && !skip_insert) {// write new variable to database
 				char esc_name[32 * 2 + 1];
-				Sql_EscapeStringLen(mmysql_handle, esc_name, name, strnlen(name, 32));
-				if (SQL_ERROR == Sql_Query(mmysql_handle, "INSERT INTO `%s`(`varname`,`index`,`value`) VALUES ('%s','%" PRIu32 "','%" PRId64 "')", mapreg_table, esc_name, i, val))
-					Sql_ShowDebug(mmysql_handle);
+				Sql_EscapeStringLen(map_db_handle, esc_name, name, strnlen(name, 32));
+				if (SQL_ERROR == Sql_Query(map_db_handle, "INSERT INTO `%s`(`varname`,`index`,`value`) VALUES ('%s','%" PRIu32 "','%" PRId64 "')", mapreg_table, esc_name, i, val))
+					Sql_ShowDebug(map_db_handle);
 			}
 			i64db_put(regs.vars, uid, m);
 		}
@@ -102,9 +102,9 @@ bool mapreg_setreg(int64 uid, int64 val)
 
 		if (name[1] != '@') {// Remove from database because it is unused.
 			char esc_name[32 * 2 + 1];
-			Sql_EscapeStringLen(mmysql_handle, esc_name, name, strnlen(name, 32));
-			if (SQL_ERROR == Sql_Query(mmysql_handle, "DELETE FROM `%s` WHERE `varname`='%s' AND `index`='%" PRIu32 "'", mapreg_table, esc_name, i))
-				Sql_ShowDebug(mmysql_handle);
+			Sql_EscapeStringLen(map_db_handle, esc_name, name, strnlen(name, 32));
+			if (SQL_ERROR == Sql_Query(map_db_handle, "DELETE FROM `%s` WHERE `varname`='%s' AND `index`='%" PRIu32 "'", mapreg_table, esc_name, i))
+				Sql_ShowDebug(map_db_handle);
 		}
 	}
 
@@ -130,9 +130,9 @@ bool mapreg_setregstr(int64 uid, const char* str)
 			script_array_update(&regs, uid, true);
 		if (name[1] != '@') {
 			char esc_name[32 * 2 + 1];
-			Sql_EscapeStringLen(mmysql_handle, esc_name, name, strnlen(name, 32));
-			if (SQL_ERROR == Sql_Query(mmysql_handle, "DELETE FROM `%s` WHERE `varname`='%s' AND `index`='%" PRIu32 "'", mapreg_table, esc_name, i))
-				Sql_ShowDebug(mmysql_handle);
+			Sql_EscapeStringLen(map_db_handle, esc_name, name, strnlen(name, 32));
+			if (SQL_ERROR == Sql_Query(map_db_handle, "DELETE FROM `%s` WHERE `varname`='%s' AND `index`='%" PRIu32 "'", mapreg_table, esc_name, i))
+				Sql_ShowDebug(map_db_handle);
 		}
 		if ((m = static_cast<mapreg_save *>(i64db_get(regs.vars, uid)))) {
 			if (m->u.str != nullptr)
@@ -163,10 +163,10 @@ bool mapreg_setregstr(int64 uid, const char* str)
 			if (name[1] != '@' && !skip_insert) { //put returned null, so we must insert.
 				char esc_name[32 * 2 + 1];
 				char esc_str[255 * 2 + 1];
-				Sql_EscapeStringLen(mmysql_handle, esc_name, name, strnlen(name, 32));
-				Sql_EscapeStringLen(mmysql_handle, esc_str, str, strnlen(str, 255));
-				if (SQL_ERROR == Sql_Query(mmysql_handle, "INSERT INTO `%s`(`varname`,`index`,`value`) VALUES ('%s','%" PRIu32 "','%s')", mapreg_table, esc_name, i, esc_str))
-					Sql_ShowDebug(mmysql_handle);
+				Sql_EscapeStringLen(map_db_handle, esc_name, name, strnlen(name, 32));
+				Sql_EscapeStringLen(map_db_handle, esc_str, str, strnlen(str, 255));
+				if (SQL_ERROR == Sql_Query(map_db_handle, "INSERT INTO `%s`(`varname`,`index`,`value`) VALUES ('%s','%" PRIu32 "','%s')", mapreg_table, esc_name, i, esc_str))
+					Sql_ShowDebug(map_db_handle);
 			}
 			i64db_put(regs.vars, uid, m);
 		}
@@ -186,7 +186,7 @@ static void script_load_mapreg(void)
 	   | varname | index | value |
 	   +-------------------------+
 	                                */
-	SqlStmt stmt{ *mmysql_handle };
+	SqlStmt stmt{ *map_db_handle };
 	char varname[32+1];
 	uint32 index;
 	char value[255+1];
@@ -239,16 +239,16 @@ static void script_save_mapreg(void)
 				const char* name = get_str(num);
 				if (!m->is_string) {
 					char esc_name[32 * 2 + 1];
-					Sql_EscapeStringLen(mmysql_handle, esc_name, name, strnlen(name, 32));
-					if (SQL_ERROR == Sql_Query(mmysql_handle, "UPDATE `%s` SET `value`='%" PRId64 "' WHERE `varname`='%s' AND `index`='%" PRIu32 "'", mapreg_table, m->u.i, esc_name, i))
-						Sql_ShowDebug(mmysql_handle);
+					Sql_EscapeStringLen(map_db_handle, esc_name, name, strnlen(name, 32));
+					if (SQL_ERROR == Sql_Query(map_db_handle, "UPDATE `%s` SET `value`='%" PRId64 "' WHERE `varname`='%s' AND `index`='%" PRIu32 "'", mapreg_table, m->u.i, esc_name, i))
+						Sql_ShowDebug(map_db_handle);
 				} else {
 					char esc_str[2 * 255 + 1];
 					char esc_name[32 * 2 + 1];
-					Sql_EscapeStringLen(mmysql_handle, esc_name, name, strnlen(name, 32));
-					Sql_EscapeStringLen(mmysql_handle, esc_str, m->u.str, safestrnlen(m->u.str, 255));
-					if (SQL_ERROR == Sql_Query(mmysql_handle, "UPDATE `%s` SET `value`='%s' WHERE `varname`='%s' AND `index`='%" PRIu32 "'", mapreg_table, esc_str, esc_name, i))
-						Sql_ShowDebug(mmysql_handle);
+					Sql_EscapeStringLen(map_db_handle, esc_name, name, strnlen(name, 32));
+					Sql_EscapeStringLen(map_db_handle, esc_str, m->u.str, safestrnlen(m->u.str, 255));
+					if (SQL_ERROR == Sql_Query(map_db_handle, "UPDATE `%s` SET `value`='%s' WHERE `varname`='%s' AND `index`='%" PRIu32 "'", mapreg_table, esc_str, esc_name, i))
+						Sql_ShowDebug(map_db_handle);
 				}
 				m->save = false;
 			}

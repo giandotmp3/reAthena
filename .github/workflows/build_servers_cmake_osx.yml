@@ -43,8 +43,7 @@ jobs:
         run: |
           brew update
           brew install pcre
-          brew install mysql
-          brew install mysql-client
+          brew install libpq
 
       # Install latest CMake.
       - uses: lukka/get-cmake@latest
@@ -55,7 +54,7 @@ jobs:
       - name: Create Unix Makefiles
         run: |
           cd cbuild
-          cmake ..
+          cmake -DCMAKE_PREFIX_PATH="$(brew --prefix libpq)" ..
 
       - name: Command - make
         run: |

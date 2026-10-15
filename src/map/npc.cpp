@@ -844,29 +844,29 @@ void BarterDatabase::loadingFinished(){
 
 		for( const auto& itemPair : barter->items ){
 			if( itemPair.second->stockLimited ){
-				if( Sql_Query( mmysql_handle, "SELECT `amount` FROM `%s` WHERE `name` = '%s' AND `index` = '%hu'", barter_table, barter->name.c_str(), itemPair.first ) != SQL_SUCCESS ){
-					Sql_ShowDebug( mmysql_handle );
+				if( Sql_Query( map_db_handle, "SELECT `amount` FROM `%s` WHERE `name` = '%s' AND `index` = '%hu'", barter_table, barter->name.c_str(), itemPair.first ) != SQL_SUCCESS ){
+					Sql_ShowDebug( map_db_handle );
 					continue;
 				}
 
 				// Previous amount found
-				if( SQL_SUCCESS == Sql_NextRow( mmysql_handle ) ){
+				if( SQL_SUCCESS == Sql_NextRow( map_db_handle ) ){
 					char* data;
 
-					Sql_GetData( mmysql_handle, 0, &data, nullptr );
+					Sql_GetData( map_db_handle, 0, &data, nullptr );
 
 					itemPair.second->stock = strtoul( data, nullptr, 10 );
 				}
 
-				Sql_FreeResult( mmysql_handle );
+				Sql_FreeResult( map_db_handle );
 
 				// Save or refresh the amount
-				if( Sql_Query( mmysql_handle, "REPLACE INTO `%s` (`name`,`index`,`amount`) VALUES ( '%s', '%hu', '%hu' )", barter_table, barter->name.c_str(), itemPair.first, itemPair.second->stock ) != SQL_SUCCESS ){
-					Sql_ShowDebug( mmysql_handle );
+				if( Sql_Query( map_db_handle, "REPLACE INTO `%s` (`name`,`index`,`amount`) VALUES ( '%s', '%hu', '%hu' )", barter_table, barter->name.c_str(), itemPair.first, itemPair.second->stock ) != SQL_SUCCESS ){
+					Sql_ShowDebug( map_db_handle );
 				}
 			}else{
-				if( Sql_Query( mmysql_handle, "DELETE FROM `%s` WHERE `name` = '%s' AND `index` = '%hu'", barter_table, barter->name.c_str(), itemPair.first ) != SQL_SUCCESS ){
-					Sql_ShowDebug( mmysql_handle );
+				if( Sql_Query( map_db_handle, "DELETE FROM `%s` WHERE `name` = '%s' AND `index` = '%hu'", barter_table, barter->name.c_str(), itemPair.first ) != SQL_SUCCESS ){
+					Sql_ShowDebug( map_db_handle );
 				}
 			}
 		}
@@ -3357,8 +3357,8 @@ e_purchase_result npc_barter_purchase( map_session_data& sd, std::shared_ptr<s_n
 		if( purchase.item->stockLimited ){
 			purchase.item->stock -= purchase.amount;
 
-			if( Sql_Query( mmysql_handle, "REPLACE INTO `%s` (`name`,`index`,`amount`) VALUES ( '%s', '%hu', '%hu' )", barter_table, barter->name.c_str(), purchase.item->index, purchase.item->stock ) != SQL_SUCCESS ){
-				Sql_ShowDebug( mmysql_handle );
+			if( Sql_Query( map_db_handle, "REPLACE INTO `%s` (`name`,`index`,`amount`) VALUES ( '%s', '%hu', '%hu' )", barter_table, barter->name.c_str(), purchase.item->index, purchase.item->stock ) != SQL_SUCCESS ){
+				Sql_ShowDebug( map_db_handle );
 				return e_purchase_result::PURCHASE_FAIL_EXCHANGE_FAILED;
 			}
 		}
@@ -4793,7 +4793,7 @@ int32 npc_instancedestroy(npc_data* nd)
  * @param qty Stock
  **/
 void npc_market_tosql(const char *exname, struct npc_item_list *list) {
-	SqlStmt stmt{ *mmysql_handle };
+	SqlStmt stmt{ *map_db_handle };
 	if (SQL_ERROR == stmt.Prepare("REPLACE INTO `%s` (`name`,`nameid`,`price`,`amount`,`flag`) VALUES ('%s','%u','%d','%d','%" PRIu8 "')",
 		market_table, exname, list->nameid, list->value, list->qty, list->flag) ||
 		SQL_ERROR == stmt.Execute())
@@ -4807,7 +4807,7 @@ void npc_market_tosql(const char *exname, struct npc_item_list *list) {
  * @param clear True: will removes all records related with the NPC
  **/
 void npc_market_delfromsql_(const char *exname, t_itemid nameid, bool clear) {
-	SqlStmt stmt{ *mmysql_handle };
+	SqlStmt stmt{ *map_db_handle };
 	if (clear) {
 		if( SQL_ERROR == stmt.Prepare("DELETE FROM `%s` WHERE `name`='%s'", market_table, exname) ||
 			SQL_ERROR == stmt.Execute())
@@ -4921,17 +4921,17 @@ static void npc_market_checkall(void) {
 static void npc_market_fromsql(void) {
 	uint32 count = 0;
 
-	if (SQL_ERROR == Sql_Query(mmysql_handle, "SELECT `name`,`nameid`,`price`,`amount`,`flag` FROM `%s` ORDER BY `name`", market_table)) {
-		Sql_ShowDebug(mmysql_handle);
+	if (SQL_ERROR == Sql_Query(map_db_handle, "SELECT `name`,`nameid`,`price`,`amount`,`flag` FROM `%s` ORDER BY `name`", market_table)) {
+		Sql_ShowDebug(map_db_handle);
 		return;
 	}
 
-	while (SQL_SUCCESS == Sql_NextRow(mmysql_handle)) {
+	while (SQL_SUCCESS == Sql_NextRow(map_db_handle)) {
 		char *data;
 		struct s_npc_market *market;
 		struct npc_item_list list;
 
-		Sql_GetData(mmysql_handle, 0, &data, nullptr);
+		Sql_GetData(map_db_handle, 0, &data, nullptr);
 
 		if (!(market = (struct s_npc_market *)strdb_get(NPCMarketDB,data))) {
 			CREATE(market, struct s_npc_market, 1);
@@ -4940,10 +4940,10 @@ static void npc_market_fromsql(void) {
 			strdb_put(NPCMarketDB, market->exname, market);
 		}
 
-		Sql_GetData(mmysql_handle, 1, &data, nullptr); list.nameid = strtoul(data, nullptr, 10);
-		Sql_GetData(mmysql_handle, 2, &data, nullptr); list.value = atoi(data);
-		Sql_GetData(mmysql_handle, 3, &data, nullptr); list.qty = atoi(data);
-		Sql_GetData(mmysql_handle, 4, &data, nullptr); list.flag = atoi(data);
+		Sql_GetData(map_db_handle, 1, &data, nullptr); list.nameid = strtoul(data, nullptr, 10);
+		Sql_GetData(map_db_handle, 2, &data, nullptr); list.value = atoi(data);
+		Sql_GetData(map_db_handle, 3, &data, nullptr); list.qty = atoi(data);
+		Sql_GetData(map_db_handle, 4, &data, nullptr); list.flag = atoi(data);
 
 		std::shared_ptr<item_data> id = item_db.find(list.nameid);
 
@@ -4962,7 +4962,7 @@ static void npc_market_fromsql(void) {
 		market->list[market->count++] = list;
 		count++;
 	}
-	Sql_FreeResult(mmysql_handle);
+	Sql_FreeResult(map_db_handle);
 
 	ShowStatus("Done loading '" CL_WHITE "%d" CL_RESET "' entries for '" CL_WHITE "%d" CL_RESET "' NPC Markets from '" CL_WHITE "%s" CL_RESET "' table.\n", count, db_size(NPCMarketDB), market_table);
 }

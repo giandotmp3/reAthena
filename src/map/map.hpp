@@ -1317,9 +1317,9 @@ typedef s_elemental_data	TBL_ELEM;
 #ifndef ONLY_CONSTANTS
 #include <common/sql.hpp>
 
-extern Sql* mmysql_handle;
-extern Sql* qsmysql_handle;
-extern Sql* logmysql_handle;
+extern Sql* map_db_handle;
+extern Sql* qs_db_handle;
+extern Sql* log_db_handle;
 #endif
 
 extern char barter_table[32];

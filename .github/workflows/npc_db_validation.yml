@@ -58,8 +58,6 @@ jobs:
           sudo apt update
           sudo apt install zlib1g-dev libpcre3-dev gcc-${{ matrix.gcc }} g++-${{ matrix.gcc }}
           
-      - name: Start MySQL
-        run: sudo systemctl start mysql.service
 
       - name: Command - configure
         env:
@@ -79,12 +77,6 @@ jobs:
 
       - name: Command - make tools
         run: make tools
-
-      - name: Run Once - yaml2sql
-        run: ./yaml2sql
-
-      - name: Setup Database and import table data
-        run: ./tools/ci/sql.sh
 
       - name: Command - make map
         run: make map

@@ -3953,8 +3953,8 @@ bool itemdb_parse_roulette_db(void)
 	uint32 count = 0;
 
 	// retrieve all rows from the item database
-	if (SQL_ERROR == Sql_Query(mmysql_handle, "SELECT * FROM `%s`", roulette_table)) {
-		Sql_ShowDebug(mmysql_handle);
+	if (SQL_ERROR == Sql_Query(map_db_handle, "SELECT * FROM `%s`", roulette_table)) {
+		Sql_ShowDebug(map_db_handle);
 		return false;
 	}
 
@@ -3964,16 +3964,16 @@ bool itemdb_parse_roulette_db(void)
 	for (i = 0; i < MAX_ROULETTE_LEVEL; i++) {
 		int32 k, limit = MAX_ROULETTE_COLUMNS - i;
 
-		for (k = 0; k < limit && SQL_SUCCESS == Sql_NextRow(mmysql_handle); k++) {
+		for (k = 0; k < limit && SQL_SUCCESS == Sql_NextRow(map_db_handle); k++) {
 			char* data;
 			t_itemid item_id;
 			uint16 amount;
 			int32 level, flag;
 
-			Sql_GetData(mmysql_handle, 1, &data, nullptr); level = atoi(data);
-			Sql_GetData(mmysql_handle, 2, &data, nullptr); item_id = strtoul(data, nullptr, 10);
-			Sql_GetData(mmysql_handle, 3, &data, nullptr); amount = atoi(data);
-			Sql_GetData(mmysql_handle, 4, &data, nullptr); flag = atoi(data);
+			Sql_GetData(map_db_handle, 1, &data, nullptr); level = atoi(data);
+			Sql_GetData(map_db_handle, 2, &data, nullptr); item_id = strtoul(data, nullptr, 10);
+			Sql_GetData(map_db_handle, 3, &data, nullptr); amount = atoi(data);
+			Sql_GetData(map_db_handle, 4, &data, nullptr); flag = atoi(data);
 
 			if (!item_db.exists(item_id)) {
 				ShowWarning("itemdb_parse_roulette_db: Unknown item ID '%u' in level '%d'\n", item_id, level);
@@ -4002,7 +4002,7 @@ bool itemdb_parse_roulette_db(void)
 	}
 
 	// free the query result
-	Sql_FreeResult(mmysql_handle);
+	Sql_FreeResult(map_db_handle);
 
 	for (i = 0; i < MAX_ROULETTE_LEVEL; i++) {
 		int32 limit = MAX_ROULETTE_COLUMNS - i;

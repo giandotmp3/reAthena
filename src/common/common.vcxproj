@@ -39,6 +39,7 @@
     <ClInclude Include="showmsg.hpp" />
     <ClInclude Include="socket.hpp" />
     <ClInclude Include="sql.hpp" />
+    <ClInclude Include="sql_dialect.hpp" />
     <ClInclude Include="strlib.hpp" />
     <ClInclude Include="timer.hpp" />
     <ClInclude Include="utils.hpp" />
@@ -63,6 +64,12 @@
     <ClCompile Include="showmsg.cpp" />
     <ClCompile Include="socket.cpp" />
     <ClCompile Include="sql.cpp" />
+    <ClCompile Include="sql_dialect.cpp" />
+    <ClCompile Include="..\..\3rdparty\sqlite\sqlite3.c">
+      <CompileAs>CompileAsC</CompileAs>
+      <WarningLevel>TurnOffAllWarnings</WarningLevel>
+      <PreprocessorDefinitions>SQLITE_DQS=0;SQLITE_THREADSAFE=1;SQLITE_OMIT_LOAD_EXTENSION;SQLITE_OMIT_DEPRECATED;SQLITE_DEFAULT_MEMSTATUS=0;SQLITE_LIKE_DOESNT_MATCH_BLOBS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
     <ClCompile Include="strlib.cpp" />
     <ClCompile Include="timer.cpp" />
     <ClCompile Include="utils.cpp" />
@@ -120,22 +127,22 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <OutDir>$(SolutionDir).vs\build\</OutDir>
     <IntDir>$(SolutionDir).vs\build\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
-    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SolutionDir)3rdparty\zlib\include\;$(SolutionDir)3rdparty\mysql\include\;$(SolutionDir)3rdparty\libconfig\</IncludePath>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SolutionDir)3rdparty\zlib\include\;$(SolutionDir)3rdparty\sqlite\;$(SolutionDir)3rdparty\libconfig\</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <IntDir>$(SolutionDir).vs\build\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
     <OutDir>$(SolutionDir).vs\build\</OutDir>
-    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SolutionDir)3rdparty\zlib\include\;$(SolutionDir)3rdparty\mysql\include\;$(SolutionDir)3rdparty\libconfig\</IncludePath>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SolutionDir)3rdparty\zlib\include\;$(SolutionDir)3rdparty\sqlite\;$(SolutionDir)3rdparty\libconfig\</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <OutDir>$(SolutionDir).vs\build\</OutDir>
     <IntDir>$(SolutionDir).vs\build\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
-    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SolutionDir)3rdparty\zlib\include\;$(SolutionDir)3rdparty\mysql\include\;$(SolutionDir)3rdparty\libconfig\</IncludePath>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SolutionDir)3rdparty\zlib\include\;$(SolutionDir)3rdparty\sqlite\;$(SolutionDir)3rdparty\libconfig\</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <IntDir>$(SolutionDir).vs\build\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
     <OutDir>$(SolutionDir).vs\build\</OutDir>
-    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SolutionDir)3rdparty\zlib\include\;$(SolutionDir)3rdparty\mysql\include\;$(SolutionDir)3rdparty\libconfig\</IncludePath>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SolutionDir)3rdparty\zlib\include\;$(SolutionDir)3rdparty\sqlite\;$(SolutionDir)3rdparty\libconfig\</IncludePath>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <VcpkgUseStatic>true</VcpkgUseStatic>

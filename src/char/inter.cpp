@@ -44,7 +44,7 @@ InterServerDatabase interServerDb;
 
 #define WISDATA_TTL (60*1000)	//Wis data Time To Live (60 seconds)
 
-Sql* sql_handle = nullptr;	///Link to mysql db, connection FD
+Sql* sql_handle = nullptr;	///Link to the database, connection FD
 
 int32 char_server_port = 5432;
 std::string char_server_ip = "127.0.0.1";

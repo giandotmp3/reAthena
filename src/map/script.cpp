@@ -18124,17 +18124,17 @@ int32 buildin_query_sql_sub(struct script_state* st, Sql* handle)
 }
 
 BUILDIN_FUNC(query_sql) {
-	return buildin_query_sql_sub(st, qsmysql_handle);
+	return buildin_query_sql_sub(st, qs_db_handle);
 }
 
 BUILDIN_FUNC(query_logsql) {
-	if( !log_config.sql_logs ) {// logmysql_handle == nullptr
+	if( !log_config.sql_logs ) {// log_db_handle == nullptr
 		ShowWarning("buildin_query_logsql: SQL logs are disabled, query '%s' will not be executed.\n", script_getstr(st,2));
 		script_pushint(st,-1);
 		return SCRIPT_CMD_FAILURE;
 	}
 
-	return buildin_query_sql_sub(st, logmysql_handle);
+	return buildin_query_sql_sub(st, log_db_handle);
 }
 
 //Allows escaping of a given string.
@@ -18147,7 +18147,7 @@ BUILDIN_FUNC(escape_sql)
 	str = script_getstr(st,2);
 	len = strlen(str);
 	esc_str = (char*)aMalloc(len*2+1);
-	Sql_EscapeStringLen(mmysql_handle, esc_str, str, len);
+	Sql_EscapeStringLen(map_db_handle, esc_str, str, len);
 	script_pushstr(st, esc_str);
 	return SCRIPT_CMD_SUCCESS;
 }

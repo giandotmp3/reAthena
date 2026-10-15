@@ -63,8 +63,8 @@ std::string map_server_ip = "127.0.0.1";
 std::string map_server_id = "ragnarok";
 std::string map_server_pw = "";
 std::string map_server_db = "ragnarok";
-Sql* mmysql_handle;
-Sql* qsmysql_handle; /// For query_sql
+Sql* map_db_handle;
+Sql* qs_db_handle; /// For query_sql
 
 char barter_table[32] = "barter";
 char buyingstores_table[32] = "buyingstores";
@@ -83,7 +83,7 @@ uint16 log_db_port = 5432;
 std::string log_db_id = "ragnarok";
 std::string log_db_pw = "";
 std::string log_db_db = "log";
-Sql* logmysql_handle;
+Sql* log_db_handle;
 
 // inter config
 struct inter_conf inter_config {};
@@ -4364,33 +4364,33 @@ int32 inter_config_read(const char *cfgName)
 }
 
 /*=======================================
- *  MySQL Init
+ *  Database Init
  *---------------------------------------*/
 int32 map_sql_init(void)
 {
 	// main db connection
-	mmysql_handle = Sql_Malloc();
-	qsmysql_handle = Sql_Malloc();
+	map_db_handle = Sql_Malloc();
+	qs_db_handle = Sql_Malloc();
 
 	ShowInfo("Connecting to the Map DB Server....\n");
-	if( SQL_ERROR == Sql_Connect(mmysql_handle, map_server_id.c_str(), map_server_pw.c_str(), map_server_ip.c_str(), map_server_port, map_server_db.c_str()) ||
-		SQL_ERROR == Sql_Connect(qsmysql_handle, map_server_id.c_str(), map_server_pw.c_str(), map_server_ip.c_str(), map_server_port, map_server_db.c_str()) )
+	if( SQL_ERROR == Sql_Connect(map_db_handle, map_server_id.c_str(), map_server_pw.c_str(), map_server_ip.c_str(), map_server_port, map_server_db.c_str()) ||
+		SQL_ERROR == Sql_Connect(qs_db_handle, map_server_id.c_str(), map_server_pw.c_str(), map_server_ip.c_str(), map_server_port, map_server_db.c_str()) )
 	{
 		ShowError("Couldn't connect with uname='%s',host='%s',port='%d',database='%s'\n",
 			map_server_id.c_str(), map_server_ip.c_str(), map_server_port, map_server_db.c_str());
-		Sql_ShowDebug(mmysql_handle);
-		Sql_Free(mmysql_handle);
-		Sql_ShowDebug(qsmysql_handle);
-		Sql_Free(qsmysql_handle);
+		Sql_ShowDebug(map_db_handle);
+		Sql_Free(map_db_handle);
+		Sql_ShowDebug(qs_db_handle);
+		Sql_Free(qs_db_handle);
 		exit(EXIT_FAILURE);
 	}
 	ShowStatus("Connect success! (Map Server Connection)\n");
 
 	if( !default_codepage.empty() ) {
-		if ( SQL_ERROR == Sql_SetEncoding(mmysql_handle, default_codepage.c_str()) )
-			Sql_ShowDebug(mmysql_handle);
-		if ( SQL_ERROR == Sql_SetEncoding(qsmysql_handle, default_codepage.c_str()) )
-			Sql_ShowDebug(qsmysql_handle);
+		if ( SQL_ERROR == Sql_SetEncoding(map_db_handle, default_codepage.c_str()) )
+			Sql_ShowDebug(map_db_handle);
+		if ( SQL_ERROR == Sql_SetEncoding(qs_db_handle, default_codepage.c_str()) )
+			Sql_ShowDebug(qs_db_handle);
 	}
 	return 0;
 }
@@ -4398,16 +4398,16 @@ int32 map_sql_init(void)
 int32 map_sql_close(void)
 {
 	ShowStatus("Close Map DB Connection....\n");
-	Sql_Free(mmysql_handle);
-	Sql_Free(qsmysql_handle);
-	mmysql_handle = nullptr;
-	qsmysql_handle = nullptr;
+	Sql_Free(map_db_handle);
+	Sql_Free(qs_db_handle);
+	map_db_handle = nullptr;
+	qs_db_handle = nullptr;
 
 	if (log_config.sql_logs)
 	{
 		ShowStatus("Close Log DB Connection....\n");
-		Sql_Free(logmysql_handle);
-		logmysql_handle = nullptr;
+		Sql_Free(log_db_handle);
+		log_db_handle = nullptr;
 	}
 
 	return 0;
@@ -4416,21 +4416,21 @@ int32 map_sql_close(void)
 int32 log_sql_init(void)
 {
 	// log db connection
-	logmysql_handle = Sql_Malloc();
+	log_db_handle = Sql_Malloc();
 
 	ShowInfo("" CL_WHITE "[SQL]" CL_RESET ": Connecting to the Log Database " CL_WHITE "%s" CL_RESET " At " CL_WHITE "%s" CL_RESET "...\n",log_db_db.c_str(), log_db_ip.c_str());
-	if ( SQL_ERROR == Sql_Connect(logmysql_handle, log_db_id.c_str(), log_db_pw.c_str(), log_db_ip.c_str(), log_db_port, log_db_db.c_str()) ){
+	if ( SQL_ERROR == Sql_Connect(log_db_handle, log_db_id.c_str(), log_db_pw.c_str(), log_db_ip.c_str(), log_db_port, log_db_db.c_str()) ){
 		ShowError("Couldn't connect with uname='%s',host='%s',port='%hu',database='%s'\n",
 			log_db_id.c_str(), log_db_ip.c_str(), log_db_port, log_db_db.c_str());
-		Sql_ShowDebug(logmysql_handle);
-		Sql_Free(logmysql_handle);
+		Sql_ShowDebug(log_db_handle);
+		Sql_Free(log_db_handle);
 		exit(EXIT_FAILURE);
 	}
 	ShowStatus("" CL_WHITE "[SQL]" CL_RESET ": Successfully '" CL_GREEN "connected" CL_RESET "' to Database '" CL_WHITE "%s" CL_RESET "'.\n", log_db_db.c_str());
 
 	if( !default_codepage.empty() )
-		if ( SQL_ERROR == Sql_SetEncoding(logmysql_handle, default_codepage.c_str()) )
-			Sql_ShowDebug(logmysql_handle);
+		if ( SQL_ERROR == Sql_SetEncoding(log_db_handle, default_codepage.c_str()) )
+			Sql_ShowDebug(log_db_handle);
 
 	return 0;
 }

@@ -114,7 +114,7 @@ void int_party_calc_state( std::shared_ptr<struct party_data> p ){
 	return;
 }
 
-// Save party to mysql
+// Save party to the database
 int32 inter_party_tosql(struct party *p, int32 flag, int32 index)
 {
 	// 'party' ('party_id','name','exp','item','leader_id','leader_char')
@@ -188,7 +188,7 @@ int32 inter_party_tosql(struct party *p, int32 flag, int32 index)
 	return 1;
 }
 
-// Read party from mysql
+// Read party from the database
 std::shared_ptr<struct party_data> inter_party_fromsql( int32 party_id ){
 	int32 leader_id = 0;
 	int32 leader_char = 0;

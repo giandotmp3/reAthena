@@ -111,7 +111,7 @@
       <DisableSpecificWarnings>4018;4200</DisableSpecificWarnings>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
-      <AdditionalIncludeDirectories>$(SolutionDir)src;$(SolutionDir)\3rdparty\rapidyaml\src;$(SolutionDir)\3rdparty\rapidyaml\ext\c4core\src;$(SolutionDir)\3rdparty\pcre\include;$(SolutionDir)3rdparty\libconfig\;$(SolutionDir)3rdparty\mysql\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)src;$(SolutionDir)\3rdparty\rapidyaml\src;$(SolutionDir)\3rdparty\rapidyaml\ext\c4core\src;$(SolutionDir)\3rdparty\pcre\include;$(SolutionDir)3rdparty\libconfig\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
@@ -119,7 +119,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>ws2_32.lib;$(SolutionDir).vs\build\ryml.lib;$(SolutionDir).vs\build\common.lib;$(SolutionDir).vs\build\libconfig.lib;$(SolutionDir)3rdparty\zlib\lib\$(Platform)\zlib.lib;$(SolutionDir)3rdparty\pcre\lib\$(Platform)\pcre8.lib;$(SolutionDir)3rdparty\mysql\lib\$(Platform)\libmysql.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>ws2_32.lib;$(SolutionDir).vs\build\ryml.lib;$(SolutionDir).vs\build\common.lib;$(SolutionDir).vs\build\libconfig.lib;$(SolutionDir)3rdparty\zlib\lib\$(Platform)\zlib.lib;$(SolutionDir)3rdparty\pcre\lib\$(Platform)\pcre8.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -133,14 +133,14 @@
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>$(SolutionDir)src;$(SolutionDir)\3rdparty\rapidyaml\src;$(SolutionDir)\3rdparty\rapidyaml\ext\c4core\src;$(SolutionDir)\3rdparty\pcre\include;$(SolutionDir)3rdparty\libconfig\;$(SolutionDir)3rdparty\mysql\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)src;$(SolutionDir)\3rdparty\rapidyaml\src;$(SolutionDir)\3rdparty\rapidyaml\ext\c4core\src;$(SolutionDir)\3rdparty\pcre\include;$(SolutionDir)3rdparty\libconfig\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>ws2_32.lib;$(SolutionDir).vs\build\ryml.lib;$(SolutionDir).vs\build\common.lib;$(SolutionDir).vs\build\libconfig.lib;$(SolutionDir)3rdparty\zlib\lib\$(Platform)\zlib.lib;$(SolutionDir)3rdparty\pcre\lib\$(Platform)\pcre8.lib;$(SolutionDir)3rdparty\mysql\lib\$(Platform)\libmysql.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>ws2_32.lib;$(SolutionDir).vs\build\ryml.lib;$(SolutionDir).vs\build\common.lib;$(SolutionDir).vs\build\libconfig.lib;$(SolutionDir)3rdparty\zlib\lib\$(Platform)\zlib.lib;$(SolutionDir)3rdparty\pcre\lib\$(Platform)\pcre8.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -156,7 +156,7 @@
       <DisableSpecificWarnings>4018</DisableSpecificWarnings>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>$(SolutionDir)src;$(SolutionDir)\3rdparty\rapidyaml\src;$(SolutionDir)\3rdparty\rapidyaml\ext\c4core\src;$(SolutionDir)\3rdparty\pcre\include;$(SolutionDir)3rdparty\libconfig\;$(SolutionDir)3rdparty\mysql\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)src;$(SolutionDir)\3rdparty\rapidyaml\src;$(SolutionDir)\3rdparty\rapidyaml\ext\c4core\src;$(SolutionDir)\3rdparty\pcre\include;$(SolutionDir)3rdparty\libconfig\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
@@ -165,7 +165,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>ws2_32.lib;$(SolutionDir).vs\build\ryml.lib;$(SolutionDir).vs\build\common.lib;$(SolutionDir).vs\build\libconfig.lib;$(SolutionDir)3rdparty\zlib\lib\$(Platform)\zlib.lib;$(SolutionDir)3rdparty\pcre\lib\$(Platform)\pcre8.lib;$(SolutionDir)3rdparty\mysql\lib\$(Platform)\libmysql.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>ws2_32.lib;$(SolutionDir).vs\build\ryml.lib;$(SolutionDir).vs\build\common.lib;$(SolutionDir).vs\build\libconfig.lib;$(SolutionDir)3rdparty\zlib\lib\$(Platform)\zlib.lib;$(SolutionDir)3rdparty\pcre\lib\$(Platform)\pcre8.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <Profile>true</Profile>
     </Link>
   </ItemDefinitionGroup>
@@ -182,7 +182,7 @@
       <DisableSpecificWarnings>4018</DisableSpecificWarnings>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>$(SolutionDir)src;$(SolutionDir)\3rdparty\rapidyaml\src;$(SolutionDir)\3rdparty\rapidyaml\ext\c4core\src;$(SolutionDir)\3rdparty\pcre\include;$(SolutionDir)3rdparty\libconfig\;$(SolutionDir)3rdparty\mysql\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)src;$(SolutionDir)\3rdparty\rapidyaml\src;$(SolutionDir)\3rdparty\rapidyaml\ext\c4core\src;$(SolutionDir)\3rdparty\pcre\include;$(SolutionDir)3rdparty\libconfig\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
@@ -191,7 +191,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>ws2_32.lib;$(SolutionDir).vs\build\ryml.lib;$(SolutionDir).vs\build\common.lib;$(SolutionDir).vs\build\libconfig.lib;$(SolutionDir)3rdparty\zlib\lib\$(Platform)\zlib.lib;$(SolutionDir)3rdparty\pcre\lib\$(Platform)\pcre8.lib;$(SolutionDir)3rdparty\mysql\lib\$(Platform)\libmysql.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>ws2_32.lib;$(SolutionDir).vs\build\ryml.lib;$(SolutionDir).vs\build\common.lib;$(SolutionDir).vs\build\libconfig.lib;$(SolutionDir)3rdparty\zlib\lib\$(Platform)\zlib.lib;$(SolutionDir)3rdparty\pcre\lib\$(Platform)\pcre8.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <Profile>true</Profile>
     </Link>
   </ItemDefinitionGroup>
@@ -5236,7 +5236,6 @@
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
   <Target Name="AfterClean">
-    <Delete Files="$(SolutionDir)libmysql.dll" ContinueOnError="true" />
     <Delete Files="$(SolutionDir)zlib.dll" ContinueOnError="true" />
     <Delete Files="$(SolutionDir)pcre8.dll" ContinueOnError="true" />
     <Delete Files="$(SolutionDir)serv.bat" ContinueOnError="true" />
@@ -5244,7 +5243,6 @@
     <Delete Files="$(SolutionDir)runserver.bat" ContinueOnError="true" />
   </Target>
   <Target Name="AfterBuild">
-    <Copy SourceFiles="$(SolutionDir)3rdparty\mysql\lib\$(Platform)\libmysql.dll" DestinationFolder="$(SolutionDir)" ContinueOnError="true" Condition="!Exists('$(SolutionDir)libmysql.dll')" />
     <Copy SourceFiles="$(SolutionDir)3rdparty\pcre\lib\$(Platform)\pcre8.dll" DestinationFolder="$(SolutionDir)" ContinueOnError="true" Condition="!Exists('$(SolutionDir)pcre8.dll')" />
     <Copy SourceFiles="$(SolutionDir)3rdparty\zlib\lib\$(Platform)\zlib.dll" DestinationFolder="$(SolutionDir)" ContinueOnError="true" Condition="!Exists('$(SolutionDir)zlib.dll')" />
     <Copy SourceFiles="$(SolutionDir)tools\serv.bat" DestinationFolder="$(SolutionDir)" ContinueOnError="true" Condition="!Exists('$(SolutionDir)serv.bat')" />

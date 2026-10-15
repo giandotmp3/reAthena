@@ -565,25 +565,47 @@ private:
 #endif
 
 /// Creates the schema in an empty database (db_auto_create_schema).
+/// Servers usually start together, so the check and the creation run in one transaction that holds
+/// a database-wide lock: the first server creates the schema, the others wait and then find it.
 static bool create_schema_if_empty( Engine& engine ){
 	if( !db_auto_create_schema || engine.has_table( "login" ) ){
 		return true;
 	}
-	const char* sub = ( db_backend == e_db_backend::postgresql ) ? "postgresql" : "sqlite";
+	const bool pg = ( db_backend == e_db_backend::postgresql );
+	// SQLite: a write transaction excludes other writers (they wait up to busy_timeout).
+	// PostgreSQL: DDL is transactional; the advisory lock key is arbitrary but fixed ("rAth").
+	if( !engine.exec_script( pg ? "BEGIN; SELECT pg_advisory_xact_lock(1918989416);" : "BEGIN IMMEDIATE;" ) ){
+		ShowError( "Creating the schema: cannot lock the database: %s\n", engine.error.c_str() );
+		return false;
+	}
+	auto rollback = [&engine]( void ){
+		const std::string error = engine.error;
+		engine.exec_script( "ROLLBACK;" );
+		engine.error = error;
+		return false;
+	};
+	if( engine.has_table( "login" ) ){
+		return engine.exec_script( "COMMIT;" ); // another server created it meanwhile
+	}
+	const char* sub = pg ? "postgresql" : "sqlite";
 	ShowStatus( "Database is empty: creating the schema from %s/%s/ ...\n", db_schema_directory.c_str(), sub );
 	for( const char* file : { "main.sql", "logs.sql", "web.sql", "roulette_default_data.sql" } ){
 		const std::string path = db_schema_directory + "/" + sub + "/" + file;
 		std::ifstream in( path, std::ios::binary );
 		if( !in ){
 			ShowError( "Schema file not found: %s\n", path.c_str() );
-			return false;
+			return rollback();
 		}
 		std::stringstream ss;
 		ss << in.rdbuf();
 		if( !engine.exec_script( ss.str() ) ){
 			ShowError( "Creating the schema from %s failed: %s\n", path.c_str(), engine.error.c_str() );
-			return false;
+			return rollback();
 		}
+	}
+	if( !engine.exec_script( "COMMIT;" ) ){
+		ShowError( "Creating the schema: commit failed: %s\n", engine.error.c_str() );
+		return rollback();
 	}
 	ShowStatus( "Database schema created.\n" );
 	return true;
@@ -910,7 +932,7 @@ struct SqlStmtState {
 	uint64 insert_id = 0;
 };
 
-SqlStmt::SqlStmt( Sql& sql ) : sql( sql ), state( std::make_unique<SqlStmtState>() ){
+SqlStmt::SqlStmt( Sql& handle ) : sql( handle ), state( std::make_unique<SqlStmtState>() ){
 	StringBuf_Init( &this->buf ); // the constructor does not allocate
 }
 

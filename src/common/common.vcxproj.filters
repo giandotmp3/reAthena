@@ -68,6 +68,9 @@
     <ClInclude Include="socket.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="sql_dialect.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="sql.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -134,6 +137,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="socket.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="sql_dialect.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3rdparty\sqlite\sqlite3.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="sql.cpp">

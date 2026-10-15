@@ -47,11 +47,11 @@ We want to hide all error messages and add a few custom maps.
 
 ### Inter Server
 ---
-We want to use MySQL tables instead of .txt files.
+We want to keep the data in PostgreSQL instead of the default SQLite file (save/ragnarok.db).
 
 #### /conf/import/inter_conf.txt
 
-	use_sql_db: yes
+	db_backend: postgresql
 
 
 ### Logging Settings

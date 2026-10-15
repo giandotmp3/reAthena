@@ -614,7 +614,7 @@ char storage_guild_storageopen(map_session_data* sd)
 
 void storage_guild_log( map_session_data* sd, struct item* item, int16 amount ){
 	int32 i;
-	SqlStmt stmt{ *mmysql_handle };
+	SqlStmt stmt{ *map_db_handle };
 	StringBuf buf;
 	StringBuf_Init(&buf);
 
@@ -657,7 +657,7 @@ enum e_guild_storage_log storage_guild_log_read_sub( map_session_data* sd, std::
 	StringBuf_Printf(&buf, " FROM `%s` WHERE `guild_id`='%u'", guild_storage_log_table, sd->status.guild_id );
 	StringBuf_Printf(&buf, " ORDER BY `time` DESC LIMIT %u", max);
 
-	SqlStmt stmt{ *mmysql_handle };
+	SqlStmt stmt{ *map_db_handle };
 	if( SQL_ERROR == stmt.PrepareStr(StringBuf_Value(&buf)) ||
 		SQL_ERROR == stmt.Execute() )
 	{
@@ -697,7 +697,7 @@ enum e_guild_storage_log storage_guild_log_read_sub( map_session_data* sd, std::
 		log.push_back( entry );
 	}
 
-	Sql_FreeResult(mmysql_handle);
+	Sql_FreeResult(map_db_handle);
 
 	if( log.empty() ){
 		return GUILDSTORAGE_LOG_EMPTY;

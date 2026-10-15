@@ -1,0 +1,94 @@
+name: Servers on SQLite and PostgreSQL
+# build_servers_database.yml
+# Builds the servers with both database backends, runs the Sql/SqlStmt contract tests on SQLite
+# and PostgreSQL, then drives a full login -> char -> map session (tools/ci/smoke.sh) on each.
+
+concurrency:
+  group: ${{ github.repository }}-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'src/**'
+      - '3rdparty/**'
+      - 'sql-files/**'
+      - 'conf/**'
+      - 'tools/ci/**'
+      - 'tools/sql/**'
+      - '**/CMakeLists.txt'
+      - '.github/workflows/build_servers_database.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - '3rdparty/**'
+      - 'sql-files/**'
+      - 'conf/**'
+      - 'tools/ci/**'
+      - 'tools/sql/**'
+      - '**/CMakeLists.txt'
+      - '.github/workflows/build_servers_database.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  database:
+    if: "!contains(github.event.head_commit.message, 'ci-skip')"
+    runs-on: ubuntu-24.04
+    env:
+      # Per-run throwaway credential for the service container below; not a real secret.
+      PGPASSWORD: ci-${{ github.run_id }}-${{ github.run_attempt }}
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: rathena
+          POSTGRES_PASSWORD: ci-${{ github.run_id }}-${{ github.run_attempt }}
+          POSTGRES_DB: rathena_test
+          # rAthena stores raw client bytes (EUC-KR, CP1252, ...): byte-exact text, C ordering.
+          POSTGRES_INITDB_ARGS: --encoding=SQL_ASCII --locale=C
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U rathena"
+          --health-interval=5s --health-timeout=5s --health-retries=30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install packages
+        run: sudo apt-get update -q && sudo apt-get install -y -q zlib1g-dev libpcre3-dev libpq-dev postgresql-client
+
+      - name: Generated schemas are up to date
+        run: python3 tools/sql/mysql2portable.py --check
+
+      - name: Configure
+        run: cmake -S . -B cbuild -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON -DWITH_POSTGRESQL=ON
+
+      - name: Build
+        run: cmake --build cbuild --parallel 4
+
+      - name: Sql/SqlStmt contract tests (SQLite and PostgreSQL)
+        env:
+          RATHENA_TEST_PG: 127.0.0.1:5432:rathena:${{ env.PGPASSWORD }}:rathena_test
+        run: ctest --test-dir cbuild --output-on-failure -R sql_test
+
+      - name: Smoke test on SQLite
+        run: tools/ci/smoke.sh sqlite
+
+      - name: Smoke test on PostgreSQL
+        env:
+          RATHENA_PG: 127.0.0.1:5432:rathena:${{ env.PGPASSWORD }}:rathena_smoke
+        run: |
+          psql -h 127.0.0.1 -U rathena -d rathena_test -c "CREATE DATABASE rathena_smoke"
+          tools/ci/smoke.sh postgresql
+
+      - name: Server logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-logs
+          path: smoke-logs/
+          if-no-files-found: ignore

@@ -60,9 +60,9 @@ void vending_closevending(map_session_data* sd)
 	nullpo_retv(sd);
 
 	if( sd->state.vending ) {
-		if( Sql_Query( mmysql_handle, "DELETE FROM `%s` WHERE vending_id = %d;", vending_items_table, sd->vender_id ) != SQL_SUCCESS ||
-			Sql_Query( mmysql_handle, "DELETE FROM `%s` WHERE `id` = %d;", vendings_table, sd->vender_id ) != SQL_SUCCESS ) {
-				Sql_ShowDebug(mmysql_handle);
+		if( Sql_Query( map_db_handle, "DELETE FROM `%s` WHERE vending_id = %d;", vending_items_table, sd->vender_id ) != SQL_SUCCESS ||
+			Sql_Query( map_db_handle, "DELETE FROM `%s` WHERE `id` = %d;", vendings_table, sd->vender_id ) != SQL_SUCCESS ) {
+				Sql_ShowDebug(map_db_handle);
 		}
 
 		sd->state.vending = false;
@@ -230,12 +230,12 @@ void vending_purchasereq(map_session_data* sd, int32 aid, int32 uid, const uint8
 		z += ((double)vsd->vending[vend_list[i]].value * (double)amount);
 
 		if( vsd->vending[vend_list[i]].amount ) {
-			if( Sql_Query( mmysql_handle, "UPDATE `%s` SET `amount` = %d WHERE `vending_id` = %d and `cartinventory_id` = %d", vending_items_table, vsd->vending[vend_list[i]].amount, vsd->vender_id, vsd->cart.u.items_cart[idx].id ) != SQL_SUCCESS ) {
-				Sql_ShowDebug( mmysql_handle );
+			if( Sql_Query( map_db_handle, "UPDATE `%s` SET `amount` = %d WHERE `vending_id` = %d and `cartinventory_id` = %d", vending_items_table, vsd->vending[vend_list[i]].amount, vsd->vender_id, vsd->cart.u.items_cart[idx].id ) != SQL_SUCCESS ) {
+				Sql_ShowDebug( map_db_handle );
 			}
 		} else {
-			if( Sql_Query( mmysql_handle, "DELETE FROM `%s` WHERE `vending_id` = %d and `cartinventory_id` = %d", vending_items_table, vsd->vender_id, vsd->cart.u.items_cart[idx].id ) != SQL_SUCCESS ) {
-				Sql_ShowDebug( mmysql_handle );
+			if( Sql_Query( map_db_handle, "DELETE FROM `%s` WHERE `vending_id` = %d and `cartinventory_id` = %d", vending_items_table, vsd->vender_id, vsd->cart.u.items_cart[idx].id ) != SQL_SUCCESS ) {
+				Sql_ShowDebug( map_db_handle );
 			}
 		}
 
@@ -391,12 +391,12 @@ int8 vending_openvending( map_session_data& sd, const char* message, const uint8
 	sd.vend_num = i;
 	safestrncpy(sd.message, message, MESSAGE_SIZE);
 	
-	Sql_EscapeString( mmysql_handle, message_sql, sd.message );
+	Sql_EscapeString( map_db_handle, message_sql, sd.message );
 
-	if( Sql_Query( mmysql_handle, "INSERT INTO `%s`(`id`, `account_id`, `char_id`, `sex`, `map`, `x`, `y`, `title`, `autotrade`, `body_direction`, `head_direction`, `sit`) "
+	if( Sql_Query( map_db_handle, "INSERT INTO `%s`(`id`, `account_id`, `char_id`, `sex`, `map`, `x`, `y`, `title`, `autotrade`, `body_direction`, `head_direction`, `sit`) "
 		"VALUES( %d, %d, %d, '%c', '%s', %d, %d, '%s', %d, '%d', '%d', '%d' );",
 		vendings_table, sd.vender_id, sd.status.account_id, sd.status.char_id, sd.status.sex == SEX_FEMALE ? 'F' : 'M', map_getmapdata(sd.m)->name, sd.x, sd.y, message_sql, sd.state.autotrade, at ? at->dir : sd.ud.dir, at ? at->head_dir : sd.head_dir, at ? at->sit : pc_issit(&sd) ) != SQL_SUCCESS ) {
-		Sql_ShowDebug(mmysql_handle);
+		Sql_ShowDebug(map_db_handle);
 	}
 
 	StringBuf_Init(&buf);
@@ -406,8 +406,8 @@ int8 vending_openvending( map_session_data& sd, const char* message, const uint8
 		if (j < i-1)
 			StringBuf_AppendStr(&buf, ",");
 	}
-	if (SQL_ERROR == Sql_QueryStr(mmysql_handle, StringBuf_Value(&buf)))
-		Sql_ShowDebug(mmysql_handle);
+	if (SQL_ERROR == Sql_QueryStr(map_db_handle, StringBuf_Value(&buf)))
+		Sql_ShowDebug(map_db_handle);
 
 	clif_openvending( sd );
 	clif_showvendingboard( sd );
@@ -595,37 +595,37 @@ void vending_reopen( map_session_data& sd )
 void do_init_vending_autotrade(void)
 {
 	if (battle_config.feature_autotrade) {
-		if (Sql_Query(mmysql_handle,
+		if (Sql_Query(map_db_handle,
 			"SELECT `id`, `account_id`, `char_id`, `sex`, `title`, `body_direction`, `head_direction`, `sit` "
 			"FROM `%s` "
 			"WHERE `autotrade` = 1 AND (SELECT COUNT(`vending_id`) FROM `%s` WHERE `vending_id` = `id`) > 0 "
 			"ORDER BY `id`;",
 			vendings_table, vending_items_table ) != SQL_SUCCESS )
 		{
-			Sql_ShowDebug(mmysql_handle);
+			Sql_ShowDebug(map_db_handle);
 			return;
 		}
 
-		if( Sql_NumRows(mmysql_handle) > 0 ) {
+		if( Sql_NumRows(map_db_handle) > 0 ) {
 			uint16 items = 0;
 			DBIterator *iter = nullptr;
 			struct s_autotrader *at = nullptr;
 
 			// Init each autotrader data
-			while (SQL_SUCCESS == Sql_NextRow(mmysql_handle)) {
+			while (SQL_SUCCESS == Sql_NextRow(map_db_handle)) {
 				size_t len;
 				char* data;
 
 				at = nullptr;
 				CREATE(at, struct s_autotrader, 1);
-				Sql_GetData(mmysql_handle, 0, &data, nullptr); at->id = atoi(data);
-				Sql_GetData(mmysql_handle, 1, &data, nullptr); at->account_id = atoi(data);
-				Sql_GetData(mmysql_handle, 2, &data, nullptr); at->char_id = atoi(data);
-				Sql_GetData(mmysql_handle, 3, &data, nullptr); at->sex = (data[0] == 'F') ? SEX_FEMALE : SEX_MALE;
-				Sql_GetData(mmysql_handle, 4, &data, &len); safestrncpy(at->title, data, zmin(len + 1, MESSAGE_SIZE));
-				Sql_GetData(mmysql_handle, 5, &data, nullptr); at->dir = atoi(data);
-				Sql_GetData(mmysql_handle, 6, &data, nullptr); at->head_dir = atoi(data);
-				Sql_GetData(mmysql_handle, 7, &data, nullptr); at->sit = atoi(data);
+				Sql_GetData(map_db_handle, 0, &data, nullptr); at->id = atoi(data);
+				Sql_GetData(map_db_handle, 1, &data, nullptr); at->account_id = atoi(data);
+				Sql_GetData(map_db_handle, 2, &data, nullptr); at->char_id = atoi(data);
+				Sql_GetData(map_db_handle, 3, &data, nullptr); at->sex = (data[0] == 'F') ? SEX_FEMALE : SEX_MALE;
+				Sql_GetData(map_db_handle, 4, &data, &len); safestrncpy(at->title, data, zmin(len + 1, MESSAGE_SIZE));
+				Sql_GetData(map_db_handle, 5, &data, nullptr); at->dir = atoi(data);
+				Sql_GetData(map_db_handle, 6, &data, nullptr); at->head_dir = atoi(data);
+				Sql_GetData(map_db_handle, 7, &data, nullptr); at->sit = atoi(data);
 				at->count = 0;
 
 				if (battle_config.feature_autotrade_direction >= 0)
@@ -647,25 +647,25 @@ void do_init_vending_autotrade(void)
 				chrif_authreq(at->sd, true);
 				uidb_put(vending_autotrader_db, at->char_id, at);
 			}
-			Sql_FreeResult(mmysql_handle);
+			Sql_FreeResult(map_db_handle);
 
 			// Init items for each autotraders
 			iter = db_iterator(vending_autotrader_db);
 			for (at = (struct s_autotrader *)dbi_first(iter); dbi_exists(iter); at = (struct s_autotrader *)dbi_next(iter)) {
 				uint16 j = 0;
 
-				if (SQL_ERROR == Sql_Query(mmysql_handle,
+				if (SQL_ERROR == Sql_Query(map_db_handle,
 					"SELECT `cartinventory_id`, `amount`, `price` "
 					"FROM `%s` "
 					"WHERE `vending_id` = %d "
 					"ORDER BY `index` ASC;",
 					vending_items_table, at->id ) )
 				{
-					Sql_ShowDebug(mmysql_handle);
+					Sql_ShowDebug(map_db_handle);
 					continue;
 				}
 
-				if (!(at->count = (uint16)Sql_NumRows(mmysql_handle))) {
+				if (!(at->count = (uint16)Sql_NumRows(map_db_handle))) {
 					map_quit(at->sd);
 					vending_autotrader_remove(at, true);
 					continue;
@@ -676,16 +676,16 @@ void do_init_vending_autotrade(void)
 
 				//Add the item into list
 				j = 0;
-				while (SQL_SUCCESS == Sql_NextRow(mmysql_handle) && j < at->count) {
+				while (SQL_SUCCESS == Sql_NextRow(map_db_handle) && j < at->count) {
 					char *data;
 					CREATE(at->entries[j], struct s_autotrade_entry, 1);
-					Sql_GetData(mmysql_handle, 0, &data, nullptr); at->entries[j]->cartinventory_id = atoi(data);
-					Sql_GetData(mmysql_handle, 1, &data, nullptr); at->entries[j]->amount = atoi(data);
-					Sql_GetData(mmysql_handle, 2, &data, nullptr); at->entries[j]->price = atoi(data);
+					Sql_GetData(map_db_handle, 0, &data, nullptr); at->entries[j]->cartinventory_id = atoi(data);
+					Sql_GetData(map_db_handle, 1, &data, nullptr); at->entries[j]->amount = atoi(data);
+					Sql_GetData(map_db_handle, 2, &data, nullptr); at->entries[j]->price = atoi(data);
 					j++;
 				}
 				items += j;
-				Sql_FreeResult(mmysql_handle);
+				Sql_FreeResult(map_db_handle);
 			}
 			dbi_destroy(iter);
 
@@ -694,9 +694,9 @@ void do_init_vending_autotrade(void)
 	}
 
 	// Everything is loaded fine, their entries will be reinserted once they are loaded
-	if (Sql_Query( mmysql_handle, "DELETE FROM `%s`;", vendings_table ) != SQL_SUCCESS ||
-		Sql_Query( mmysql_handle, "DELETE FROM `%s`;", vending_items_table ) != SQL_SUCCESS) {
-		Sql_ShowDebug(mmysql_handle);
+	if (Sql_Query( map_db_handle, "DELETE FROM `%s`;", vendings_table ) != SQL_SUCCESS ||
+		Sql_Query( map_db_handle, "DELETE FROM `%s`;", vending_items_table ) != SQL_SUCCESS) {
+		Sql_ShowDebug(map_db_handle);
 	}
 }
 
@@ -737,11 +737,11 @@ static int32 vending_autotrader_free(DBKey key, DBData *data, va_list ap) {
 */
 void vending_update(map_session_data &sd)
 {
-	if (Sql_Query(mmysql_handle, "UPDATE `%s` SET `map` = '%s', `x` = '%d', `y` = '%d', `body_direction` = '%d', `head_direction` = '%d', `sit` = '%d', `autotrade` = '%d' WHERE `id` = '%d'",
+	if (Sql_Query(map_db_handle, "UPDATE `%s` SET `map` = '%s', `x` = '%d', `y` = '%d', `body_direction` = '%d', `head_direction` = '%d', `sit` = '%d', `autotrade` = '%d' WHERE `id` = '%d'",
 		vendings_table, map_getmapdata(sd.m)->name, sd.x, sd.y, sd.ud.dir, sd.head_dir, pc_issit(&sd), sd.state.autotrade,
 		sd.vender_id
 	) != SQL_SUCCESS) {
-		Sql_ShowDebug(mmysql_handle);
+		Sql_ShowDebug(map_db_handle);
 	}
 }
 

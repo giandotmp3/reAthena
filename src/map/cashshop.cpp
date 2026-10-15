@@ -189,12 +189,12 @@ static bool sale_parse_dbrow( char* fields[], int32 columns, int32 current ){
 static void sale_read_db_sql( void ){
 	uint32 lines = 0, count = 0;
 
-	if( SQL_ERROR == Sql_Query( mmysql_handle, "SELECT `nameid`, UNIX_TIMESTAMP(`start`), UNIX_TIMESTAMP(`end`), `amount` FROM `%s` WHERE `end` > now()", sales_table ) ){
-		Sql_ShowDebug(mmysql_handle);
+	if( SQL_ERROR == Sql_Query( map_db_handle, "SELECT `nameid`, UNIX_TIMESTAMP(`start`), UNIX_TIMESTAMP(`end`), `amount` FROM `%s` WHERE `end` > now()", sales_table ) ){
+		Sql_ShowDebug(map_db_handle);
 		return;
 	}
 
-	while( SQL_SUCCESS == Sql_NextRow(mmysql_handle) ){
+	while( SQL_SUCCESS == Sql_NextRow(map_db_handle) ){
 		char* str[4];
 		char dummy[256] = "";
 		int32 i;
@@ -202,7 +202,7 @@ static void sale_read_db_sql( void ){
 		lines++;
 
 		for( i = 0; i < 4; i++ ){
-			Sql_GetData( mmysql_handle, i, &str[i], nullptr );
+			Sql_GetData( map_db_handle, i, &str[i], nullptr );
 
 			if( str[i] == nullptr ){
 				str[i] = dummy;
@@ -217,7 +217,7 @@ static void sale_read_db_sql( void ){
 		count++;
 	}
 
-	Sql_FreeResult(mmysql_handle);
+	Sql_FreeResult(map_db_handle);
 
 	ShowStatus( "Done reading '" CL_WHITE "%u" CL_RESET "' entries in '" CL_WHITE "%s" CL_RESET "'.\n", count, sales_table );
 }
@@ -280,8 +280,8 @@ enum e_sale_add_result sale_add_item( t_itemid nameid, int32 count, time_t from,
 		return SALE_ADD_DUPLICATE;
 	}
 	
-	if( SQL_ERROR == Sql_Query(mmysql_handle, "INSERT INTO `%s`(`nameid`,`start`,`end`,`amount`) VALUES ( '%u', FROM_UNIXTIME(%d), FROM_UNIXTIME(%d), '%d' )", sales_table, nameid, (uint32)from, (uint32)to, count) ){
-		Sql_ShowDebug(mmysql_handle);
+	if( SQL_ERROR == Sql_Query(map_db_handle, "INSERT INTO `%s`(`nameid`,`start`,`end`,`amount`) VALUES ( '%u', FROM_UNIXTIME(%d), FROM_UNIXTIME(%d), '%d' )", sales_table, nameid, (uint32)from, (uint32)to, count) ){
+		Sql_ShowDebug(map_db_handle);
 		return SALE_ADD_FAILED;
 	}
 
@@ -311,8 +311,8 @@ bool sale_remove_item( t_itemid nameid ){
 	}
 
 	// Delete it from the database
-	if( SQL_ERROR == Sql_Query(mmysql_handle, "DELETE FROM `%s` WHERE `nameid` = '%u'", sales_table, nameid ) ){
-		Sql_ShowDebug(mmysql_handle);
+	if( SQL_ERROR == Sql_Query(map_db_handle, "DELETE FROM `%s` WHERE `nameid` = '%u'", sales_table, nameid ) ){
+		Sql_ShowDebug(map_db_handle);
 		return false;
 	}
 
@@ -412,8 +412,8 @@ static void cashshop_read_db( void ){
 	sale_read_db_sql();
 
 	// Clean outdated sales
-	if( SQL_ERROR == Sql_Query(mmysql_handle, "DELETE FROM `%s` WHERE `end` < FROM_UNIXTIME(%d)", sales_table, (uint32)now ) ){
-		Sql_ShowDebug(mmysql_handle);
+	if( SQL_ERROR == Sql_Query(map_db_handle, "DELETE FROM `%s` WHERE `end` < FROM_UNIXTIME(%d)", sales_table, (uint32)now ) ){
+		Sql_ShowDebug(map_db_handle);
 	}
 
 	// Init next sale start, if there is any
@@ -607,8 +607,8 @@ bool cashshop_buylist( map_session_data* sd, uint32 kafrapoints, int32 n, const 
 				if( new_amount == 0 ){
 					sale_remove_item(sale->nameid);
 				}else{
-					if( SQL_ERROR == Sql_Query( mmysql_handle, "UPDATE `%s` SET `amount` = '%d' WHERE `nameid` = '%u'", sales_table, new_amount, nameid ) ){
-						Sql_ShowDebug(mmysql_handle);
+					if( SQL_ERROR == Sql_Query( map_db_handle, "UPDATE `%s` SET `amount` = '%d' WHERE `nameid` = '%u'", sales_table, new_amount, nameid ) ){
+						Sql_ShowDebug(map_db_handle);
 					}
 
 					sale->amount = new_amount;
