@@ -21,6 +21,8 @@ set(RATHENA_LEGACY_MAP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../src/map"
 target_compile_definitions(map_rules_acceptance_tests PRIVATE
   MAP_RULES_MANIFEST_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../manifest"
   MAP_RULES_TESTS_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+  # Golden vectors captured from the legacy servers by tools/golden/capture.sh
+  MAP_RULES_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/golden"
   RATHENA_LEGACY_MAP_DIR="${RATHENA_LEGACY_MAP_DIR}"
   # Shipped static data (read-only) for loader tests, e.g. db/re/attr_fix.yml (BR-MAP-017)
   RATHENA_LEGACY_DB_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../../../db")

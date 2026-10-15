@@ -122,6 +122,10 @@ int32 cli_get_options(int32 argc, char ** argv) {
 						if (opt_has_next_value(arg, i, argc))
 							LOGIN_CONF_NAME = argv[++i];
 					}
+					else if (strcmp(arg, "inter-config") == 0) {
+						if (opt_has_next_value(arg, i, argc))
+							INTER_CONF_NAME = argv[++i];
+					}
 					else {
 						ShowError("Unknown option '%s'.\n", argv[i]);
 						exit(EXIT_FAILURE);

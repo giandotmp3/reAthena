@@ -12,6 +12,8 @@ add_executable(rathena_core_tests
 target_link_libraries(rathena_core_tests PRIVATE rathena::core GTest::gtest_main)
 target_compile_definitions(rathena_core_tests PRIVATE
   RATHENA_CORE_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
+  # Golden vectors captured from legacy code by tools/golden/capture.sh
+  RATHENA_CORE_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/golden"
   RATHENA_CORE_CONF_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../conf"
   # Legacy conf/ tree at the repository root (drift guard, spec §5.6)
   RATHENA_LEGACY_CONF_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../../../conf")

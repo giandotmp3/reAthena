@@ -2,7 +2,14 @@
 // "Combat RNG must follow the legacy distributions").
 #include <gtest/gtest.h>
 
+#include <cstdio>
+#include <filesystem>
+#include <fstream>
+#include <map>
 #include <set>
+#include <string>
+#include <tuple>
+#include <vector>
 
 #include "rathena/core/rng.hpp"
 
@@ -90,8 +97,36 @@ TEST(CORE_Rng, CORE_Rng_InjectableThroughBaseReference) {
 	EXPECT_EQ(r.next_u32(), 1u); // cycles
 }
 
-TEST(CORE_Rng, PENDING_ARCH_6_GoldenVectorsMatchLegacyRnd) {
-	// Architecture §3.2 step 1 / §6: golden vectors captured from an instrumented legacy build
-	// (src/common/random.hpp with the injectable Rng patch) are not yet available.
-	GTEST_SKIP() << "PENDING ARCH-6-GOLDEN-RNG: needs golden vectors from the instrumented legacy build";
+TEST(CORE_Rng, ARCH_6_GoldenVectorsMatchLegacyRnd) {
+	// tools/golden/capture.sh rng: legacy src/common/random.cpp after rnd_seed(seed).
+	// "raw" is the legacy generator's own output; SeededRng(seed) must reproduce it exactly, so a
+	// legacy server started with RATHENA_RNG_SEED=<seed> and a rule run on SeededRng(<seed>) draw
+	// from the same stream. "rnd" is legacy rnd() = uniform_int_distribution(0, INT32_MAX), whose
+	// mapping is implementation-defined: on libstdc++ (where these were captured) it is raw >> 1.
+	// The rules use Rng's own portable mapping instead (K4), so only the raw stream is pinned.
+	std::ifstream in(std::filesystem::path(RATHENA_CORE_GOLDEN_DIR) / "rng.jsonl");
+	ASSERT_TRUE(in) << "golden vectors missing; run tools/golden/capture.sh rng";
+	std::map<std::pair<std::uint64_t, int>, std::uint32_t> raw;
+	std::vector<std::tuple<std::uint64_t, int, std::int64_t>> rnd;
+	std::string line;
+	while (std::getline(in, line)) {
+		unsigned long long seed = 0;
+		int i = 0;
+		long long value = 0;
+		if (std::sscanf(line.c_str(), "{\"seed\":%llu,\"i\":%d,\"raw\":%lld}", &seed, &i, &value) == 3)
+			raw[{seed, i}] = static_cast<std::uint32_t>(value);
+		else if (std::sscanf(line.c_str(), "{\"seed\":%llu,\"i\":%d,\"rnd\":%lld}", &seed, &i, &value) == 3)
+			rnd.emplace_back(seed, i, value);
+	}
+	ASSERT_GE(raw.size(), 64u);
+	std::set<std::uint64_t> seeds;
+	for (const auto& [key, value] : raw) seeds.insert(key.first);
+	for (const auto seed : seeds) {
+		SeededRng rng(static_cast<std::uint32_t>(seed));
+		for (int i = 0; raw.count({seed, i}); ++i)
+			EXPECT_EQ(rng.next_u32(), (raw.at({seed, i}))) << "seed " << seed << " draw " << i;
+	}
+	// Documents the libstdc++ legacy mapping (informative; differs on other standard libraries).
+	for (const auto& [seed, i, value] : rnd)
+		EXPECT_EQ(value, static_cast<std::int64_t>(raw.at({seed, i}) >> 1)) << "seed " << seed << " draw " << i;
 }

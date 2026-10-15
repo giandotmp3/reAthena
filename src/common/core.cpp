@@ -5,10 +5,12 @@
 
 #include <cstdlib>
 #include <csignal>
+#include <cstring>
 
 #include <config/core.hpp>
 
 #ifndef MINICORE
+#include "cli.hpp"
 #include "database.hpp"
 #include "ers.hpp"
 #include "socket.hpp"
@@ -366,6 +368,13 @@ int32 Core::start( int32 argc, char **argv ){
 #endif
 
 #ifndef MINICORE
+	// Sql_Init reads the database backend settings before the server parses its options, so pick up
+	// --inter-config here; otherwise an alternative inter config would not reach the database layer.
+	for( int32 i = 1; i + 1 < argc; i++ ){
+		if( strcmp( argv[i], "--inter-config" ) == 0 ){
+			INTER_CONF_NAME = argv[i + 1];
+		}
+	}
 	Sql_Init();
 	db_init();
 	signals_init();

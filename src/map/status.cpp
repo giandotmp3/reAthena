@@ -10,6 +10,7 @@
 
 #include <common/cbasetypes.hpp>
 #include <common/ers.hpp>
+#include <common/golden_trace.hpp>
 #include <common/malloc.hpp>
 #include <common/nullpo.hpp>
 #include <common/random.hpp>
@@ -2395,7 +2396,11 @@ int32 status_base_amotion_pc(map_session_data* sd, struct status_data* status)
 		val -= 50 - 10 * pc_checkskill(sd, KN_CAVALIERMASTERY);
 	else if (pc_isridingdragon(sd))
 		val -= 25 - 5 * pc_checkskill(sd, RK_DRAGONTRAINING);
-	aspd = ((int32)(temp_aspd + ((float)(status_calc_aspd(sd, &sd->sc, true) + val) * status->agi / 200)) - min(aspd, 200));
+	const int16 status_bonus = status_calc_aspd(sd, &sd->sc, true);
+	GOLDEN_TRACE( "aspd_re", { "class", sd->status.class_ }, { "weapon", sd->status.weapon }, { "job_aspd", aspd },
+		{ "agi", status->agi }, { "dex", status->dex }, { "skill_bonus", val }, { "status_bonus", status_bonus },
+		{ "result", (int32)(temp_aspd + ((float)(status_bonus + val) * status->agi / 200)) - min(aspd, 200) } );
+	aspd = ((int32)(temp_aspd + ((float)(status_bonus + val) * status->agi / 200)) - min(aspd, 200));
 	return aspd;
 #else
 	if (job == nullptr)

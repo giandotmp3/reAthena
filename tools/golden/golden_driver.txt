@@ -1,0 +1,114 @@
+//===== rAthena Script =======================================
+//= Golden-vector capture driver (tools/golden/capture.sh)
+//===== Description: =========================================
+//= Loaded only by capture runs of a map-server built with
+//= RATHENA_GOLDEN_TRACE. When the capture character logs in it
+//= walks through stat, class and weapon combinations so the
+//= traced legacy functions record their inputs and outputs:
+//=  - renewal build:     ASPD (status_base_amotion_pc) for many
+//=                       class x weapon x AGI x DEX combinations
+//=  - pre-renewal build: defense reduction with monsters hitting
+//=                       the character and the character hitting
+//=                       monsters, over a range of VIT/DEF values
+//= Prints "GOLDEN DONE" when finished.
+//============================================================
+
+-	script	golden_driver	-1,{
+OnPCLoginEvent:
+	sleep2 2000; // let the client finish loading
+	if (checkre(0)) {
+		callsub S_Aspd;
+	} else {
+		BaseLevel = 99; // survives the fights; stats are set per round
+		percentheal 100, 100;
+		.@cid = getcharid(0);
+		.@aid = getcharid(3);
+		getmapxy(.@map$, .@x, .@y, BL_PC);
+		detachrid; // unitattack needs the character free of the script
+		callsub S_Defense, .@cid, .@aid, .@map$, .@x, .@y;
+	}
+	debugmes "GOLDEN DONE";
+	end;
+
+// Sets base stat <param> of character <cid> to <value>.
+S_SetStat:
+	statusup2 getarg(1), getarg(2) - readparam(getarg(1), getarg(0)), getarg(0);
+	return;
+
+S_Aspd:
+	// Runs attached to the character.
+	// Novice, 1st jobs, 2nd jobs, Gunslinger, Ninja, transcendent, 3rd jobs, Star Gladiator, Doram
+	setarray .@jobs[0], 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20, 23, 24, 25,
+		4008, 4010, 4012, 4054, 4057, 4060, 4047, 4218;
+	// dagger, 1H sword, 2H sword, spear, axe, mace, staff, bow, knuckle, instrument, whip, book,
+	// katar, revolver, rifle, huuma (bare hands first, then each weapon alone, then with a shield)
+	setarray .@weapons[0], 1201, 1101, 1151, 1401, 1301, 1501, 1601, 1701, 1801, 1901, 1951,
+		1550, 1250, 13100, 13150, 13300;
+	setarray .@agi[0], 1, 30, 77, 99, 130;
+	setarray .@dex[0], 1, 45, 99, 130;
+	for (.@j = 0; .@j < getarraysize(.@jobs); .@j++) {
+		jobchange .@jobs[.@j];
+		BaseLevel = 99;
+		statusup2 bStr, 99 - readparam(bStr); // carry weight
+		for (.@w = -1; .@w < getarraysize(.@weapons); .@w++) {
+			for (.@shield = 0; .@shield < 2; .@shield++) {
+				if (.@w >= 0) {
+					getitem .@weapons[.@w], 1;
+					equip .@weapons[.@w];
+				}
+				if (.@shield) {
+					getitem 2101, 1;
+					equip 2101;
+				}
+				for (.@a = 0; .@a < getarraysize(.@agi); .@a++) {
+					for (.@d = 0; .@d < getarraysize(.@dex); .@d++) {
+						statusup2 bAgi, .@agi[.@a] - readparam(bAgi);
+						statusup2 bDex, .@dex[.@d] - readparam(bDex);
+					}
+				}
+				if (getequipisequiped(EQI_HAND_L))
+					unequip EQI_HAND_L;
+				if (getequipisequiped(EQI_HAND_R))
+					unequip EQI_HAND_R;
+				if (.@shield)
+					delitem 2101, 1;
+				if (.@w >= 0)
+					delitem .@weapons[.@w], 1;
+			}
+			sleep2 10;
+		}
+	}
+	return;
+
+S_Defense:
+	.@cid = getarg(0);
+	.@aid = getarg(1);
+	.@map$ = getarg(2);
+	setarray .@vit[0], 1, 10, 15, 20, 30, 45, 60, 80, 99;
+	// normal (non-boss) monsters whose VIT, their soft DEF in pre-renewal, spans 1..120:
+	// Poring, Thief Bug, Munak, Muka, Side Winder, Medusa, Sasquatch, Bloody Knight, Gig,
+	// Stalactic Golem, Sleeper, Phendark
+	setarray .@mobs[0], 1002, 1053, 1026, 1055, 1037, 1148, 1243, 1268, 1387, 1278, 1386, 1202;
+	for (.@v = 0; .@v < getarraysize(.@vit); .@v++) {
+		callsub S_SetStat, .@cid, bVit, .@vit[.@v];
+		debugmes "GOLDEN round vit=" + readparam(bVit, .@cid);
+		for (.@m = 0; .@m < getarraysize(.@mobs); .@m++) {
+			monster .@map$, getarg(3), getarg(4), "--ja--", .@mobs[.@m], 1, "golden_driver::OnMobDead";
+			.@gid = $@mobid[0];
+			// Attacks are re-issued every tick: a monster drops its target after a miss and a
+			// script-started player attack stops after one swing. Misses never reach the traced
+			// defense code, so the high-level monsters (which rarely miss) give most PC vectors.
+			for (.@t = 0; .@t < 20; .@t++) {
+				unitattack .@gid, .@aid;
+				unitattack .@aid, .@gid;
+				recovery 0, .@cid; // revive and heal: a dead character is neither hit nor hits
+				sleep 300;
+			}
+			killmonster .@map$, "golden_driver::OnMobDead";
+		}
+	}
+	return;
+
+OnMobDead:
+	end;
+}

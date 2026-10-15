@@ -55,6 +55,9 @@ def main() -> int:
     ap.add_argument("--char", default="Smokey")
     ap.add_argument("--register", action="store_true", help="append _M to the user id (auto-register)")
     ap.add_argument("--no-create", action="store_true", help="select the existing character in slot 0")
+    ap.add_argument("--stay", type=float, default=0, help="stay on the map this many seconds before quitting")
+    ap.add_argument("--until-file", help="with --stay: leave as soon as this file contains --until-text")
+    ap.add_argument("--until-text", default="")
     args = ap.parse_args()
 
     # 1. login ------------------------------------------------------------------------------
@@ -119,6 +122,18 @@ def main() -> int:
     print(f"map: entered ({len(data)} bytes received)")
     m.sendall(struct.pack("<H", 0x7D))  # LoadEndAck: the character becomes active
     recv_for(m, 2.0)
+    end = time.time() + args.stay
+    while time.time() < end:
+        m.sendall(struct.pack("<HI", 0x360, int(time.time() * 1000) & 0xFFFFFFFF))  # keep-alive tick
+        if not recv_for(m, 5.0) and m.fileno() < 0:
+            break
+        if args.until_file:
+            try:
+                with open(args.until_file, encoding="latin1") as f:
+                    if args.until_text in f.read():
+                        break
+            except OSError:
+                pass
     m.sendall(struct.pack("<HH", 0x18A, 0))  # quit
     data = recv_for(m, 2.0)
     m.close()

@@ -8,6 +8,7 @@
 
 #include <common/cbasetypes.hpp>
 #include <common/ers.hpp>
+#include <common/golden_trace.hpp>
 #include <common/malloc.hpp>
 #include <common/nullpo.hpp>
 #include <common/random.hpp>
@@ -4730,6 +4731,10 @@ static void battle_calc_defense_reduction( Damage* wd, block_list* src, block_li
 	int16 vit_def;
 	defType def1 = status_get_def(target); //Don't use tstatus->def1 due to skill timer reductions.
 	int16 def2 = tstatus->def2;
+#ifdef RATHENA_GOLDEN_TRACE
+	const int64 golden_damage_in = wd->damage;
+	int32 golden_rnd = -1;
+#endif
 
 	if (sd) {
 		int32 i = sd->indexed_bonus.ignore_def_by_race[tstatus->race] + sd->indexed_bonus.ignore_def_by_race[RC_ALL];
@@ -4808,7 +4813,13 @@ static void battle_calc_defense_reduction( Damage* wd, block_list* src, block_li
 #ifndef RENEWAL
 		//Damage reduction: [VIT*0.3] + RND(0, [VIT^2/150] - [VIT*0.3] - 1) + [VIT*0.5]
 		vit_def = ((3 * def2) / 10);
-		vit_def += rnd_value(0, max(0, (def2 * def2) / 150 - ((3 * def2) / 10) - 1));
+		{
+			const int32 spread = rnd_value(0, max(0, (def2 * def2) / 150 - ((3 * def2) / 10) - 1));
+#ifdef RATHENA_GOLDEN_TRACE
+			golden_rnd = spread;
+#endif
+			vit_def += spread;
+		}
 		vit_def += (def2 / 2);
 #else
 		vit_def = def2;
@@ -4829,7 +4840,13 @@ static void battle_calc_defense_reduction( Damage* wd, block_list* src, block_li
 			vit_def = 90; //Eska sets the random part of the formula to 90
 		else
 			vit_def = (def2 / 20) * (def2 / 20);
-		vit_def = def2 + (vit_def>0?rnd()%vit_def:0);
+		{
+			const int32 spread = vit_def > 0 ? rnd() % vit_def : 0;
+#ifdef RATHENA_GOLDEN_TRACE
+			golden_rnd = spread;
+#endif
+			vit_def = def2 + spread;
+		}
 #else
 		//SoftDEF of monsters is floor((BaseLevel+Vit)/2)
 		vit_def = def2;
@@ -4881,6 +4898,11 @@ static void battle_calc_defense_reduction( Damage* wd, block_list* src, block_li
 		);
 		wd->basedamage -= vit_def;
 #endif
+	GOLDEN_TRACE( tsd ? "defense_pc" : "defense_mob", { "def1", def1 }, { "def2", def2 }, { "rnd", golden_rnd },
+		{ "vit_def", vit_def }, { "weapon_defense_type", battle_config.weapon_defense_type },
+		{ "ignores_def", attack_ignores_def( wd, src, target, skill_id, skill_lv, EQI_HAND_R ) ? 1 : 0 },
+		{ "piercing", is_attack_piercing( wd, src, target, skill_id, skill_lv, EQI_HAND_R ) ? 1 : 0 },
+		{ "damage_in", golden_damage_in }, { "damage_out", wd->damage } );
 }
 
 /*====================================

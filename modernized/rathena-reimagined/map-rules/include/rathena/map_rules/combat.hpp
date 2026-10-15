@@ -79,9 +79,25 @@ std::int32_t crowd_def(std::int32_t def, std::int32_t attackers, const BattleCon
 /// BR-MAP-014: RE: dmg x (4000 + DEF)/(4000 + 10 x DEF) - softDEF. Never negative.
 std::int64_t apply_defense_re(std::int64_t damage, std::int32_t hard_def, std::int32_t soft_def);
 
-/// BR-MAP-015: pre-RE: dmg x (100 - DEF)% - VIT def, where for a player target
-/// VIT def = VIT/2 + rnd() % (VIT*(VIT-15)/150) when that range is positive. Never negative.
-std::int64_t apply_defense_pre_re(std::int64_t damage, std::int32_t hard_def, std::int32_t vit, Rng& rng);
+/// Inclusive range [min, max] of a randomised value.
+struct Range {
+	std::int32_t min = 0;
+	std::int32_t max = 0;
+};
+
+/// BR-MAP-015: pre-RE VIT defense of a player target with soft DEF `def2` (battle.cpp,
+/// battle_calc_defense_reduction): [3 x def2/10] + rnd(0, max(0, [def2^2/150] - [3 x def2/10] - 1))
+/// + [def2/2]. Pinned by golden vectors.
+Range vit_def_pre_re_player_range(std::int32_t def2);
+/// BR-MAP-015: pre-RE VIT defense of a monster (or pet) target: def2 + rnd() % ([def2/20]^2), the
+/// random part being 0 when [def2/20]^2 is 0.
+Range vit_def_pre_re_monster_range(std::int32_t def2);
+/// Draws a VIT defense uniformly from `r`.
+std::int32_t roll_vit_def(Range r, Rng& rng);
+
+/// BR-MAP-015: pre-RE: dmg x (100 - DEF)% - VIT def, with DEF capped at 100. The result may be
+/// negative; the post-defense step (refine bonus, then minimum damage 1) handles that, as legacy.
+std::int64_t apply_defense_pre_re(std::int64_t damage, std::int32_t hard_def, std::int32_t vit_def);
 
 /// BR-MAP-016: total ignore-DEF percent is capped to [0, 100].
 std::int32_t capped_ignore_def_pct(std::int32_t summed_bonus_pct);

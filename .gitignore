@@ -155,3 +155,5 @@ Thumbs.db
 generated
 /save/*.db*
 /smoke-logs
+/build-golden
+/.claude/worktrees/

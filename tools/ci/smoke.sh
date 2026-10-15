@@ -49,7 +49,7 @@ for s in login char map; do
 	pids+=($!)
 done
 for _ in $(seq 1 120); do
-	grep -q "ready (Server is listening" "$logs/map-$backend.log" 2>/dev/null && break
+	grep -q "and listening on port" "$logs/map-$backend.log" 2>/dev/null && break
 	sleep 2
 done
 sleep 3

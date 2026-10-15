@@ -110,14 +110,23 @@ std::int64_t apply_defense_re(std::int64_t damage, std::int32_t hard_def, std::i
 	return std::max<std::int64_t>(reduced, 0);
 }
 
-std::int64_t apply_defense_pre_re(std::int64_t damage, std::int32_t hard_def, std::int32_t vit, Rng& rng) {
-	const std::int64_t def = std::clamp<std::int64_t>(hard_def, 0, 100);
-	std::int64_t vit_def = vit / 2;
-	const std::int64_t spread = static_cast<std::int64_t>(vit) * (vit - 15) / 150;
-	if (spread > 0) {
-		vit_def += rng.below(static_cast<std::uint32_t>(spread));
-	}
-	return std::max<std::int64_t>(damage * (100 - def) / 100 - vit_def, 0);
+Range vit_def_pre_re_player_range(std::int32_t def2) {
+	const std::int64_t d = def2;
+	const std::int64_t base = 3 * d / 10 + d / 2;
+	const std::int64_t spread = std::max<std::int64_t>(0, d * d / 150 - 3 * d / 10 - 1);
+	return {to_i32(base), to_i32(base + spread)};
+}
+
+Range vit_def_pre_re_monster_range(std::int32_t def2) {
+	const std::int64_t n = static_cast<std::int64_t>(def2 / 20) * (def2 / 20);
+	return {def2, to_i32(def2 + std::max<std::int64_t>(0, n - 1))};
+}
+
+std::int32_t roll_vit_def(Range r, Rng& rng) { return r.max > r.min ? r.min + static_cast<std::int32_t>(rng.below(static_cast<std::uint32_t>(r.max - r.min) + 1u)) : r.min; }
+
+std::int64_t apply_defense_pre_re(std::int64_t damage, std::int32_t hard_def, std::int32_t vit_def) {
+	const std::int64_t def = std::min<std::int64_t>(hard_def, 100);
+	return damage * (100 - def) / 100 - vit_def;
 }
 
 std::int32_t capped_ignore_def_pct(std::int32_t summed_bonus_pct) { return std::clamp(summed_bonus_pct, 0, 100); }
