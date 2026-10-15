@@ -13,6 +13,21 @@ std::string lower(std::string_view s) {
 	return out;
 }
 
+/// MariaDB and MySQL 5.7 report integer display widths (`int(11) unsigned`); MySQL 8.0.19+ drops
+/// them (`int unsigned`). The width has no effect on storage, so it is not part of the shape.
+std::string normalize_type(std::string_view type) {
+	std::string t = lower(type);
+	for (const std::string_view base : {"tinyint", "smallint", "mediumint", "bigint", "int"}) {
+		if (!t.starts_with(base)) continue;
+		if (t.size() > base.size() && t[base.size()] == '(') {
+			const auto close = t.find(')', base.size());
+			if (close != std::string::npos) t.erase(base.size(), close - base.size() + 1);
+		}
+		break;
+	}
+	return t;
+}
+
 } // namespace
 
 const TableSchema* SchemaSnapshot::find(std::string_view table) const noexcept {
@@ -30,7 +45,7 @@ std::string schema_fingerprint(const SchemaSnapshot& s) {
 	for (const auto& t : s.tables) {
 		std::vector<std::string> cols;
 		for (const auto& c : t.columns)
-			cols.push_back(lower(c.name) + " " + lower(c.type) + (c.nullable ? " null" : " not null"));
+			cols.push_back(lower(c.name) + " " + normalize_type(c.type) + (c.nullable ? " null" : " not null"));
 		std::sort(cols.begin(), cols.end());
 		std::string line = lower(t.name) + "(";
 		for (const auto& c : cols) line += c + ",";

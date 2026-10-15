@@ -103,6 +103,17 @@ TEST(MigrationRun, M0_FingerprintIsOrderAndCaseIndependent) {
 	EXPECT_NE(schema_fingerprint(a), schema_fingerprint(b));
 }
 
+TEST(MigrationRun, M0_FingerprintIgnoresIntegerDisplayWidth) {
+	// MariaDB reports `int(11) unsigned`, MySQL 8 reports `int unsigned` for the same column.
+	SchemaSnapshot mariadb{{{"login", "MyISAM", {{"account_id", "int(11) unsigned", false}, {"group_id", "tinyint(3)", false}}}}};
+	SchemaSnapshot mysql8{{{"login", "MyISAM", {{"account_id", "int unsigned", false}, {"group_id", "tinyint", false}}}}};
+	EXPECT_EQ(schema_fingerprint(mariadb), schema_fingerprint(mysql8));
+	SchemaSnapshot widened{{{"login", "MyISAM", {{"account_id", "bigint unsigned", false}, {"group_id", "tinyint", false}}}}};
+	EXPECT_NE(schema_fingerprint(mariadb), schema_fingerprint(widened));
+	SchemaSnapshot varchar{{{"login", "MyISAM", {{"account_id", "int(11) unsigned", false}, {"group_id", "varchar(3)", false}}}}};
+	EXPECT_NE(schema_fingerprint(mariadb), schema_fingerprint(varchar)) << "non-integer lengths still count";
+}
+
 TEST(MigrationRun, StepsApplyInPlanOrderUntilFirstClosedGate) {
 	FakeTarget t;
 	t.schema = legacy_schema();

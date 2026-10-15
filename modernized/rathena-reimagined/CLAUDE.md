@@ -28,7 +28,7 @@ This is a hybrid. **login-server** and **web-server** are full C++20 rebuilds: d
 | `char-rules/` | charlife, PIN, party, guild, mail (RODEX only), registry, clan, GM (authority re-check), session rules, **save→auth barrier per char_id** | BR-CHAR-001…055, BR-INTER-008, 009, 015, 018, 019 | 121 (9) |
 | `map-rules/` | combat, progression, economy, trade, skills, anticheat; renewal + pre-renewal; property tests; `manifest/map_modules.tsv` (each `src/map/*.cpp` → one module) | BR-MAP-001…061 | 95 (8) |
 
-**Totals: 671 tests. With a test database: 634 pass, 37 skipped as pending, 0 fail. Without `RATHENA_TEST_DATABASE_URL`, the 12 live-database tests also skip.** All 191 rule IDs appear in at least one test.
+**Totals: 672 tests. With a test database: 635 pass, 37 skipped as pending, 0 fail. Without `RATHENA_TEST_DATABASE_URL`, the 12 live-database tests also skip.** All 191 rule IDs appear in at least one test.
 
 Pending tests are `GTEST_SKIP() << "PENDING <BR-ID>"`. They are mostly waiting on golden vectors from an instrumented legacy build, a live MySQL, libsodium, or verbatim packet headers. Pending rule IDs:
 BR-CHAR-013, 022, 028, 031, 032, 034, 042, 047 · BR-INTER-001, 003, 006, 007, 010, 013, 017, 018 · BR-LOGIN-001, 036, 037, 039 · BR-MAP-015, 019, 032, 033, 034, 049, 053, 055 · BR-WEB-010 (client-capture gate), 016 (httplib end-to-end).
@@ -52,7 +52,7 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-- Live database tests: point `RATHENA_TEST_DATABASE_URL=mysql://user:pass@host:3306/db` at a **disposable** database. The tests drop and recreate the account tables. The build links a MySQL/MariaDB client when one is found (`-DRATHENA_PERSISTENCE_WITH_MYSQL=AUTO|ON|OFF`). CI runs these against a MariaDB service container (`linux-gcc-mariadb` job). Run them serially (no `ctest -j`), because they share the one database.
+- Live database tests: point `RATHENA_TEST_DATABASE_URL=mysql://user:pass@host:3306/db` at a **disposable** database. The tests drop and recreate the account tables. The build links a MySQL/MariaDB client when one is found (`-DRATHENA_PERSISTENCE_WITH_MYSQL=AUTO|ON|OFF`). CI runs these against a MariaDB service container (`linux-gcc-mariadb` and `linux-gcc-mysql8` jobs, so M0 fingerprints are checked on both servers). Run them serially (no `ctest -j`), because they share the one database.
 - Offline: add `-DFETCHCONTENT_SOURCE_DIR_GOOGLETEST=<path-to-googletest-checkout>`. `web-server` also fetches nlohmann/json.
 - Run a single rule's tests: `ctest --test-dir build -R BR_MAP_014`. Test names embed the BR-ID; dashes become underscores.
 - `web-server`: the real HTTP transport is behind `-DRATHENA_WEB_WITH_HTTPLIB=ON`. Until the persistence wiring lands, the binary refuses to start unless `RATHENA_WEB_DEV_INMEMORY=1`.

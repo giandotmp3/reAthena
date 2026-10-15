@@ -44,8 +44,8 @@ bool excluded_from_snapshot(const std::string& lname, const TableNames& names) {
 const std::set<std::string>& known_legacy_baselines() {
 	// Regenerate with MysqlMigrationIT.KnownBaselinesMatchShippedSqlFiles when sql-files change.
 	static const std::set<std::string> kBaselines = {
-	    "fnv1a64:c49b2a29aef98b18", // sql-files/main.sql @ d4b8e7b
-	    "fnv1a64:61e54cc3b42c1532", // sql-files/main.sql + web.sql @ d4b8e7b
+	    "fnv1a64:b344e34d7ab9ce65", // sql-files/main.sql @ d4b8e7b
+	    "fnv1a64:d6c43cf034523592", // sql-files/main.sql + web.sql @ d4b8e7b
 	};
 	return kBaselines;
 }

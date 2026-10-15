@@ -65,26 +65,38 @@ jobs:
       - name: Test
         run: ctest --test-dir build --build-config Debug --output-on-failure --parallel 4
 
-  # Live-database tests (persistence unit) against a throwaway MariaDB service container.
-  mariadb-integration:
-    name: linux-gcc-mariadb
+  # Live-database tests (persistence unit) against throwaway database service containers.
+  # Both servers matter: M0 fingerprints must match on MariaDB and on MySQL 8.
+  database-integration:
+    name: linux-gcc-${{ matrix.name }}
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: mariadb
+            image: mariadb:11.4
+            health: healthcheck.sh --connect --innodb_initialized
+          - name: mysql8
+            image: mysql:8.4
+            health: mysqladmin ping -h 127.0.0.1 --silent
     env:
       # Per-run throwaway credential for the service container below; not a real secret.
       TEST_DB_PASSWORD: ci-${{ github.run_id }}-${{ github.run_attempt }}
     services:
-      mariadb:
-        image: mariadb:11.4
+      db:
+        image: ${{ matrix.image }}
         env:
-          MARIADB_RANDOM_ROOT_PASSWORD: '1'
-          MARIADB_DATABASE: rathena_it
-          MARIADB_USER: rathena_it
-          MARIADB_PASSWORD: ci-${{ github.run_id }}-${{ github.run_attempt }}
+          # The mariadb image accepts the MYSQL_* names too.
+          MYSQL_RANDOM_ROOT_PASSWORD: 'yes'
+          MYSQL_DATABASE: rathena_it
+          MYSQL_USER: rathena_it
+          MYSQL_PASSWORD: ci-${{ github.run_id }}-${{ github.run_attempt }}
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="healthcheck.sh --connect --innodb_initialized"
-          --health-interval=5s --health-timeout=5s --health-retries=20
+          --health-cmd="${{ matrix.health }}"
+          --health-interval=5s --health-timeout=5s --health-retries=30
 
     steps:
       - uses: actions/checkout@v4
@@ -102,7 +114,7 @@ jobs:
       - name: Build
         run: cmake --build build --parallel 4 --target rathena_persistence_tests
 
-      - name: Test (live database)
+      - name: Test (live database, serial)
         env:
           RATHENA_TEST_DATABASE_URL: mysql://rathena_it:${{ env.TEST_DB_PASSWORD }}@127.0.0.1:3306/rathena_it
         run: ctest --test-dir build --output-on-failure -R 'Mysql'

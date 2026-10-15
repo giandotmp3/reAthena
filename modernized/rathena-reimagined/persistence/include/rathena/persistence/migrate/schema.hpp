@@ -26,7 +26,8 @@ struct SchemaSnapshot {
 	[[nodiscard]] const TableSchema* find(std::string_view table) const noexcept;
 };
 
-/// Order-independent, case-normalized fingerprint of table/column names, types and nullability:
+/// Order-independent, case-normalized fingerprint of table/column names, types and nullability
+/// (integer display widths ignored, so MariaDB and MySQL 8 agree):
 /// "fnv1a64:<16 hex>". Detects drift, not tampering (not a security hash).
 std::string schema_fingerprint(const SchemaSnapshot& s);
 
