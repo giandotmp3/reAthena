@@ -26,6 +26,7 @@ struct TableNames {
 	std::string party = "party";
 	std::string guild = "guild";
 	std::string guild_member = "guild_member";
+	std::string guild_position = "guild_position";
 	std::string clan = "clan";
 	std::string clan_alliance = "clan_alliance";
 	std::string elemental = "elemental";

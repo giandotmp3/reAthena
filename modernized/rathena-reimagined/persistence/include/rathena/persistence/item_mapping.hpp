@@ -50,7 +50,15 @@ Item from_row(const Row& row, ItemTable t);
 Statement insert_statement(const TableNames& names, ItemTable t, std::uint64_t owner_id,
                            const Item& item, std::optional<std::uint32_t> index = std::nullopt);
 
-/// Parameterized SELECT of all items for one owner.
+/// Parameterized INSERT for one row of a table with a row id (all but mail_attachments). A
+/// non-zero `item.row_id` is written as the row's `id`, so a rewrite keeps each row's identity;
+/// 0 lets the database assign one. Throws MappingError for mail_attachments.
+Statement insert_statement(const TableNames& names, ItemTable t, std::uint64_t owner_id, const StoredItem& item);
+
+/// Parameterized SELECT of all items for one owner, ordered by row id (mail_attachments: index).
 Statement select_statement(const TableNames& names, ItemTable t, std::uint64_t owner_id);
+
+/// Parameterized DELETE of all items of one owner.
+Statement delete_statement(const TableNames& names, ItemTable t, std::uint64_t owner_id);
 
 } // namespace rathena::persistence

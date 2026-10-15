@@ -26,6 +26,7 @@ std::vector<Row> PostgresConnection::run(const Statement&, bool) { unavailable()
 void PostgresConnection::execute(const Statement&) { unavailable(); }
 std::vector<Row> PostgresConnection::query(const Statement&) { unavailable(); }
 bool PostgresConnection::execute_in_transaction(const std::vector<Statement>&) { unavailable(); }
+void PostgresConnection::transaction(const std::function<void()>&) { unavailable(); }
 void PostgresConnection::execute_script(std::string_view) { unavailable(); }
 
 } // namespace rathena::persistence

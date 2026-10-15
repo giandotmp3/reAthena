@@ -9,7 +9,7 @@ namespace rathena::persistence {
 namespace {
 
 using F = std::string TableNames::*;
-constexpr std::array<std::pair<std::string_view, F>, 32> kFields = {{
+constexpr std::array<std::pair<std::string_view, F>, 33> kFields = {{
     {"login", &TableNames::login},
     {"global_acc_reg_num", &TableNames::global_acc_reg_num},
     {"global_acc_reg_str", &TableNames::global_acc_reg_str},
@@ -27,6 +27,7 @@ constexpr std::array<std::pair<std::string_view, F>, 32> kFields = {{
     {"party", &TableNames::party},
     {"guild", &TableNames::guild},
     {"guild_member", &TableNames::guild_member},
+    {"guild_position", &TableNames::guild_position},
     {"clan", &TableNames::clan},
     {"clan_alliance", &TableNames::clan_alliance},
     {"elemental", &TableNames::elemental},
@@ -47,7 +48,7 @@ constexpr std::array<std::pair<std::string_view, F>, 32> kFields = {{
 // Children of `char` that BR-CHAR-013 deletes -> CASCADE; references it clears -> SET NULL.
 // Account deletion (BR-LOGIN-037) removes only the login row and `##` regs, so `char` and
 // account storage RESTRICT on login rather than cascading a behavior change.
-constexpr std::array<ForeignKeySpec, 31> kForeignKeys = {{
+constexpr std::array<ForeignKeySpec, 35> kForeignKeys = {{
     {"global_acc_reg_num", "account_id", "login", "account_id", OnDelete::Cascade},
     {"global_acc_reg_str", "account_id", "login", "account_id", OnDelete::Cascade},
     {"character", "account_id", "login", "account_id", OnDelete::Restrict},
@@ -80,6 +81,11 @@ constexpr std::array<ForeignKeySpec, 31> kForeignKeys = {{
     {"guild", "char_id", "character", "char_id", OnDelete::Restrict},
     {"mail", "dest_id", "character", "char_id", OnDelete::Cascade},
     {"mail", "send_id", "character", "char_id", OnDelete::SetNull},
+    // BR-CHAR-042: breaking a guild deletes all of its data; a mail takes its attachments along.
+    {"guild_member", "guild_id", "guild", "guild_id", OnDelete::Cascade},
+    {"guild_position", "guild_id", "guild", "guild_id", OnDelete::Cascade},
+    {"guild_storage", "guild_id", "guild", "guild_id", OnDelete::Cascade},
+    {"mail_attachments", "id", "mail", "id", OnDelete::Cascade},
 }};
 
 } // namespace

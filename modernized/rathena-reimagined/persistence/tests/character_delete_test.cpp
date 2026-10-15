@@ -72,7 +72,7 @@ TEST(BR_CHAR_013_CharacterDelete, BR_CHAR_013_TargetForeignKeysAgreeWithCleanupP
 }
 
 TEST(BR_CHAR_013_CharacterDelete, BR_CHAR_013_RepositoryRemoveLeavesNoOrphans) {
-	GTEST_SKIP() << "PENDING BR-CHAR-013: CharacterRepository::remove not implemented (char refactor phase 3)";
+	// The full cleanup on every backend is in repositories_test.cpp (RepositoryContract).
 	InMemoryDatabase db;
 	InMemoryCharacterRepository chars(db);
 	InMemoryPartyRepository parties(db);
@@ -96,9 +96,8 @@ TEST(BR_CHAR_013_CharacterDelete, BR_CHAR_013_RepositoryRemoveLeavesNoOrphans) {
 	(void)pid;
 }
 
-TEST(BR_CHAR_013_CharacterDelete, BR_CHAR_013_FakeRemoveIsNotImplementedYet) {
-	// Guard: documents the pending state so nobody relies on a silent no-op delete.
+TEST(BR_CHAR_013_CharacterDelete, BR_CHAR_013_RemoveOfAnUnknownCharacterChangesNothing) {
 	InMemoryDatabase db;
 	InMemoryCharacterRepository chars(db);
-	EXPECT_THROW((void)chars.remove(CharId{150'000}), NotImplemented);
+	EXPECT_FALSE(chars.remove(CharId{150'000}));
 }

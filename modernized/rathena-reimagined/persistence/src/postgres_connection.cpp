@@ -173,13 +173,23 @@ void PostgresConnection::execute(const Statement& st) { (void)run(st, false); }
 
 std::vector<Row> PostgresConnection::query(const Statement& st) { return run(st, true); }
 
-bool PostgresConnection::execute_in_transaction(const std::vector<Statement>& statements) {
+void PostgresConnection::transaction(const std::function<void()>& body) {
 	execute({"BEGIN", {}});
 	try {
-		for (const auto& st : statements) execute(st);
+		body();
 		execute({"COMMIT", {}});
-	} catch (const RepositoryError&) {
+	} catch (...) {
 		PQclear(PQexec(impl_->conn, "ROLLBACK"));
+		throw;
+	}
+}
+
+bool PostgresConnection::execute_in_transaction(const std::vector<Statement>& statements) {
+	try {
+		transaction([&] {
+			for (const auto& st : statements) execute(st);
+		});
+	} catch (const RepositoryError&) {
 		return false;
 	}
 	return true;

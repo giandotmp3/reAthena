@@ -1,8 +1,8 @@
 #pragma once
-// Foreign keys the clean target schema carries once the character-side repositories are ported
-// (DATABASE_DECISION.md increment 3; formerly the in-place MySQL step M3b). CASCADE / SET NULL
-// actions must agree with the BR-CHAR-013 cleanup plan (character_delete_plan()); see
-// character_delete_test.cpp.
+// Foreign keys of the clean target schema (DATABASE_DECISION.md increment 3; formerly the in-place
+// MySQL step M3b). target_schema_statements() generates its FOREIGN KEY clauses from this list.
+// CASCADE / SET NULL actions must agree with the BR-CHAR-013 cleanup plan
+// (character_delete_plan()); see character_delete_test.cpp.
 #include <span>
 #include <string_view>
 

@@ -120,6 +120,20 @@ TEST(D6_ItemMapping, D6_MailAttachmentsNeedAnIndex) {
 	EXPECT_THROW((void)insert_statement(names, ItemTable::Inventory, 7, sample(false), 2u), MappingError);
 }
 
+TEST(D6_ItemMapping, D6_StoredRowsKeepTheirRowIdAndReadInRowIdOrder) {
+	const TableNames names;
+	const auto fresh = insert_statement(names, ItemTable::Cart, 7, StoredItem{0, sample(false)});
+	EXPECT_EQ(fresh.sql.rfind("INSERT INTO \"cart_inventory\" (\"char_id\", ", 0), 0u) << "row id 0: the database assigns one";
+	const auto kept = insert_statement(names, ItemTable::Cart, 7, StoredItem{42, sample(false)});
+	EXPECT_EQ(kept.sql.rfind("INSERT INTO \"cart_inventory\" (\"id\", \"char_id\", ", 0), 0u);
+	EXPECT_EQ(std::get<std::uint64_t>(kept.params[0]), 42u);
+	EXPECT_EQ(kept.params.size(), fresh.params.size() + 1);
+	EXPECT_THROW((void)insert_statement(names, ItemTable::MailAttachments, 7, StoredItem{1, sample(false)}), MappingError);
+	EXPECT_NE(select_statement(names, ItemTable::Cart, 7).sql.find("ORDER BY \"id\""), std::string::npos);
+	EXPECT_NE(select_statement(names, ItemTable::MailAttachments, 7).sql.find("ORDER BY \"index\""), std::string::npos);
+	EXPECT_EQ(delete_statement(names, ItemTable::Storage, 9).sql, "DELETE FROM \"storage\" WHERE \"account_id\" = ?");
+}
+
 TEST(D6_ItemMapping, D6_SelectUsesConfiguredTableName) {
 	TableNames names;
 	ASSERT_TRUE(names.set("inventory_db", "inventory_custom"));

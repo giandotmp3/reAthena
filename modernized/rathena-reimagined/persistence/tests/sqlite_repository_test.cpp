@@ -117,6 +117,8 @@ TEST(TargetSchema, PostgresDdlHasNoSqliteOrMysqlSyntax) {
 	ASSERT_FALSE(pg.empty());
 	for (const auto& st : pg) {
 		EXPECT_EQ(st.sql.find('`'), std::string::npos) << "PostgreSQL DDL must not use backticks: " << st.sql;
-		EXPECT_EQ(st.sql.find("STRICT"), std::string::npos) << "STRICT is SQLite-only: " << st.sql;
+		EXPECT_EQ(st.sql.find(") STRICT"), std::string::npos) << "STRICT tables are SQLite-only: " << st.sql;
+		EXPECT_EQ(st.sql.find("AUTOINCREMENT"), std::string::npos) << "SQLite-only: " << st.sql;
+		EXPECT_EQ(st.sql.find("sqlite_"), std::string::npos) << "SQLite-only: " << st.sql;
 	}
 }

@@ -163,40 +163,60 @@ Item from_row(const Row& row, ItemTable t) {
 	return it;
 }
 
-// Identifiers use the portable double quotes (identical for SQLite and PostgreSQL).
-Statement insert_statement(const TableNames& names, ItemTable t, std::uint64_t owner_id, const Item& item,
-                           std::optional<std::uint32_t> index) {
+namespace {
+
+/// INSERT of one item row: [row id,] owner [, index], then item_columns(t). Identifiers use the
+/// portable double quotes (identical for SQLite and PostgreSQL).
+Statement build_insert(const TableNames& names, ItemTable t, std::uint64_t owner_id, const Item& item,
+                       std::optional<std::uint32_t> index, std::uint64_t row_id) {
 	const auto& p = profile(t);
 	if (p.has_index_column != index.has_value())
 		throw MappingError("index column is required for mail_attachments and only there");
 	const Row row = to_row(item, t);
 	Statement st;
-	std::string cols = quote_identifier(p.owner_column, SqlDialect::Sqlite);
-	std::string marks = "?";
-	st.params.emplace_back(owner_id);
-	if (index) {
-		cols += ", " + quote_identifier("index", SqlDialect::Sqlite);
-		marks += ", ?";
-		st.params.emplace_back(std::uint64_t{*index});
-	}
-	for (const auto& c : item_columns(t)) {
-		cols += ", " + quote_identifier(c, SqlDialect::Sqlite);
-		marks += ", ?";
-		st.params.push_back(row.at(c));
-	}
+	std::string cols;
+	std::string marks;
+	auto add = [&](std::string_view col, SqlValue v) {
+		cols += (cols.empty() ? "" : ", ") + quote_identifier(col, SqlDialect::Sqlite);
+		marks += marks.empty() ? "?" : ", ?";
+		st.params.push_back(std::move(v));
+	};
+	if (row_id != 0) add("id", SqlValue{row_id});
+	add(p.owner_column, SqlValue{owner_id});
+	if (index) add("index", SqlValue{std::uint64_t{*index}});
+	for (const auto& c : item_columns(t)) add(c, row.at(c));
 	st.sql = "INSERT INTO " + quote_identifier(table_name(names, t), SqlDialect::Sqlite) + " (" + cols + ") VALUES (" + marks + ")";
 	return st;
 }
 
+} // namespace
+
+Statement insert_statement(const TableNames& names, ItemTable t, std::uint64_t owner_id, const Item& item,
+                           std::optional<std::uint32_t> index) {
+	return build_insert(names, t, owner_id, item, index, 0);
+}
+
+Statement insert_statement(const TableNames& names, ItemTable t, std::uint64_t owner_id, const StoredItem& item) {
+	if (profile(t).has_index_column) throw MappingError("mail_attachments rows are keyed by index, not by a row id");
+	return build_insert(names, t, owner_id, item.item, std::nullopt, item.row_id);
+}
+
 Statement select_statement(const TableNames& names, ItemTable t, std::uint64_t owner_id) {
 	const auto& p = profile(t);
-	std::string cols = quote_identifier(p.has_index_column ? "index" : "id", SqlDialect::Sqlite);
+	const auto key = quote_identifier(p.has_index_column ? "index" : "id", SqlDialect::Sqlite);
+	std::string cols = key;
 	for (const auto& c : item_columns(t)) cols += ", " + quote_identifier(c, SqlDialect::Sqlite);
 	Statement st;
 	st.sql = "SELECT " + cols + " FROM " + quote_identifier(table_name(names, t), SqlDialect::Sqlite) + " WHERE " +
-	         quote_identifier(p.owner_column, SqlDialect::Sqlite) + " = ?";
+	         quote_identifier(p.owner_column, SqlDialect::Sqlite) + " = ? ORDER BY " + key;
 	st.params.emplace_back(owner_id);
 	return st;
+}
+
+Statement delete_statement(const TableNames& names, ItemTable t, std::uint64_t owner_id) {
+	return {"DELETE FROM " + quote_identifier(table_name(names, t), SqlDialect::Sqlite) + " WHERE " +
+	            quote_identifier(profile(t).owner_column, SqlDialect::Sqlite) + " = ?",
+	        {SqlValue{owner_id}}};
 }
 
 } // namespace rathena::persistence

@@ -43,6 +43,7 @@ public:
 	std::vector<Row> query(const Statement& st) override;
 	[[nodiscard]] std::uint64_t affected_rows() const noexcept override { return affected_rows_; }
 	bool execute_in_transaction(const std::vector<Statement>& statements) override;
+	void transaction(const std::function<void()>& body) override;
 	void execute_script(std::string_view sql) override;
 
 	[[nodiscard]] const DbEndpoint& endpoint() const noexcept { return endpoint_; }

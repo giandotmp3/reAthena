@@ -32,10 +32,15 @@ struct InMemoryDatabase {
 	std::map<PartyId, Party> parties;
 	std::map<GuildId, Guild> guilds;
 	std::map<MailId, Mail> mails;
+	std::map<AccountId, std::vector<StoredItem>> storage;
 	std::uint32_t next_char_id = kStartCharNum;
 	std::uint32_t next_party_id = 1;
 	std::uint32_t next_guild_id = 1;
 	std::uint64_t next_mail_id = 1;
+	std::uint64_t next_item_row_id = 1; ///< one counter for every item table, like a row id
+	/// Write faults are labelled "write:<default table name>" (e.g. "write:cart_inventory"), the
+	/// table the SQL repositories would be writing at that point; accounts use the older
+	/// "insert:login" / "update:login" / "delete:<table>" labels.
 	FaultInjector faults;
 };
 
@@ -65,7 +70,8 @@ public:
 	std::optional<Character> find_by_name(std::string_view name) const override;
 	CharId create(Character character) override;
 	void save(const Character& character) override;
-	/// PENDING BR-CHAR-013: throws NotImplemented until the char-server refactor (phase 3).
+	/// BR-CHAR-013 over the data the fake holds (characters, parties, guilds, mail); the plan's
+	/// other tables have nothing here.
 	bool remove(CharId id) override;
 
 private:
@@ -79,6 +85,7 @@ public:
 	PartyId create(Party party) override;
 	void save(const Party& party) override;
 	bool remove(PartyId id) override;
+	std::vector<CharId> members(PartyId id) const override;
 
 private:
 	InMemoryDatabase& db_;
@@ -104,6 +111,16 @@ public:
 	MailId create(Mail mail) override;
 	void save(const Mail& mail) override;
 	bool remove(MailId id) override;
+
+private:
+	InMemoryDatabase& db_;
+};
+
+class InMemoryStorageRepository final : public StorageRepository {
+public:
+	explicit InMemoryStorageRepository(InMemoryDatabase& db) : db_(db) {}
+	std::vector<StoredItem> load(AccountId account) const override;
+	void save(AccountId account, const std::vector<StoredItem>& items) override;
 
 private:
 	InMemoryDatabase& db_;

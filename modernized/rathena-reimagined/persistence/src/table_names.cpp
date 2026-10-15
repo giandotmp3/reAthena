@@ -10,7 +10,7 @@ namespace {
 
 using Field = std::string TableNames::*;
 // Legacy inter_athena.conf key -> field. Only keys the persistence repositories use.
-constexpr std::array<std::pair<std::string_view, Field>, 32> kKeys = {{
+constexpr std::array<std::pair<std::string_view, Field>, 33> kKeys = {{
     {"login_server_account_db", &TableNames::login},
     {"global_acc_reg_num_table", &TableNames::global_acc_reg_num},
     {"global_acc_reg_str_table", &TableNames::global_acc_reg_str},
@@ -28,6 +28,7 @@ constexpr std::array<std::pair<std::string_view, Field>, 32> kKeys = {{
     {"party_db", &TableNames::party},
     {"guild_db", &TableNames::guild},
     {"guild_member_db", &TableNames::guild_member},
+    {"guild_position_db", &TableNames::guild_position},
     {"clan_table", &TableNames::clan},
     {"clan_alliance_table", &TableNames::clan_alliance},
     {"elemental_db", &TableNames::elemental},

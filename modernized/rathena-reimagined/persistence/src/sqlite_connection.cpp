@@ -131,16 +131,26 @@ void SqliteConnection::execute_script(std::string_view sql) {
 	execute({"COMMIT", {}});
 }
 
-bool SqliteConnection::execute_in_transaction(const std::vector<Statement>& statements) {
+void SqliteConnection::transaction(const std::function<void()>& body) {
 	connect();
 	// IMMEDIATE takes the write lock up front, so two server processes sharing one file never
 	// deadlock upgrading a read transaction.
 	execute({"BEGIN IMMEDIATE", {}});
 	try {
-		for (const auto& st : statements) execute(st);
+		body();
 		execute({"COMMIT", {}});
-	} catch (const RepositoryError&) {
+	} catch (...) {
 		sqlite3_exec(db_, "ROLLBACK", nullptr, nullptr, nullptr);
+		throw;
+	}
+}
+
+bool SqliteConnection::execute_in_transaction(const std::vector<Statement>& statements) {
+	try {
+		transaction([&] {
+			for (const auto& st : statements) execute(st);
+		});
+	} catch (const RepositoryError&) {
 		return false;
 	}
 	return true;

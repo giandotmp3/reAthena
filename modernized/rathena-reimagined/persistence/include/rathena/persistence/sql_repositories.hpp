@@ -5,6 +5,7 @@
 #include <memory>
 #include <vector>
 
+#include "rathena/persistence/character_delete.hpp"
 #include "rathena/persistence/repositories.hpp"
 #include "rathena/persistence/row.hpp"
 #include "rathena/persistence/sql_connection.hpp"
@@ -46,7 +47,11 @@ private:
 	TableNames names_;
 };
 
-/// Not yet ported to SQL (DATABASE_DECISION.md increment 3): every call throws NotImplemented.
+// The character-side repositories (DATABASE_DECISION.md increment 3), also on the target schema.
+// Generated ids come back through RETURNING inside the transaction that writes the child rows;
+// item rows of every table go through the ONE Item mapping (item_mapping.hpp). "None" references
+// are NULL (std::nullopt), never 0.
+
 class SqlCharacterRepository final : public CharacterRepository {
 public:
 	SqlCharacterRepository(SqlConnection& conn, TableNames names) : conn_(conn), names_(std::move(names)) {}
@@ -58,7 +63,10 @@ public:
 	bool remove(CharId id) override;
 
 private:
-	[[maybe_unused]] SqlConnection& conn_;
+	std::vector<Character> load(const Statement& select) const;
+	void write_items(const Character& character);
+	void cleanup(const CleanupStepInfo& step, const Character& character);
+	SqlConnection& conn_;
 	TableNames names_;
 };
 
@@ -69,9 +77,10 @@ public:
 	PartyId create(Party party) override;
 	void save(const Party& party) override;
 	bool remove(PartyId id) override;
+	std::vector<CharId> members(PartyId id) const override;
 
 private:
-	[[maybe_unused]] SqlConnection& conn_;
+	SqlConnection& conn_;
 	TableNames names_;
 };
 
@@ -84,7 +93,8 @@ public:
 	bool remove(GuildId id) override;
 
 private:
-	[[maybe_unused]] SqlConnection& conn_;
+	void write_children(const Guild& guild);
+	SqlConnection& conn_;
 	TableNames names_;
 };
 
@@ -98,7 +108,19 @@ public:
 	bool remove(MailId id) override;
 
 private:
-	[[maybe_unused]] SqlConnection& conn_;
+	std::vector<Mail> load(const Statement& select) const;
+	SqlConnection& conn_;
+	TableNames names_;
+};
+
+class SqlStorageRepository final : public StorageRepository {
+public:
+	SqlStorageRepository(SqlConnection& conn, TableNames names) : conn_(conn), names_(std::move(names)) {}
+	std::vector<StoredItem> load(AccountId account) const override;
+	void save(AccountId account, const std::vector<StoredItem>& items) override;
+
+private:
+	SqlConnection& conn_;
 	TableNames names_;
 };
 

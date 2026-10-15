@@ -74,6 +74,7 @@ struct Character {
 	std::optional<std::uint32_t> homun_id;
 	std::optional<std::uint32_t> elemental_id;
 	std::int64_t delete_date = 0;
+	/// Ordered by row id. A row id of 0 is a new row; create()/save() assign one, find() returns it.
 	std::vector<StoredItem> inventory;
 	std::vector<StoredItem> cart;
 	friend bool operator==(const Character&, const Character&) = default;
@@ -88,13 +89,32 @@ struct Party {
 	friend bool operator==(const Party&, const Party&) = default;
 };
 
+inline constexpr std::size_t kMaxGuildPositions = 20; ///< MAX_GUILDPOSITION
+
+struct GuildMember {
+	CharId char_id{};
+	std::uint32_t position = 0; ///< index into Guild::positions (< kMaxGuildPositions)
+	std::uint64_t exp = 0;      ///< exp contributed through the guild tax
+	friend bool operator==(const GuildMember&, const GuildMember&) = default;
+};
+
+struct GuildPosition {
+	std::uint32_t index = 0;    ///< 0 is the master's position
+	std::string name;
+	std::uint32_t mode = 0;     ///< GUILD_PERM_* bitmask
+	std::uint32_t exp_mode = 0; ///< tax percent, 0..100
+	friend bool operator==(const GuildPosition&, const GuildPosition&) = default;
+};
+
+/// Repositories return members ordered by char id, positions by index and storage by row id.
 struct Guild {
 	GuildId id{};
 	std::string name;
 	CharId master{};
 	std::string master_name; ///< denormalized (D5); kept in sync by rename propagation
 	std::uint32_t guild_lv = 1;
-	std::vector<CharId> members;
+	std::vector<GuildMember> members;
+	std::vector<GuildPosition> positions;
 	std::vector<StoredItem> storage;
 	friend bool operator==(const Guild&, const Guild&) = default;
 };

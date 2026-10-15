@@ -6,6 +6,7 @@
 // (servers). MySQL/MariaDB is no longer a backend: `rathena-migrate import` copies an existing
 // MySQL database into one of these once, and is the only code that still talks to MySQL.
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -35,6 +36,10 @@ public:
 	[[nodiscard]] virtual std::uint64_t affected_rows() const noexcept = 0;
 	/// All statements in one transaction; ROLLBACK and false on any failure.
 	virtual bool execute_in_transaction(const std::vector<Statement>& statements) = 0;
+	/// Runs `body` in one transaction: COMMIT when it returns, ROLLBACK and rethrow when it throws.
+	/// For writes whose later statements need an earlier result (a RETURNING id, a row read
+	/// first); a fixed list of statements goes through execute_in_transaction(). Not reentrant.
+	virtual void transaction(const std::function<void()>& body) = 0;
 	/// Runs a multi-statement SQL script in one transaction (schema files shipped with rAthena,
 	/// e.g. sql-files/postgresql/main.sql). No parameters: never pass text built from user input.
 	/// Throws RepositoryError on failure, after rolling back.
