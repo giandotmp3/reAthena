@@ -368,56 +368,16 @@ AC_SUBST([OWEB],$output_web)
 
 
 #
-# Optionally specify the path to mysql_config
+# PostgreSQL client library (optional; SQLite is built in)
 #
 AC_ARG_WITH(
-	[mysql],
+	[postgresql],
 	AC_HELP_STRING(
-		[--with-mysql@<:@=ARG@:>@],
-		[optionally specify the path to the mysql_config executable]
+		[--with-postgresql@<:@=ARG@:>@],
+		[PostgreSQL backend: auto (default), yes, no, or the path to the pg_config executable]
 	),
-	[
-		if test "$withval" != "no" ; then
-			if test ! -x "$withval" ; then
-				AC_MSG_ERROR([$withval is not an executable file])
-			fi
-			MYSQL_CONFIG_HOME="$withval"
-		fi
-	]
-)
-
-
-#
-# Manual MYSQL_CFLAGS (optional)
-#
-AC_ARG_WITH(
-	[MYSQL_CFLAGS],
-	AC_HELP_STRING(
-		[--with-MYSQL_CFLAGS=ARG],
-		[specify MYSQL_CFLAGS manually (instead of using "mysql_config --include")]
-	),
-	[
-		manual_MYSQL_CFLAGS="yes"
-		MYSQL_CFLAGS="$withval"
-	],
-	[manual_MYSQL_CFLAGS="no"]
-)
-
-
-#
-# Manual MYSQL_LIBS (optional)
-#
-AC_ARG_WITH(
-	[MYSQL_LIBS],
-	AC_HELP_STRING(
-		[--with-MYSQL_LIBS=ARG],
-		[specify MYSQL_LIBS manually (instead of using "mysql_config --libs")]
-	),
-	[
-		manual_MYSQL_LIBS="yes"
-		MYSQL_LIBS="$withval"
-	],
-	[manual_MYSQL_LIBS="no"]
+	[with_postgresql="$withval"],
+	[with_postgresql="auto"]
 )
 
 
@@ -1230,44 +1190,51 @@ AC_SEARCH_LIBS([pthread_join], [pthread], [], [AC_MSG_ERROR([pthread library not
 
 
 #
-# MySQL library
+# Database backends
 #
-
-if test -z "$MYSQL_CONFIG_HOME"; then
-	AC_PATH_PROG([MYSQL_CONFIG_HOME], [mysql_config], [no])
-fi
-
-if test "$MYSQL_CONFIG_HOME" != "no" ; then
-	MYSQL_VERSION="`$MYSQL_CONFIG_HOME --version`"
-	if test "$manual_MYSQL_CFLAGS" = "no" ; then
-		MYSQL_CFLAGS="`$MYSQL_CONFIG_HOME --include`"
+# SQLite is compiled from the vendored amalgamation in 3rdparty/sqlite and is always available.
+# PostgreSQL support needs libpq; it is enabled when found (or required with --with-postgresql=yes).
+#
+DB_CFLAGS="-I../../3rdparty/sqlite"
+DB_LIBS=""
+HAVE_POSTGRESQL="no"
+if test "$with_postgresql" != "no" ; then
+	PG_CFLAGS=""
+	PG_LIBS=""
+	if test -x "$with_postgresql" ; then
+		PG_CONFIG="$with_postgresql"
+	else
+		AC_PATH_PROG([PG_CONFIG], [pg_config], [no])
 	fi
-	if test "$manual_MYSQL_LIBS" = "no" ; then
-		MYSQL_LIBS="`$MYSQL_CONFIG_HOME --libs`"
+	if test "$PG_CONFIG" != "no" ; then
+		PG_CFLAGS="-I`$PG_CONFIG --includedir`"
+		PG_LIBS="-L`$PG_CONFIG --libdir` -lpq"
+	elif pkg-config --exists libpq 2>/dev/null ; then
+		PG_CFLAGS="`pkg-config --cflags libpq`"
+		PG_LIBS="`pkg-config --libs libpq`"
+	else
+		PG_LIBS="-lpq"
 	fi
-else
-	MYSQL_VERSION="unknown"
+	PG_OLD_LDFLAGS="$LDFLAGS" ; LDFLAGS="$LDFLAGS $PG_LIBS"
+	PG_OLD_CPPFLAGS="$CPPFLAGS" ; CPPFLAGS="$CPPFLAGS $PG_CFLAGS"
+	AC_CHECK_LIB([pq], [PQconnectdbParams], [HAVE_POSTGRESQL="yes"], [])
+	AC_CHECK_HEADER([libpq-fe.h], [], [HAVE_POSTGRESQL="no"])
+	CPPFLAGS="$PG_OLD_CPPFLAGS"
+	LDFLAGS="$PG_OLD_LDFLAGS"
+	if test "$HAVE_POSTGRESQL" = "yes" ; then
+		DB_CFLAGS="$DB_CFLAGS $PG_CFLAGS -DHAVE_POSTGRESQL"
+		DB_LIBS="$PG_LIBS"
+	elif test "$with_postgresql" != "auto" ; then
+		AC_MSG_ERROR([PostgreSQL client library (libpq) not found])
+	fi
 fi
 
-MYSQL_OLD_LDFLAGS="$LDFLAGS" ; LDFLAGS="$LDFLAGS $MYSQL_LIBS"
-MYSQL_OLD_CPPFLAGS="$CPPFLAGS" ; CPPFLAGS="$CPPFLAGS $MYSQL_CFLAGS"
-AC_CHECK_LIB([mysqlclient], [mysql_init], [HAVE_MYSQL="yes"], [])
-AC_CHECK_HEADER([mysql.h], [], [HAVE_MYSQL=""])
-CPPFLAGS="$MYSQL_OLD_CPPFLAGS"
-LDFLAGS="$MYSQL_OLD_LDFLAGS"
+AC_MSG_CHECKING([PostgreSQL backend])
+AC_MSG_RESULT([$HAVE_POSTGRESQL])
 
-AC_MSG_CHECKING([MySQL library (required)])
-if test "$HAVE_MYSQL" = "yes" ; then
-	AC_MSG_RESULT([yes ($MYSQL_VERSION)])
-else
-	AC_MSG_RESULT([no])
-	AC_MSG_ERROR([MySQL not found or incompatible])
-fi
-
-AC_SUBST([HAVE_MYSQL])
-AC_SUBST([MYSQL_VERSION])
-AC_SUBST([MYSQL_CFLAGS])
-AC_SUBST([MYSQL_LIBS])
+AC_SUBST([HAVE_POSTGRESQL])
+AC_SUBST([DB_CFLAGS])
+AC_SUBST([DB_LIBS])
 
 
 #

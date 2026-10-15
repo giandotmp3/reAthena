@@ -1,24 +1,13 @@
 @SET_MAKE@
 
-HAVE_MYSQL=@HAVE_MYSQL@
 OMAP=@OMAP@
-ifeq ($(HAVE_MYSQL),yes)
-	ALL_DEPENDS=server tools
-	SERVER_DEPENDS=common login char map web import
-	COMMON_DEPENDS=libconfig rapidyaml yaml-cpp
-	LOGIN_DEPENDS=libconfig common
-	CHAR_DEPENDS=libconfig common rapidyaml
-	MAP_DEPENDS=libconfig common rapidyaml
-	WEB_DEPENDS=libconfig common yaml-cpp httplib
-else
-	ALL_DEPENDS=needs_mysql
-	SERVER_DEPENDS=needs_mysql
-	COMMON_DEPENDS=needs_mysql
-	LOGIN_DEPENDS=needs_mysql
-	CHAR_DEPENDS=needs_mysql
-	MAP_DEPENDS=needs_mysql
-	WEB_DEPENDS=needs_mysql
-endif
+ALL_DEPENDS=server tools
+SERVER_DEPENDS=common login char map web import
+COMMON_DEPENDS=libconfig rapidyaml yaml-cpp
+LOGIN_DEPENDS=libconfig common
+CHAR_DEPENDS=libconfig common rapidyaml
+MAP_DEPENDS=libconfig common rapidyaml
+WEB_DEPENDS=libconfig common yaml-cpp httplib
 
 
 #####################################################################
@@ -58,7 +47,7 @@ web: $(WEB_DEPENDS)
 libconfig:
 	@$(MAKE) -C 3rdparty/libconfig
 
-tools:
+tools: common
 	@$(MAKE) -C src/tool
 	@$(MAKE) -C src/map tools
 
@@ -119,10 +108,6 @@ help:
 	@echo "'bin-clean'   - deletes installed binaries"
 	@echo "'uninstall'   - run uninstaller which erases all installation changes"
 	@echo "'help'        - outputs this message"
-
-needs_mysql:
-	@echo "MySQL not found or disabled by the configure script"
-	@exit 1
 
 install:
 	@sh ./install.sh

@@ -31,12 +31,7 @@ WEB_H = $(shell ls *.hpp)
 
 SERVER_DEPENDS=web-server
 
-HAVE_MYSQL=@HAVE_MYSQL@
-ifeq ($(HAVE_MYSQL),yes)
-	SERVER_DEPENDS=web-server
-else
-	SERVER_DEPENDS=needs_mysql
-endif
+SERVER_DEPENDS=web-server
 
 ALL_DEPENDS=server
 
@@ -62,10 +57,6 @@ help:
 
 #####################################################################
 
-needs_mysql:
-	@echo "MySQL not found or disabled by the configure script"
-	@exit 1
-
 # object directories
 
 obj:
@@ -76,13 +67,13 @@ obj:
 
 web-server: obj $(WEB_DIR_OBJ) $(COMMON_AR) $(LIBCONFIG_AR) $(RAPIDYAML_AR) $(HTTPLIB_AR)
 	@echo "	LD	@OWEB@@EXEEXT@"
-	@@CXX@ @LDFLAGS@ -o ../../@OWEB@@EXEEXT@ $(WEB_DIR_OBJ) $(COMMON_AR) $(LIBCONFIG_AR) $(RAPIDYAML_AR) $(HTTPLIB_AR) @LIBS@ @MYSQL_LIBS@
+	@@CXX@ @LDFLAGS@ -o ../../@OWEB@@EXEEXT@ $(WEB_DIR_OBJ) $(COMMON_AR) $(LIBCONFIG_AR) $(RAPIDYAML_AR) $(HTTPLIB_AR) @LIBS@ @DB_LIBS@
 
 # web object files
 
 obj/%.o: %.cpp $(WEB_H) $(COMMON_H) $(LIBCONFIG_H) $(HTTPLIB_H) $(RAPIDYAML_H) $(NLOHMANN_H)
 	@echo "	CXX	$<"
-	@@CXX@ @CXXFLAGS@ $(COMMON_INCLUDE) $(RA_INCLUDE) $(LIBCONFIG_INCLUDE) $(HTTPLIB_INCLUDE) $(RAPIDYAML_INCLUDE) $(NLOHMANN_INCLUDE) @MYSQL_CFLAGS@ @CPPFLAGS@ -c $(OUTPUT_OPTION) $<
+	@@CXX@ @CXXFLAGS@ $(COMMON_INCLUDE) $(RA_INCLUDE) $(LIBCONFIG_INCLUDE) $(HTTPLIB_INCLUDE) $(RAPIDYAML_INCLUDE) $(NLOHMANN_INCLUDE) @DB_CFLAGS@ @CPPFLAGS@ -c $(OUTPUT_OPTION) $<
 
 # missing object files
 $(COMMON_AR):

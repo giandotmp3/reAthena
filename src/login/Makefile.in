@@ -19,12 +19,7 @@ RAPIDYAML_AR = ../../3rdparty/rapidyaml/obj/ryml.a
 RAPIDYAML_H = $(shell find ../../3rdparty/rapidyaml/ -type f -name "*.h*")
 RAPIDYAML_INCLUDE = -I../../3rdparty/rapidyaml/src -I../../3rdparty/rapidyaml/ext/c4core/src
 
-HAVE_MYSQL=@HAVE_MYSQL@
-ifeq ($(HAVE_MYSQL),yes)
-	SERVER_DEPENDS=login-server
-else
-	SERVER_DEPENDS=needs_mysql
-endif
+SERVER_DEPENDS=login-server
 ALL_DEPENDS=server
 
 @SET_MAKE@
@@ -49,10 +44,6 @@ help:
 
 #####################################################################
 
-needs_mysql:
-	@echo "MySQL not found or disabled by the configure script"
-	@exit 1
-
 # object directories
 
 obj:
@@ -63,13 +54,13 @@ obj:
 
 login-server: obj $(LOGIN_DIR_OBJ) $(COMMON_AR) $(RAPIDYAML_AR)
 	@echo "	LD	@OLOG@@EXEEXT@"
-	@@CXX@ @LDFLAGS@ -o ../../@OLOG@@EXEEXT@ $(LOGIN_DIR_OBJ) $(COMMON_AR) $(LIBCONFIG_AR) $(RAPIDYAML_AR) @LIBS@ @MYSQL_LIBS@
+	@@CXX@ @LDFLAGS@ -o ../../@OLOG@@EXEEXT@ $(LOGIN_DIR_OBJ) $(COMMON_AR) $(LIBCONFIG_AR) $(RAPIDYAML_AR) @LIBS@ @DB_LIBS@
 
 # login object files
 
 obj/%.o: %.cpp $(LOGIN_H) $(COMMON_H) $(LIBCONFIG_H) $(RAPIDYAML_H)
 	@echo "	CXX	$<"
-	@@CXX@ @CXXFLAGS@ $(COMMON_INCLUDE) $(RA_INCLUDE) $(LIBCONFIG_INCLUDE) $(RAPIDYAML_INCLUDE) -DWITH_SQL @MYSQL_CFLAGS@ @CPPFLAGS@ -c $(OUTPUT_OPTION) $<
+	@@CXX@ @CXXFLAGS@ $(COMMON_INCLUDE) $(RA_INCLUDE) $(LIBCONFIG_INCLUDE) $(RAPIDYAML_INCLUDE) -DWITH_SQL @DB_CFLAGS@ @CPPFLAGS@ -c $(OUTPUT_OPTION) $<
 
 # missing object files
 $(COMMON_AR):

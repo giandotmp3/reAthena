@@ -1,8 +1,8 @@
 
 COMMON_OBJ = core.o socket.o timer.o db.o nullpo.o malloc.o showmsg.o strlib.o utils.o utilities.o \
 	grfio.o mapindex.o ers.o md5calc.o minicore.o minisocket.o minimalloc.o random.o des.o \
-	conf.o msg_conf.o cli.o sql.o database.o
-COMMON_DIR_OBJ = $(COMMON_OBJ:%=obj/%)
+	conf.o msg_conf.o cli.o sql.o sql_dialect.o database.o
+COMMON_DIR_OBJ = $(COMMON_OBJ:%=obj/%) obj/sqlite3.o
 COMMON_H = $(shell ls ../common/*.hpp)
 COMMON_AR = obj/common.a
 
@@ -24,12 +24,7 @@ RAPIDYAML_AR = ../../3rdparty/rapidyaml/obj/ryml.a
 RAPIDYAML_H = $(shell find ../../3rdparty/rapidyaml/ -type f -name "*.h*")
 RAPIDYAML_INCLUDE = -I../../3rdparty/rapidyaml/src -I../../3rdparty/rapidyaml/ext/c4core/src
 
-HAVE_MYSQL=@HAVE_MYSQL@
-ifeq ($(HAVE_MYSQL),yes)
-	SERVER_DEPENDS=common
-else
-	SERVER_DEPENDS=needs_mysql
-endif
+SERVER_DEPENDS=common
 ALL_DEPENDS=server
 
 @SET_MAKE@
@@ -54,10 +49,6 @@ help:
 
 #####################################################################
 
-needs_mysql:
-	@echo "MySQL not found or disabled by the configure script"
-	@exit 1
-
 obj:
 	@echo "	MKDIR	obj"
 	@-mkdir obj
@@ -70,11 +61,16 @@ common: obj $(COMMON_DIR_OBJ) $(LIBCONFIG_AR) $(YAML_CPP_AR) $(RAPIDYAML_AR) $(C
 
 obj/%.o: %.cpp $(COMMON_H) $(LIBCONFIG_H) $(RAPIDYAML_H)
 	@echo "	CXX	$<"
-	@@CXX@ @CXXFLAGS@ @CFLAGS_AR@ $(RA_INCLUDE) $(LIBCONFIG_INCLUDE) $(RAPIDYAML_INCLUDE) @MYSQL_CFLAGS@ @CPPFLAGS@ -c $(OUTPUT_OPTION) $<
+	@@CXX@ @CXXFLAGS@ @CFLAGS_AR@ $(RA_INCLUDE) $(LIBCONFIG_INCLUDE) $(RAPIDYAML_INCLUDE) @DB_CFLAGS@ @CPPFLAGS@ -c $(OUTPUT_OPTION) $<
+
+# vendored SQLite amalgamation (see 3rdparty/sqlite/CMakeLists.txt for the options)
+obj/sqlite3.o: ../../3rdparty/sqlite/sqlite3.c ../../3rdparty/sqlite/sqlite3.h
+	@echo "	CC	$<"
+	@@CC@ @CFLAGS_AR@ -O2 -w -DSQLITE_DQS=0 -DSQLITE_THREADSAFE=1 -DSQLITE_OMIT_LOAD_EXTENSION -DSQLITE_OMIT_DEPRECATED -DSQLITE_DEFAULT_MEMSTATUS=0 -DSQLITE_LIKE_DOESNT_MATCH_BLOBS @CPPFLAGS@ -c $(OUTPUT_OPTION) $<
 
 obj/mini%.o: %.cpp $(COMMON_H) $(LIBCONFIG_H) $(YAML_CPP_H)
 	@echo "	CXX	$<"
-	@@CXX@ @CXXFLAGS@ @CFLAGS_AR@ $(RA_INCLUDE) $(LIBCONFIG_INCLUDE) $(YAML_CPP_INCLUDE) @MYSQL_CFLAGS@ -DMINICORE @CPPFLAGS@ -c $(OUTPUT_OPTION) $<
+	@@CXX@ @CXXFLAGS@ @CFLAGS_AR@ $(RA_INCLUDE) $(LIBCONFIG_INCLUDE) $(YAML_CPP_INCLUDE) @DB_CFLAGS@ -DMINICORE @CPPFLAGS@ -c $(OUTPUT_OPTION) $<
 
 # missing object files
 $(LIBCONFIG_AR):

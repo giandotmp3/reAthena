@@ -673,7 +673,7 @@ int32 char_memitemdata_to_sql(const struct item items[], int32 max, int32 id, en
 						StringBuf_Printf(&buf, ", `option_val%d`=%d", j, items[i].option[j].value);
 						StringBuf_Printf(&buf, ", `option_parm%d`=%d", j, items[i].option[j].param);
 					}
-					StringBuf_Printf(&buf, " WHERE `id`='%d' LIMIT 1", item.id);
+					StringBuf_Printf(&buf, " WHERE `id`='%d'", item.id);
 
 					if( SQL_ERROR == Sql_QueryStr(sql_handle, StringBuf_Value(&buf)) )
 					{
