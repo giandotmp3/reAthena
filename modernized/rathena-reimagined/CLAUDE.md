@@ -26,12 +26,12 @@ This is a hybrid. **login-server** and **web-server** are full C++20 rebuilds: d
 | `login-server/` | Auth order, refusal codes, tickets (30 s), online state, IP ban + failure counter independent of the log, web token (retry ≤ 20), Argon2id behind a bounded pool (stub), char-server registry, client handler stubs | BR-LOGIN-001…039 (004 → "Removed"), BR-INTER-004, 005, 006, 014, 017 | 80 (7) |
 | `web-server/` | 16 POST routes, WebToken required on **all** routes including `*/load`, nlohmann/json only, emblem validation including the transparency limit, config merge semantics, party booking, CORS | BR-WEB-001…017 | 104 (2) |
 | `char-rules/` | charlife, PIN, party, guild, mail (RODEX only), registry, clan, GM (authority re-check), session rules, **save→auth barrier per char_id** | BR-CHAR-001…055, BR-INTER-008, 009, 015, 018, 019 | 121 (9) |
-| `map-rules/` | combat, progression, economy, trade, skills, anticheat; renewal + pre-renewal; property tests; `manifest/map_modules.tsv` (each `src/map/*.cpp` → one module) | BR-MAP-001…061 | 94 (9) |
+| `map-rules/` | combat, progression, economy, trade, skills, anticheat; renewal + pre-renewal; property tests; `manifest/map_modules.tsv` (each `src/map/*.cpp` → one module) | BR-MAP-001…061 | 95 (8) |
 
-**Totals: 658 tests. 619 pass, 39 skipped as pending, 0 fail.** All 191 rule IDs appear in at least one test.
+**Totals: 659 tests. 621 pass, 38 skipped as pending, 0 fail.** All 191 rule IDs appear in at least one test.
 
 Pending tests are `GTEST_SKIP() << "PENDING <BR-ID>"`. They are mostly waiting on golden vectors from an instrumented legacy build, a live MySQL, libsodium, or verbatim packet headers. Pending rule IDs:
-BR-CHAR-013, 022, 028, 031, 032, 034, 042, 047 · BR-INTER-001, 003, 006, 007, 010, 013, 017, 018 · BR-LOGIN-001, 036, 037, 039 · BR-MAP-015, 017, 019, 032, 033, 034, 049, 053, 055 · BR-WEB-010 (client-capture gate), 016 (httplib end-to-end).
+BR-CHAR-013, 022, 028, 031, 032, 034, 042, 047 · BR-INTER-001, 003, 006, 007, 010, 013, 017, 018 · BR-LOGIN-001, 036, 037, 039 · BR-MAP-015, 019, 032, 033, 034, 049, 053, 055 · BR-WEB-010 (client-capture gate), 016 (httplib end-to-end).
 Most of these also have passing tests for their pure logic; only the integration part is pending.
 
 ## How to build and test
@@ -110,7 +110,7 @@ The full file → module map for the map server is `map-rules/manifest/map_modul
 ## Open items for the next engineer
 
 1. **Integrate the units.** Each one currently carries small local copies of `Rng`/`BattleConfig`/types so it can build standalone. On promotion into `src/`, replace them with `core`'s types. Every knob `map-rules` uses is now in `core/knobs.def.hpp`. A drift test (`core/tests/test_shipped_conf_parity.cpp`) checks every typed default against the legacy `conf/` files. The full 581-knob list is still to be generated.
-2. **Golden vectors.** Legacy `src/common/random.{hpp,cpp}` now has `rnd_seed()` / `rnd_seed_from_env()`. Starting a legacy server with `RATHENA_RNG_SEED=<uint32>` makes its random stream reproducible (it logs a warning; tools built in minimal-core mode skip this). Next: build an instrumented legacy binary that dumps formula inputs and outputs, and capture vectors. That unblocks most of the pending tests (BR-MAP-015/017/019, BR-CHAR-013, …).
+2. **Golden vectors.** Legacy `src/common/random.{hpp,cpp}` now has `rnd_seed()` / `rnd_seed_from_env()`. Starting a legacy server with `RATHENA_RNG_SEED=<uint32>` makes its random stream reproducible (it logs a warning; tools built in minimal-core mode skip this). Next: build an instrumented legacy binary that dumps formula inputs and outputs, and capture vectors. That unblocks most of the pending tests (BR-MAP-015/019, BR-CHAR-013, …).
 3. Wire `persistence` to the MySQL client (`3rdparty/mysql`), generate the M0 baseline fingerprints from `sql-files/upgrades/`, and vendor libsodium for Argon2id.
 4. Replace `login-server/include/.../protocol/client_packets.hpp` with the verbatim legacy packet headers (K1).
 5. Before phase 2 ships, capture what real clients send on web `*/load` (BR-WEB-010 gate).

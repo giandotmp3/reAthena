@@ -32,6 +32,7 @@ option(RATHENA_MAP_RULES_WERROR "Treat warnings as errors" OFF)
 add_library(rathena_map_rules
   src/domain.cpp
   src/combat.cpp
+  src/attr_fix_loader.cpp
   src/progression.cpp
   src/economy.cpp
   src/trade.cpp

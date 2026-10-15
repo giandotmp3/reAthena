@@ -2,7 +2,13 @@
 // Worked examples are taken verbatim from the behavior contract.
 #include <gtest/gtest.h>
 
+#include "rathena/map_rules/attr_fix_loader.hpp"
 #include "rathena/map_rules/combat.hpp"
+
+#include <filesystem>
+#include <fstream>
+#include <optional>
+#include <sstream>
 
 namespace mr = rathena::map_rules;
 namespace cb = rathena::map_rules::combat;
@@ -146,8 +152,46 @@ TEST(Combat, BR_MAP_017_ElementTableWorkedExamples) {
 	EXPECT_EQ(cb::apply_element(1000, t, mr::Element::Neutral, mr::Element::Ghost, 1), 900);
 }
 
+namespace {
+std::optional<cb::AttrFixTable> load_shipped_attr_fix(const char* mode) {
+	const std::filesystem::path file = std::filesystem::path(RATHENA_LEGACY_DB_DIR) / mode / "attr_fix.yml";
+	std::ifstream in(file);
+	if (!in) return std::nullopt;
+	auto r = cb::load_attr_fix_yaml(in);
+	EXPECT_TRUE(r.table.has_value()) << file << ": " << r.error;
+	return r.table;
+}
+} // namespace
+
 TEST(Combat, BR_MAP_017_ShippedAttrFixTableLoaded) {
-	GTEST_SKIP() << "PENDING BR-MAP-017: attr_fix.yml loader (CAP-23 static data) not in this unit yet";
+	// Neutral vs Ghost Lv1 is where the modes differ: renewal 90% (spec §5.4), pre-renewal 25%.
+	struct Mode { const char* dir; std::int64_t neutral_vs_ghost; };
+	for (const Mode mode : {Mode{"re", 900}, Mode{"pre-re", 250}}) {
+		SCOPED_TRACE(mode.dir);
+		const auto t = load_shipped_attr_fix(mode.dir);
+		if (!t) GTEST_SKIP() << "legacy db/ not present next to this tree";
+		EXPECT_EQ(cb::apply_element(1000, *t, mr::Element::Water, mr::Element::Fire, 1), 1500);
+		EXPECT_EQ(cb::apply_element(1000, *t, mr::Element::Neutral, mr::Element::Ghost, 1), mode.neutral_vs_ghost);
+		// Same-element attacks are weak at level 1; Neutral never hurts Neutral less than 100%.
+		EXPECT_EQ(t->pct(mr::Element::Fire, mr::Element::Fire, 1), 25);
+		EXPECT_EQ(t->pct(mr::Element::Neutral, mr::Element::Neutral, 1), 100);
+	}
+}
+
+TEST(Combat, BR_MAP_017_LoaderRejectsIncompleteOrUnknownInput) {
+	std::istringstream partial("Header:\n  Type: ATTRIBUTE_DB\n  Version: 1\nBody:\n  - Level: 1\n    Water:\n      Fire: 150\n");
+	auto r = cb::load_attr_fix_yaml(partial);
+	EXPECT_FALSE(r.table.has_value());
+	EXPECT_NE(r.error.find("incomplete table"), std::string::npos) << r.error;
+
+	std::istringstream unknown("Body:\n  - Level: 1\n    Lava:\n      Fire: 150\n");
+	r = cb::load_attr_fix_yaml(unknown);
+	EXPECT_FALSE(r.table.has_value());
+	EXPECT_NE(r.error.find("unknown attacker element 'Lava'"), std::string::npos) << r.error;
+
+	std::istringstream bad_level("Body:\n  - Level: 5\n");
+	r = cb::load_attr_fix_yaml(bad_level);
+	EXPECT_NE(r.error.find("level must be 1..4"), std::string::npos) << r.error;
 }
 
 TEST(Combat, BR_MAP_018_SizeModifierWorkedExample) {

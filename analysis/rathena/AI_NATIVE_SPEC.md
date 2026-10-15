@@ -515,7 +515,7 @@ These 191 rules are the acceptance tests for the rebuild. Each row is a Given/Wh
 | BR-MAP-014 | RE defense: dmg × (4000+DEF)/(4000+10×DEF) − softDEF. 1000 dmg, DEF 100, softDEF 50 → 770. | battle.cpp:4855-4870 | P0 |
 | BR-MAP-015 | Pre-RE defense: dmg × (100−DEF)% − VIT def (randomised). | battle.cpp:4805-4882 | P0 |
 | BR-MAP-016 | Ignore-DEF bonuses are capped at 100%. | battle.cpp:4734-4756 | P1 |
-| BR-MAP-017 | Element table: Water vs Fire Lv1 → 150%; Neutral vs Ghost Lv1 → 90%. | battle.cpp:511-527; db/re/attr_fix.yml | P0 |
+| BR-MAP-017 | Element table: Water vs Fire Lv1 → 150% (both modes); Neutral vs Ghost Lv1 → 90% renewal, **25% pre-renewal** (`db/pre-re/attr_fix.yml`). | battle.cpp:511-527; db/re/attr_fix.yml | P0 |
 | BR-MAP-018 | Size modifier: Knuckle vs Large → 75%. | db/re/size_fix.yml | P0 |
 | BR-MAP-019 | RE ASPD formula, capped at 190 (193 for 3rd jobs). | status.cpp:2355-2399 | P0 |
 | BR-MAP-020 | Pre-RE attack delay: 600 base, AGI 90, DEX 50 → 354. | status.cpp:2400-2414 | P1 |
