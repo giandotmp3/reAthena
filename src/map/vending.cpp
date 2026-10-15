@@ -23,6 +23,7 @@
 #include "npc.hpp"
 #include "path.hpp"
 #include "pc.hpp"
+#include "script_host.hpp"
 #include "pc_groups.hpp"
 #include "rules_bridge.hpp"
 
@@ -563,7 +564,7 @@ void vending_reopen( map_session_data& sd )
 		sd.state.autotrade = 1;
 
 		// Make sure abort all NPCs
-		npc_event_dequeue(&sd);
+		ScriptHost::run_queued_event( sd );
 		pc_cleareventtimer(&sd);
 
 		// Open the vending again

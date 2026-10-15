@@ -20,6 +20,7 @@
 #include "log.hpp"  // log_pick_pc, log_zeny
 #include "npc.hpp"
 #include "pc.hpp"  // map_session_data
+#include "script_host.hpp"
 #include "rules_bridge.hpp"
 
 #include <rathena/map_rules/anticheat.hpp>
@@ -623,7 +624,7 @@ void buyingstore_reopen( map_session_data* sd ){
 		sd->state.autotrade = 1;
 
 		// Make sure abort all NPCs
-		npc_event_dequeue(sd);
+		ScriptHost::run_queued_event( *sd );
 		pc_cleareventtimer(sd);
 
 		// Open the buyingstore again

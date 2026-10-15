@@ -21,6 +21,7 @@ on:
       - 'tools/sql/**'
       - 'tools/codegen/script_buildins.py'
       - 'doc/script_buildins.tsv'
+      - 'modernized/rathena-reimagined/map-rules/manifest/map_modules.tsv'
       - '**/CMakeLists.txt'
       - '.github/workflows/build_servers_database.yml'
   pull_request:
@@ -33,6 +34,7 @@ on:
       - 'tools/sql/**'
       - 'tools/codegen/script_buildins.py'
       - 'doc/script_buildins.tsv'
+      - 'modernized/rathena-reimagined/map-rules/manifest/map_modules.tsv'
       - '**/CMakeLists.txt'
       - '.github/workflows/build_servers_database.yml'
 
@@ -73,6 +75,9 @@ jobs:
       - name: Script buildin manifest is up to date
         run: python3 tools/codegen/script_buildins.py --check
 
+      - name: Map code reaches the script VM only through ScriptHost
+        run: python3 tools/ci/check_script_host.py
+
       - name: Configure
         run: cmake -S . -B cbuild -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON -DWITH_POSTGRESQL=ON
 
@@ -82,7 +87,7 @@ jobs:
       - name: Sql/SqlStmt contract tests (SQLite and PostgreSQL)
         env:
           RATHENA_TEST_PG: 127.0.0.1:5432:rathena:${{ env.PGPASSWORD }}:rathena_test
-        run: ctest --test-dir cbuild --output-on-failure -R "sql_test|script_buildins_manifest"
+        run: ctest --test-dir cbuild --output-on-failure -R "sql_test|script_buildins_manifest|script_host_boundary"
 
       - name: Smoke test on SQLite
         run: tools/ci/smoke.sh sqlite

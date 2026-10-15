@@ -54,6 +54,7 @@
 #include "quest.hpp"
 #include "rules_bridge.hpp"
 #include "script.hpp"
+#include "script_host.hpp"
 #include "skill.hpp"
 #include "status.hpp"
 #include "storage.hpp"
@@ -10983,7 +10984,7 @@ void clif_parse_LoadEndAck(int32 fd,map_session_data *sd)
 		}
 
 		if (!sd->state.autotrade) { // Don't trigger NPC event or opening vending/buyingstore will be failed
-			npc_script_event( *sd, NPCE_LOGIN );
+			ScriptHost::run_player_event( *sd, NPCE_LOGIN );
 		}
 
 		// Set facing direction before check below to update client
@@ -11012,7 +11013,7 @@ void clif_parse_LoadEndAck(int32 fd,map_session_data *sd)
 		sd->npc_menu = 0;
 
 		if(sd->npc_id)
-			npc_event_dequeue(sd);
+			ScriptHost::run_queued_event( *sd );
 	}
 
 	if( sd->state.changemap ) {// restore information that gets lost on map-change
@@ -11134,7 +11135,7 @@ void clif_parse_LoadEndAck(int32 fd,map_session_data *sd)
 
 	// Don't trigger NPC event or opening vending/buyingstore will be failed
 	if(!sd->state.autotrade && mapdata->getMapFlag(MF_LOADEVENT)) // Lance
-		npc_script_event( *sd, NPCE_LOADMAP );
+		ScriptHost::run_player_event( *sd, NPCE_LOADMAP );
 
 	if (pc_checkskill(sd, SG_DEVIL) && ((sd->class_&MAPID_THIRDMASK) == MAPID_STAR_EMPEROR || pc_is_maxjoblv(sd)))
 		clif_status_load(sd, EFST_DEVIL1, 1);  //blindness [Komurka]
@@ -11351,7 +11352,7 @@ void clif_parse_progressbar(int32 fd, map_session_data * sd){
 		sd->idletime = last_tick;
 	}
 
-	npc_scriptcont(sd, npc_id, closing);
+	ScriptHost::continue_dialog( *sd, npc_id, closing );
 }
 
 /// Displays cast-like progress bar on a NPC
@@ -11906,11 +11907,11 @@ void clif_parse_WisMessage(int32 fd, map_session_data* sd)
 			for( i = 0; i < NUM_WHISPER_VAR; ++i ) {
 				char variablename[CHAT_SIZE_MAX];
 				safesnprintf(variablename,sizeof(variablename),"@whispervar%d$", i);
-				set_var_str( sd, variablename, split_data[i] );
+				ScriptHost::set_var_str( sd, variablename, split_data[i] );
 			}
 
 			safesnprintf(event,sizeof(event),"%s::%s", npc->exname,script_config.onwhisper_event_name);
-			npc_event(sd,event,0); // Calls the NPC label
+			ScriptHost::run_player_npc_event( *sd, event ); // Calls the NPC label
 
 			return;
 		}
@@ -12248,7 +12249,7 @@ void clif_parse_NpcClicked( int32 fd, map_session_data* sd ){
 					return;
 				}
 
-				npc_click(sd,nd);
+				ScriptHost::talk_to_npc( *sd, *nd );
 			}
 			break;
 	}
@@ -13342,7 +13343,7 @@ void clif_parse_NpcSelectMenu(int32 fd,map_session_data *sd){
 		sd->idletime = last_tick;
 	}
 
-	npc_scriptcont(sd,npc_id, false);
+	ScriptHost::continue_dialog( *sd, npc_id, false );
 }
 
 
@@ -13354,7 +13355,7 @@ void clif_parse_NpcNextClicked(int32 fd,map_session_data *sd)
 		sd->idletime = last_tick;
 	}
 
-	npc_scriptcont(sd,RFIFOL(fd,packet_db[RFIFOW(fd,0)].pos[0]), false);
+	ScriptHost::continue_dialog( *sd, RFIFOL(fd,packet_db[RFIFOW(fd,0)].pos[0]), false );
 }
 
 
@@ -13373,7 +13374,7 @@ void clif_parse_NpcAmountInput(int32 fd,map_session_data *sd){
 		sd->idletime = last_tick;
 	}
 
-	npc_scriptcont( sd, p->GID, false );
+	ScriptHost::continue_dialog( *sd, p->GID, false );
 }
 
 
@@ -13400,7 +13401,7 @@ void clif_parse_NpcStringInput(int32 fd, map_session_data* sd){
 		sd->idletime = last_tick;
 	}
 
-	npc_scriptcont( sd, p->GID, false );
+	ScriptHost::continue_dialog( *sd, p->GID, false );
 }
 
 
@@ -13421,7 +13422,7 @@ void clif_parse_NpcCloseClicked(int32 fd,map_session_data *sd)
 
 	const PACKET_CZ_CLOSE_DIALOG* p = reinterpret_cast<PACKET_CZ_CLOSE_DIALOG*>( RFIFOP( fd, 0 ) );
 
-	npc_scriptcont( sd, p->GID, true );
+	ScriptHost::continue_dialog( *sd, p->GID, true );
 }
 
 
@@ -14821,9 +14822,7 @@ void clif_parse_GMKick(int32 fd, map_session_data *sd)
 		{
 			npc_data* nd = (npc_data *)target;
 			if( pc_can_use_command(sd, "unloadnpc", COMMAND_ATCOMMAND)) {
-				npc_unload_duplicates(nd);
-				npc_unload(nd,true);
-				npc_read_event_script();
+				ScriptHost::unload_npc( *nd );
 			}
 		}
 		break;

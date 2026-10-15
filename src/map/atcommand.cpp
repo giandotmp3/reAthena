@@ -10218,7 +10218,7 @@ ACMD_FUNC(set) {
 				value = pc_readregstr(sd, uid);
 				break;
 			case '$':
-				value = mapreg_readregstr(uid);
+				value = mapreg_readregstr(uid); // ScriptHost-exempt: @set reads back through the per-scope registry readers
 				break;
 			case '#':
 				if( reg[1] == '#' )
@@ -10244,7 +10244,7 @@ ACMD_FUNC(set) {
 				value = pc_readreg(sd, uid);
 				break;
 			case '$':
-				value = mapreg_readreg(uid);
+				value = mapreg_readreg(uid); // ScriptHost-exempt: @set reads back through the per-scope registry readers
 				break;
 			case '#':
 				if( reg[1] == '#' )

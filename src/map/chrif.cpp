@@ -34,6 +34,7 @@
 
 #include <rathena/map_rules/economy.hpp>
 #include "script.hpp" // script_config
+#include "script_host.hpp"
 #include "storage.hpp"
 
 static TIMER_FUNC(check_connect_char_server);
@@ -494,9 +495,9 @@ int32 chrif_connectack(int32 fd) {
 
 	chrif_sendmap(fd);
 
-	npc_event_runall(script_config.inter_init_event_name);
+	ScriptHost::run_label_everywhere_logged( script_config.inter_init_event_name );
 	if( !char_init_done ) {
-		npc_event_runall(script_config.inter_init_once_event_name);
+		ScriptHost::run_label_everywhere_logged( script_config.inter_init_once_event_name );
 		guild_castle_map_init();
 		intif_clan_requestclans();
 	}

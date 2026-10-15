@@ -38,6 +38,7 @@
 #include "party.hpp"
 #include "path.hpp"
 #include "pc.hpp"
+#include "script_host.hpp"
 #include "pet.hpp"
 #include "quest.hpp"
 #include "rules_bridge.hpp"
@@ -1640,7 +1641,7 @@ int32 mob_unlocktarget(mob_data *md, t_tick tick)
 		mob_setstate(*md, MSS_IDLE);
 		[[fallthrough]];
 	case MSS_IDLE:
-		if (md->ud.walktimer == INVALID_TIMER && md->idle_event[0] && npc_event_do_id(md->idle_event, md->id) > 0)
+		if (md->ud.walktimer == INVALID_TIMER && md->idle_event[0] && ScriptHost::run_event_as( md->idle_event, md->id ) > 0)
 			md->idle_event[0] = 0;
 		break;
 	case MSS_LOOT:
@@ -3598,18 +3599,18 @@ int32 mob_dead(mob_data *md, block_list *src, int32 type)
 				pc_setparam(sd, SP_KILLEDGID, md->id);
 				pc_setparam(sd, SP_KILLEDRID, md->mob_id);
 				pc_setparam(sd, SP_KILLERRID, sd->id);
-				npc_event(sd,md->npc_event,0);
+				ScriptHost::run_player_npc_event( *sd, md->npc_event );
 			} else if( first_sd != nullptr ) {
 				pc_setparam(first_sd, SP_KILLEDGID, md->id);
 				pc_setparam(first_sd, SP_KILLEDRID, md->mob_id);
 				pc_setparam(first_sd, SP_KILLERRID, sd?sd->id:0);
-				npc_event(first_sd,md->npc_event,0);
+				ScriptHost::run_player_npc_event( *first_sd, md->npc_event );
 			} else
-				npc_event_do(md->npc_event);
+				ScriptHost::run_event( md->npc_event );
 		} else if( first_sd != nullptr && !md->state.npc_killmonster ) {
 			pc_setparam(first_sd, SP_KILLEDGID, md->id);
 			pc_setparam(first_sd, SP_KILLEDRID, md->mob_id);
-			npc_script_event( *first_sd, NPCE_KILLNPC );
+			ScriptHost::run_player_event( *first_sd, NPCE_KILLNPC );
 		}
 	}
 

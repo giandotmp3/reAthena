@@ -44,6 +44,7 @@
 #include "pet.hpp"
 #include "rules_bridge.hpp"
 #include "script.hpp"
+#include "script_host.hpp"
 #include "status.hpp"
 #include "unit.hpp"
 
@@ -10560,7 +10561,7 @@ void skill_identify(map_session_data *sd, int32 idx)
 	
 	if(!failure) {
 		pc_setreg(sd, add_str("@identify_idx"), idx);
-		npc_script_event( *sd, NPCE_IDENTIFY );
+		ScriptHost::run_player_event( *sd, NPCE_IDENTIFY );
 	}
 }
 

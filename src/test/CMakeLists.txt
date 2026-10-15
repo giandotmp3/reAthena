@@ -21,4 +21,7 @@ find_package( Python3 COMPONENTS Interpreter )
 if( Python3_Interpreter_FOUND )
 	add_test( NAME script_buildins_manifest
 		COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/tools/codegen/script_buildins.py" --check )
+	# Map code outside the script module reaches the VM only through ScriptHost (script_host.hpp).
+	add_test( NAME script_host_boundary
+		COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/tools/ci/check_script_host.py" )
 endif()

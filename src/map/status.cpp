@@ -37,6 +37,7 @@
 #include "pet.hpp"
 #include "rules_bridge.hpp"
 #include "script.hpp"
+#include "script_host.hpp"
 
 #include <rathena/map_rules/combat.hpp>
 
@@ -1784,10 +1785,10 @@ int32 status_damage(block_list *src,block_list *target,int64 dhp, int64 dsp, int
 			std::shared_ptr<s_battleground_data> bg = util::umap_find(bg_team_db, sd->bg_id);
 
 			if( bg && !(bg->die_event.empty()) )
-				npc_event(sd, bg->die_event.c_str(), 0);
+				ScriptHost::run_player_npc_event( *sd, bg->die_event.c_str() );
 		}
 
-		npc_script_event( *sd, NPCE_DIE );
+		ScriptHost::run_player_event( *sd, NPCE_DIE );
 	}
 
 	return (int32)(hp+sp+ap);
@@ -3939,7 +3940,7 @@ int32 status_calc_pc_sub(map_session_data* sd, uint8 opt)
 		// Items may be equipped, their effects however are nullified.
 		if (opt&SCO_FIRST && sd->inventory_data[index]->equip_script && (pc_has_permission(sd,PC_PERM_USE_ALL_EQUIPMENT)
 			|| !itemdb_isNoEquip(sd->inventory_data[index],sd->m))) { // Execute equip-script on login
-			run_script(sd->inventory_data[index]->equip_script,0,sd->id,0);
+			ScriptHost::run_item_script( *sd, sd->inventory_data[index]->equip_script );
 			if (!calculating)
 				return 1;
 		}
@@ -4010,10 +4011,10 @@ int32 status_calc_pc_sub(map_session_data* sd, uint8 opt)
 			if(sd->inventory_data[index]->script && (pc_has_permission(sd,PC_PERM_USE_ALL_EQUIPMENT) || !itemdb_isNoEquip(sd->inventory_data[index],sd->m))) {
 				if (wd == &sd->left_weapon) {
 					sd->state.lr_flag = LR_FLAG_WEAPON;
-					run_script(sd->inventory_data[index]->script,0,sd->id,0);
+					ScriptHost::run_item_script( *sd, sd->inventory_data[index]->script );
 					sd->state.lr_flag = LR_FLAG_NONE;
 				} else
-					run_script(sd->inventory_data[index]->script,0,sd->id,0);
+					ScriptHost::run_item_script( *sd, sd->inventory_data[index]->script );
 				if (!calculating) // Abort, run_script retriggered this. [Skotlex]
 					return 1;
 			}
@@ -4044,7 +4045,7 @@ int32 status_calc_pc_sub(map_session_data* sd, uint8 opt)
 			if(sd->inventory_data[index]->script && (pc_has_permission(sd,PC_PERM_USE_ALL_EQUIPMENT) || !itemdb_isNoEquip(sd->inventory_data[index],sd->m))) {
 				if( i == EQI_HAND_L ) // Shield
 					sd->state.lr_flag = LR_FLAG_SHIELD;
-				run_script(sd->inventory_data[index]->script,0,sd->id,0);
+				ScriptHost::run_item_script( *sd, sd->inventory_data[index]->script );
 				if( i == EQI_HAND_L ) // Shield
 					sd->state.lr_flag = LR_FLAG_NONE;
 				if (!calculating) // Abort, run_script retriggered this. [Skotlex]
@@ -4052,7 +4053,7 @@ int32 status_calc_pc_sub(map_session_data* sd, uint8 opt)
 			}
 		} else if( sd->inventory_data[index]->type == IT_SHADOWGEAR ) { // Shadow System
 			if (sd->inventory_data[index]->script && (pc_has_permission(sd,PC_PERM_USE_ALL_EQUIPMENT) || !itemdb_isNoEquip(sd->inventory_data[index],sd->m))) {
-				run_script(sd->inventory_data[index]->script,0,sd->id,0);
+				ScriptHost::run_item_script( *sd, sd->inventory_data[index]->script );
 				if( !calculating )
 					return 1;
 			}
@@ -4065,7 +4066,7 @@ int32 status_calc_pc_sub(map_session_data* sd, uint8 opt)
 			sd->bonus.arrow_atk += sd->inventory_data[index]->atk;
 			sd->state.lr_flag = LR_FLAG_ARROW;
 			if( !itemdb_group.item_exists(IG_THROWABLE, sd->inventory_data[index]->nameid) ) // Don't run scripts on throwable items
-				run_script(sd->inventory_data[index]->script,0,sd->id,0);
+				ScriptHost::run_item_script( *sd, sd->inventory_data[index]->script );
 			sd->state.lr_flag = LR_FLAG_NONE;
 			if (!calculating) // Abort, run_script retriggered status_calc_pc. [Skotlex]
 				return 1;
@@ -4102,7 +4103,7 @@ int32 status_calc_pc_sub(map_session_data* sd, uint8 opt)
 			if (no_run)
 				continue;
 
-			run_script(combo->bonus, 0, sd->id, 0);
+			ScriptHost::run_item_script( *sd, combo->bonus );
 
 			if (!calculating) // Abort, run_script retriggered this
 				return 1;
@@ -4143,7 +4144,7 @@ int32 status_calc_pc_sub(map_session_data* sd, uint8 opt)
 				if(!data)
 					continue;
 				if (opt&SCO_FIRST && data->equip_script && (pc_has_permission(sd,PC_PERM_USE_ALL_EQUIPMENT) || !itemdb_isNoEquip(data.get(), sd->m))) {// Execute equip-script on login
-					run_script(data->equip_script,0,sd->id,0);
+					ScriptHost::run_item_script( *sd, data->equip_script );
 					if (!calculating)
 						return 1;
 				}
@@ -4153,10 +4154,10 @@ int32 status_calc_pc_sub(map_session_data* sd, uint8 opt)
 					continue;
 				if(i == EQI_HAND_L && sd->inventory.u.items_inventory[index].equip == EQP_HAND_L) { // Left hand status.
 					sd->state.lr_flag = LR_FLAG_WEAPON;
-					run_script(data->script,0,sd->id,0);
+					ScriptHost::run_item_script( *sd, data->script );
 					sd->state.lr_flag = LR_FLAG_NONE;
 				} else
-					run_script(data->script,0,sd->id,0);
+					ScriptHost::run_item_script( *sd, data->script );
 				if (!calculating) // Abort, run_script his function. [Skotlex]
 					return 1;
 			}
@@ -4193,11 +4194,11 @@ int32 status_calc_pc_sub(map_session_data* sd, uint8 opt)
 					continue;
 				if (i == EQI_HAND_L && sd->inventory.u.items_inventory[index].equip == EQP_HAND_L) { // Left hand status.
 					sd->state.lr_flag = LR_FLAG_WEAPON;
-					run_script(data->script, 0, sd->id, 0);
+					ScriptHost::run_item_script( *sd, data->script );
 					sd->state.lr_flag = LR_FLAG_NONE;
 				}
 				else
-					run_script(data->script, 0, sd->id, 0);
+					ScriptHost::run_item_script( *sd, data->script );
 				if (!calculating)
 					return 1;
 			}
@@ -4210,12 +4211,12 @@ int32 status_calc_pc_sub(map_session_data* sd, uint8 opt)
 			std::shared_ptr<item_data> data = item_db.find(sc->getSCE(SC_ITEMSCRIPT)->val1);
 
 			if (data && data->script)
-				run_script(data->script, 0, sd->id, 0);
+				ScriptHost::run_item_script( *sd, data->script );
 		}
 
 		for( const auto& it : *sc ){
 			if( std::shared_ptr<s_status_change_db> scdb = status_db.find( it.first ); scdb != nullptr && scdb->script != nullptr ){
-				run_script( scdb->script, 0, sd->id, 0 );
+				ScriptHost::run_item_script( *sd, scdb->script );
 			}
 		}
 	}
@@ -4227,7 +4228,7 @@ int32 status_calc_pc_sub(map_session_data* sd, uint8 opt)
 		std::shared_ptr<s_pet_db> pet_db_ptr = pd->get_pet_db();
 
 		if (pet_db_ptr != nullptr && pet_db_ptr->pet_bonus_script)
-			run_script(pet_db_ptr->pet_bonus_script,0,sd->id,0);
+			ScriptHost::run_item_script( *sd, pet_db_ptr->pet_bonus_script );
 		if (pet_db_ptr != nullptr && pd->pet.intimate > 0 && (!battle_config.pet_equip_required || pd->pet.equip > 0) && pd->state.skillbonus == 1 && pd->bonus)
 			pc_bonus(sd,pd->bonus->type, pd->bonus->val);
 	}

@@ -2926,7 +2926,7 @@ int32 unit_attack(block_list *src,int32 target_id,int32 continuous)
 	if( src->type == BL_PC &&
 		target->type == BL_NPC ) {
 		// Monster npcs [Valaris]
-		npc_click((TBL_PC*)src,(TBL_NPC*)target);
+		ScriptHost::talk_to_npc( *(TBL_PC*)src, *(TBL_NPC*)target );
 		return stop_flag;
 	}
 

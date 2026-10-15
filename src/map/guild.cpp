@@ -29,6 +29,7 @@
 #include "mob.hpp"
 #include "npc.hpp"
 #include "pc.hpp"
+#include "script_host.hpp"
 #include "storage.hpp"
 #include "trade.hpp"
 
@@ -750,7 +751,7 @@ int32 guild_request_info(int32 guild_id) {
 int32 guild_npc_request_info(int32 guild_id,const char *event) {
 	if( guild_search(guild_id) ) {
 		if( event && *event )
-			npc_event_doall(event);
+			ScriptHost::run_label_everywhere( event );
 
 		return 0;
 	}
@@ -909,7 +910,7 @@ int32 guild_recv_info(const struct mmo_guild &sg) {
 	if (guild_infoevent_db->remove(guild_infoevent_db, db_i2key(sg.guild_id), &data)) {
 		struct eventlist *ev = (struct eventlist *)db_data2ptr(&data), *ev2;
 		while(ev) {
-			npc_event_do(ev->name);
+			ScriptHost::run_event( ev->name );
 			ev2=ev->next;
 			aFree(ev);
 			ev=ev2;
@@ -2137,7 +2138,7 @@ void castle_guild_broken_sub(int32 guild_id) {
 			// We call castle_event::OnGuildBreak of all castles of the guild
 			// You can set all castle_events in the 'db/castle_db.txt'
 			safesnprintf(name, EVENT_NAME_LENGTH, "%s::%s", gc->castle_event, script_config.guild_break_event_name);
-			npc_event_do(name);
+			ScriptHost::run_event( name );
 
 			//Save the new 'owner', this should invoke guardian clean up and other such things.
 			guild_castledatasave(gc->castle_id, CD_GUILD_ID, 0);
@@ -2492,9 +2493,9 @@ int32 guild_castledataloadack(int32 len, struct guild_castle *gc) {
 	ev = i; // offset of castle or -1
 
 	if( ev < 0 ) { //No castles owned, invoke OnAgitInit as it is.
-		npc_event_doall( script_config.agit_init_event_name );
-		npc_event_doall( script_config.agit_init2_event_name );
-		npc_event_doall( script_config.agit_init3_event_name );
+		ScriptHost::run_label_everywhere( script_config.agit_init_event_name );
+		ScriptHost::run_label_everywhere( script_config.agit_init2_event_name );
+		ScriptHost::run_label_everywhere( script_config.agit_init3_event_name );
 	} else // load received castles into memory, one by one
 	for( i = 0; i < n; i++, gc++ ) {
 		std::shared_ptr<guild_castle> c = castle_db.find(gc->castle_id);
@@ -2536,7 +2537,7 @@ bool guild_agit_start(void){
 
 	agit_flag = true;
 
-	npc_event_runall( script_config.agit_start_event_name );
+	ScriptHost::run_label_everywhere_logged( script_config.agit_start_event_name );
 
 	return true;
 }
@@ -2551,7 +2552,7 @@ bool guild_agit_end(void){
 
 	agit_flag = false;
 
-	npc_event_runall( script_config.agit_end_event_name );
+	ScriptHost::run_label_everywhere_logged( script_config.agit_end_event_name );
 
 	return true;
 }
@@ -2566,7 +2567,7 @@ bool guild_agit2_start(void){
 
 	agit2_flag = true;
 
-	npc_event_runall( script_config.agit_start2_event_name );
+	ScriptHost::run_label_everywhere_logged( script_config.agit_start2_event_name );
 
 	return true;
 }
@@ -2581,7 +2582,7 @@ bool guild_agit2_end(void){
 
 	agit2_flag = false;
 
-	npc_event_runall( script_config.agit_end2_event_name );
+	ScriptHost::run_label_everywhere_logged( script_config.agit_end2_event_name );
 
 	return true;
 }
@@ -2596,7 +2597,7 @@ bool guild_agit3_start(void){
 
 	agit3_flag = true;
 
-	npc_event_runall( script_config.agit_start3_event_name );
+	ScriptHost::run_label_everywhere_logged( script_config.agit_start3_event_name );
 
 	return true;
 }
@@ -2611,7 +2612,7 @@ bool guild_agit3_end(void){
 
 	agit3_flag = false;
 
-	npc_event_runall( script_config.agit_end3_event_name );
+	ScriptHost::run_label_everywhere_logged( script_config.agit_end3_event_name );
 
 	return true;
 }

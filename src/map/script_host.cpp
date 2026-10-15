@@ -133,6 +133,20 @@ void ScriptHost::run_oninit(){
 	npc_event_do_oninit();
 }
 
+// ---- NPC dialogs --------------------------------------------------------------------------------
+
+int32 ScriptHost::talk_to_npc( map_session_data& sd, npc_data& nd ){
+	return npc_click( &sd, &nd );
+}
+
+bool ScriptHost::continue_dialog( map_session_data& sd, int32 npc_id, bool closing ){
+	return npc_scriptcont( &sd, npc_id, closing );
+}
+
+int32 ScriptHost::run_queued_event( map_session_data& sd, bool free_script_stack ){
+	return npc_event_dequeue( &sd, free_script_stack );
+}
+
 // ---- Scripts ------------------------------------------------------------------------------------
 
 void ScriptHost::run( script_code* code, int32 pos, int32 rid, int32 oid ){

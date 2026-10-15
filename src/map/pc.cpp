@@ -63,6 +63,7 @@
 #include <rathena/map_rules/progression.hpp>
 #include "skill.hpp" // skill_isCopyable()
 #include "script.hpp" // struct script_reg, struct script_regstr
+#include "script_host.hpp"
 #include "searchstore.hpp"  // struct s_search_store_info
 #include "status.hpp" // OPTION_*, struct weapon_atk
 #include "storage.hpp"
@@ -1214,7 +1215,7 @@ void pc_inventory_rentals(map_session_data *sd)
 			continue;
 		if( sd->inventory.u.items_inventory[i].expire_time <= time(nullptr) ) {
 			if (sd->inventory_data[i]->unequip_script)
-				run_script(sd->inventory_data[i]->unequip_script, 0, sd->id, fake_nd->id);
+				ScriptHost::run_as_server_npc( *sd, sd->inventory_data[i]->unequip_script );
 			clif_rental_expired(sd, i, sd->inventory.u.items_inventory[i].nameid);
 			pc_delitem(sd, i, sd->inventory.u.items_inventory[i].amount, 0, 0, LOG_TYPE_OTHER);
 		} else {
@@ -3405,7 +3406,7 @@ void pc_delautobonus(map_session_data &sd, std::vector<std::shared_ptr<s_autobon
 			}
 
 			if( ( equip_pos_idx&b->pos ) == b->pos ){
-				script_run_autobonus(b->bonus_script, &sd, b->pos);
+				ScriptHost::run_autobonus( sd, b->bonus_script, b->pos );
 			}else{
 				// Not all required items equipped anymore
 				restore = false;
@@ -3441,7 +3442,7 @@ void pc_exeautobonus(map_session_data &sd, std::vector<std::shared_ptr<s_autobon
 				equip_pos_idx |= sd.inventory.u.items_inventory[sd.equip_index[j]].equip;
 		}
 		if((equip_pos_idx&autobonus->pos) == autobonus->pos)
-			script_run_autobonus(autobonus->other_script,&sd,autobonus->pos);
+			ScriptHost::run_autobonus( sd, autobonus->other_script, autobonus->pos );
 	}
 
 	autobonus->active = add_timer(gettick()+autobonus->duration, pc_endautobonus, sd.id, (intptr_t)bonus);
@@ -6512,7 +6513,7 @@ int32 pc_useitem(map_session_data *sd,int32 n)
 		script_detach_rid( previous_st );
 	}
 
-	run_script( script, 0, sd->id, fake_nd->id );
+	ScriptHost::run_as_server_npc( *sd, script );
 
 	if( sd->st != nullptr ){
 		script_free_state( sd->st );
@@ -7005,7 +7006,7 @@ enum e_setpos pc_setpos(map_session_data* sd, uint16 mapindex, int32 x, int32 y,
 			return SETPOS_NO_MAPSERVER;
 
 		if (sd->npc_id){
-			npc_event_dequeue(sd,false);
+			ScriptHost::run_queued_event( *sd, false );
 			st = sd->st;
 		}else{
 			st = nullptr;
@@ -7019,7 +7020,7 @@ enum e_setpos pc_setpos(map_session_data* sd, uint16 mapindex, int32 x, int32 y,
 		if (sd->state.buyingstore) // Stop buyingstore
 			buyingstore_close(sd);
 
-		npc_script_event( *sd, NPCE_LOGOUT );
+		ScriptHost::run_player_event( *sd, NPCE_LOGOUT );
 
 		//remove from map, THEN change x/y coordinates
 		unit_remove_map_pc(sd,clrtype);
@@ -8248,7 +8249,7 @@ int32 pc_checkbaselevelup(map_session_data *sd) {
 		}
 	}
 	clif_misceffect( *sd, NOTIFYEFFECT_BASE_LEVEL_UP );
-	npc_script_event( *sd, NPCE_BASELVUP );
+	ScriptHost::run_player_event( *sd, NPCE_BASELVUP );
 
 	if(sd->status.party_id)
 		party_send_levelup(sd);
@@ -8306,7 +8307,7 @@ int32 pc_checkjoblevelup(map_session_data *sd)
 	if (pc_checkskill(sd, SG_DEVIL) && ((sd->class_&MAPID_THIRDMASK) == MAPID_STAR_EMPEROR || pc_is_maxjoblv(sd)) )
 		clif_status_change(sd, EFST_DEVIL1, 1, 0, 0, 0, 1); //Permanent blind effect from SG_DEVIL.
 
-	npc_script_event( *sd, NPCE_JOBLVUP );
+	ScriptHost::run_player_event( *sd, NPCE_JOBLVUP );
 
 	for (; job_level <= sd->status.job_level; job_level++)
 		achievement_update_objective(sd, AG_GOAL_LEVEL, 1, job_level);
@@ -9916,7 +9917,7 @@ int32 pc_dead(map_session_data *sd,block_list *src)
 	if (src && src->type == BL_PC) {
 		map_session_data *ssd = (map_session_data *)src;
 		pc_setparam(ssd, SP_KILLEDRID, sd->id);
-		npc_script_event( *ssd, NPCE_KILLPC );
+		ScriptHost::run_player_event( *ssd, NPCE_KILLPC );
 
 		if (battle_config.pk_mode&2) {
 			ssd->status.manner -= 5;
@@ -11651,7 +11652,7 @@ static TIMER_FUNC(pc_eventtimer){
 	{
 		sd->eventtimer[i] = INVALID_TIMER;
 		sd->eventcount--;
-		npc_event(sd,p,0);
+		ScriptHost::run_player_npc_event( *sd, p );
 	}
 	else
 		ShowError("pc_eventtimer: no such event timer\n");
@@ -12216,7 +12217,7 @@ bool pc_equipitem(map_session_data *sd,int16 n,int32 req_pos,bool equipswitch)
 		current_equip_card_id = 0;
 		//only run the script if item isn't restricted
 		if (id->equip_script && (pc_has_permission(sd,PC_PERM_USE_ALL_EQUIPMENT) || !itemdb_isNoEquip(id,sd->m)))
-			run_script(id->equip_script,0,sd->id,fake_nd->id);
+			ScriptHost::run_as_server_npc( *sd, id->equip_script );
 		if(itemdb_isspecial(sd->inventory.u.items_inventory[n].card[0]))
 			; //No cards
 		else {
@@ -12228,7 +12229,7 @@ bool pc_equipitem(map_session_data *sd,int16 n,int32 req_pos,bool equipswitch)
 				if ( data != nullptr ) {
 					if (data->equip_script && (pc_has_permission(sd,PC_PERM_USE_ALL_EQUIPMENT) || !itemdb_isNoEquip(data.get(), sd->m))) {
 						current_equip_card_id = sd->inventory.u.items_inventory[n].card[i];
-						run_script(data->equip_script,0,sd->id,fake_nd->id);
+						ScriptHost::run_as_server_npc( *sd, data->equip_script );
 					}
 				}
 				current_equip_card_id = 0;
@@ -12314,7 +12315,7 @@ static void pc_unequipitem_sub(map_session_data *sd, int32 n, int32 flag) {
 		current_equip_item_index = n;
 		current_equip_card_id = 0;
 		if (sd->inventory_data[n]->unequip_script)
-			run_script(sd->inventory_data[n]->unequip_script, 0, sd->id, fake_nd->id);
+			ScriptHost::run_as_server_npc( *sd, sd->inventory_data[n]->unequip_script );
 		if (itemdb_isspecial(sd->inventory.u.items_inventory[n].card[0]))
 			; //No cards
 		else {
@@ -12327,7 +12328,7 @@ static void pc_unequipitem_sub(map_session_data *sd, int32 n, int32 flag) {
 				if (data != nullptr) {
 					if (data->unequip_script) {
 						current_equip_card_id = sd->inventory.u.items_inventory[n].card[i];
-						run_script(data->unequip_script, 0, sd->id, fake_nd->id);
+						ScriptHost::run_as_server_npc( *sd, data->unequip_script );
 					}
 				}
 				current_equip_card_id = 0;
@@ -14982,7 +14983,7 @@ void pc_bonus_script(map_session_data *sd) {
 			}
 
 			if (entry->script)
-				run_script(entry->script, 0, sd->id, 0);
+				ScriptHost::run_item_script( *sd, entry->script );
 			else
 				ShowError("pc_bonus_script: The script has been removed somewhere. \"%s\"\n", StringBuf_Value(entry->script_buf));
 		}
@@ -15825,7 +15826,7 @@ void pc_macro_detector_process_answer(map_session_data &sd, const char captcha_a
 
 		// Grant bonuses via script
 		if( cd->bonus_script != nullptr ){
-			run_script(cd->bonus_script, 0, sd.id, fake_nd->id);
+			ScriptHost::run_as_server_npc( sd, cd->bonus_script );
 		}
 
 		// Notify the client

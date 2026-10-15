@@ -26,6 +26,7 @@
 #include "mapreg.hpp"
 #include "mob.hpp"
 #include "pc.hpp"
+#include "script_host.hpp"
 #include "pc_groups.hpp"
 #include "rules_bridge.hpp"
 #include "trade.hpp"
@@ -189,7 +190,7 @@ void party_created(uint32 account_id,uint32 char_id,int32 fail,int32 party_id,ch
 
 		// We don't do any further work here because the char-server sends a party info packet right after creating the party
 		if(party_create_byscript) {	// returns party id in $@party_create_id if party is created by script
-			mapreg_setreg(add_str("$@party_create_id"),party_id);
+			ScriptHost::set_server_var( "$@party_create_id", party_id );
 			party_create_byscript = 0;
 		}
 	} else

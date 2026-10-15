@@ -2234,7 +2234,7 @@ int32 map_quit(map_session_data *sd) {
 		delete_timer(sd->autotrade_tid, pc_autotrade_timer);
 
 	if (sd->npc_id)
-		npc_event_dequeue(sd);
+		ScriptHost::run_queued_event( *sd );
 
 	if (sd->bg_id)
 		bg_team_leave(sd, true, true);
@@ -4154,7 +4154,7 @@ int32 map_config_read(const char *cfgName)
 		else if (strcmpi(w1, "delmap") == 0)
 			map_delmap(w2);
 		else if (strcmpi(w1, "npc") == 0)
-			npc_addsrcfile(w2, false);
+			npc_addsrcfile(w2, false); // ScriptHost-exempt: builds the NPC file list read at startup
 		else if (strcmpi(w1, "delnpc") == 0)
 			npc_delsrcfile(w2);
 		else if (strcmpi(w1, "autosave_time") == 0) {
@@ -4229,7 +4229,7 @@ void map_reloadnpc_sub(const char *cfgName)
 		*ptr = '\0';
 
 		if (strcmpi(w1, "npc") == 0)
-			npc_addsrcfile(w2, false);
+			npc_addsrcfile(w2, false); // ScriptHost-exempt: builds the NPC file list read at startup
 		else if (strcmpi(w1, "delnpc") == 0)
 			npc_delsrcfile(w2);
 		else if (strcmpi(w1, "import") == 0)
@@ -4244,7 +4244,7 @@ void map_reloadnpc_sub(const char *cfgName)
 void map_reloadnpc(bool clear)
 {
 	if (clear)
-		npc_addsrcfile("clear", false); // this will clear the current script list
+		npc_addsrcfile("clear", false); // this will clear the current script list (ScriptHost-exempt: NPC file list)
 
 #ifdef RENEWAL
 	map_reloadnpc_sub("npc/re/scripts_main.conf");

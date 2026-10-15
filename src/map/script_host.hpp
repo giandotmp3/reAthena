@@ -26,7 +26,7 @@
 
 #include <common/cbasetypes.hpp>
 
-#include "npc.hpp" // npce_event
+#include "npc.hpp" // npce_event, npc_data
 
 struct script_code;
 class map_session_data;
@@ -67,6 +67,17 @@ public:
 	static int32 run_label_in_file( const char* label, const char* path );
 	/// Server start: runs OnInit everywhere and starts the clock events (npc_event_do_oninit).
 	static void run_oninit();
+
+	// ---- NPC dialogs ----------------------------------------------------------------------------
+
+	/// Player `sd` talks to NPC `nd`: starts its script, or its shop/trader (npc_click).
+	static int32 talk_to_npc( map_session_data& sd, npc_data& nd );
+	/// Resumes the dialog `sd` has open with NPC `npc_id` after a client answer ("next", a menu
+	/// choice, an input, or `closing` the window) (npc_scriptcont). Returns true if it was refused.
+	static bool continue_dialog( map_session_data& sd, int32 npc_id, bool closing );
+	/// Runs the next event queued for `sd` while it was busy (npc_event_dequeue). With
+	/// `free_script_stack` false the player's current script state is left alone.
+	static int32 run_queued_event( map_session_data& sd, bool free_script_stack = true );
 
 	// ---- Scripts --------------------------------------------------------------------------------
 
