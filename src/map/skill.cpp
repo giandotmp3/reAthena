@@ -813,6 +813,24 @@ int8 skill_isCopyable(map_session_data *sd, uint16 skill_id) {
 }
 
 /**
+ * BR-MAP-054 [DEFECT fixed]: a cooldown is recorded after the skill has run, and skill_blockpc_start
+ * skips it when the list is full (MAX_SKILLCOOLDOWN is the char-server save format), which let the
+ * 21st cooldown skill be cast again at once. The cast is refused instead, at the start of the cast
+ * (unit_skilluse_id2/pos2) and at its end (skill_castend_id/pos), as cooldowns can be added in between.
+ * @param sd: Player casting
+ * @param skill_id: Skill being cast
+ * @param skill_lv: Level it is cast at
+ * @return true: the cast must be refused
+ */
+bool skill_cooldown_blocked( map_session_data& sd, uint16 skill_id, uint16 skill_lv ){
+	if (pc_has_permission(&sd, PC_PERM_SKILL_UNCONDITIONAL))
+		return false;
+
+	return !rules::skills::cooldown_cast_allowed( sd.scd.size(), util::umap_exists( sd.scd, skill_id ),
+		pc_get_skillcooldown( &sd, skill_id, skill_lv ) > 0, sd.state.autocast );
+}
+
+/**
  * Check if the skill is ok to cast and when.
  * Done before skill_check_condition_castbegin, requirement
  * @param skill_id: Skill ID that casted
@@ -4917,6 +4935,11 @@ TIMER_FUNC(skill_castend_id){
 				clif_emotion(*src, static_cast<emotion_type>(md->db->skill[md->skill_idx]->emotion));
 		}
 
+		if (sd != nullptr && skill_cooldown_blocked(*sd, ud->skill_id, ud->skill_lv)) {
+			clif_skill_fail( *sd, ud->skill_id, USESKILL_FAIL_SKILLINTERVAL );
+			break;
+		}
+
 		if (!target || target->prev == nullptr)
 			break;
 
@@ -5286,6 +5309,11 @@ TIMER_FUNC(skill_castend_pos){
 		if (md != nullptr) {
 			if (md->skill_idx >= 0 && md->db->skill[md->skill_idx]->emotion >= ET_SURPRISE && md->db->skill[md->skill_idx]->emotion < ET_MAX)
 				clif_emotion(*src, static_cast<emotion_type>(md->db->skill[md->skill_idx]->emotion));
+		}
+
+		if (sd != nullptr && skill_cooldown_blocked(*sd, ud->skill_id, ud->skill_lv)) {
+			clif_skill_fail( *sd, ud->skill_id, USESKILL_FAIL_SKILLINTERVAL );
+			break;
 		}
 
 		if (!skill_pos_maxcount_check(src, ud->skillx, ud->skilly, ud->skill_id, ud->skill_lv, src->type, true))
@@ -13894,10 +13922,17 @@ bool skill_blockpc_start(map_session_data &sd, uint16 skill_id, t_tick tick) {
 	if (!skill_db.exists(skill_id) || tick < 1)
 		return false;
 
-	if (sd.scd.size() == MAX_SKILLCOOLDOWN) {
+	auto existing = sd.scd.find(skill_id);
+
+	// A skill that is already listed is refreshed in place; only a new entry needs room.
+	if (existing == sd.scd.end() && sd.scd.size() >= MAX_SKILLCOOLDOWN) {
 		ShowWarning("skill_blockpc_start: Too many skillcooldowns, increase MAX_SKILLCOOLDOWN.\n");
 		return false;
 	}
+
+	// The old timer would end the new cooldown early.
+	if (existing != sd.scd.end())
+		delete_timer(existing->second, skill_blockpc_end);
 
 	// Add entry to list.
 	sd.scd[skill_id] = add_timer(gettick() + tick, skill_blockpc_end, sd.id, skill_id);

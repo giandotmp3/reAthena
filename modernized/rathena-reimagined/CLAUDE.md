@@ -26,9 +26,9 @@ This is a hybrid. **login-server** and **web-server** are full C++20 rebuilds: d
 | `login-server/` | Auth order, refusal codes, tickets (30 s), online state, IP ban + failure counter independent of the log, web token (retry ≤ 20), Argon2id password hashing (PHC strings, OWASP default cost, lazy rehash of plaintext/MD5/weaker rows) on a bounded worker pool, char-server registry, client handler stubs | BR-LOGIN-001…039 (004 → "Removed"), BR-INTER-004, 005, 006, 014, 017 | 91 (6) |
 | `web-server/` | 16 POST routes, WebToken required on **all** routes including `*/load`, nlohmann/json only, emblem validation including the transparency limit, config merge semantics, party booking, CORS | BR-WEB-001…017 | 104 (2) |
 | `char-rules/` | charlife, PIN, party, guild, mail (RODEX only), registry, clan, GM (authority re-check), session rules, **save→auth barrier per char_id** | BR-CHAR-001…055, BR-INTER-008, 009, 015, 018, 019 | 121 (9) |
-| `map-rules/` | combat, progression, economy, trade, skills, anticheat; renewal + pre-renewal; property tests; `manifest/map_modules.tsv` (each `src/map/*.cpp` → one module); golden vectors in `tests/golden/` | BR-MAP-001…061 | 142 (0) |
+| `map-rules/` | combat, progression, economy, trade, skills, anticheat; renewal + pre-renewal; property tests; `manifest/map_modules.tsv` (each `src/map/*.cpp` → one module); golden vectors in `tests/golden/` | BR-MAP-001…061 | 143 (0) |
 
-**Totals: 841 tests. 818 pass and 23 skip as pending, 0 fail, when `RATHENA_TEST_PG_URL` is set; without it the 50 PostgreSQL tests skip too. The SQLite tests always run: they need no server.** All 191 rule IDs appear in at least one test.
+**Totals: 842 tests. 819 pass and 23 skip as pending, 0 fail, when `RATHENA_TEST_PG_URL` is set; without it the 50 PostgreSQL tests skip too. The SQLite tests always run: they need no server.** All 191 rule IDs appear in at least one test.
 
 Pending tests are `GTEST_SKIP() << "PENDING <BR-ID>"`. They are mostly waiting on golden vectors from an instrumented legacy build or verbatim packet headers. Pending rule IDs:
 BR-CHAR-022, 028, 031, 032, 034, 042, 047 · BR-INTER-001, 003, 006, 007, 010, 013, 017, 018 · BR-LOGIN-001, 036, 037, 039 · BR-WEB-010 (client-capture gate), 016 (httplib end-to-end).
@@ -93,6 +93,7 @@ Phase 4 is complete. The legacy map server builds as C++20 (CMake, autotools and
   - anticheat: 056, 057, 059, 060.
 
   The rule fixes these delegations needed are in the commit messages and the tests.
+- **Shipped [DEFECT] fix: BR-MAP-054.** A player with 20 active cooldowns (`MAX_SKILLCOOLDOWN`, the char-server save format) could cast a 21st cooldown skill and cast it again at once, because `skill_blockpc_start` runs after the skill and skipped the entry. The cast is now refused (`skill_cooldown_blocked`, rule `cooldown_cast_allowed`) at cast start (`unit_skilluse_id2`/`pos2`) and cast end (`skill_castend_id`/`pos`; entries can be added in between, e.g. by `guild_block_skill`). Autocasts never record a cooldown and are never refused; `PC_PERM_SKILL_UNCONDITIONAL` keeps its bypass. No wire change was needed. `skill_blockpc_start` also refreshes a listed skill when the list is full and drops the old timer, which would otherwise end the new cooldown early. Homunculus and mercenary lists are untouched (they stay far below 20).
 - **Shipped [DEFECT] fix: BR-MAP-056.** A disconnecting character stayed in the world for a flat 10 s while combat-locked. It now stays until the lock ends, `prevent_logout` ms after its last combat action.
 - **Not delegated (on purpose).** The rule stays tested in map-rules, and the legacy site keeps its own code.
   - Model mismatches: the rule's inputs or outputs do not match what the call site has, and adapting would cost more than it proves.
@@ -102,7 +103,6 @@ Phase 4 is complete. The legacy map server builds as C++20 (CMake, autotools and
     - BR-MAP-011 `hit_chance`: the call site interleaves skill modifiers;
     - 017, 018;
     - 019 `cap_aspd`: legacy caps after the status-change adjustments.
-  - BR-MAP-054 [DEFECT] (a full 20-entry cooldown list silently drops a new cooldown) is asserted corrected in the rule but not shipped. The list is the fixed `scd[MAX_SKILLCOOLDOWN]` that `mmo.hpp` structs and the char-server's save packets carry, so the fix changes the inter-server format and the char-server too.
 - **M3a/M3b are out of scope.** They were the in-place MySQL schema steps, and they were superseded by the database decision (MySQL retired, `rathena-migrate import`; see Database above). The foreign keys M3b would have added are `target_foreign_keys()` in the target schema.
 - **Follow-ups.**
   - Pin more rules with golden vectors (open item 2).

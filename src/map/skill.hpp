@@ -651,6 +651,9 @@ int32 skill_graffitiremover(block_list *bl, va_list ap); // [Valaris]
 
 // Abnormal status
 bool skill_isNotOk( uint16 skill_id, map_session_data& sd );
+/// BR-MAP-054: true when casting `skill_id` would need a new cooldown entry but `sd` already has
+/// MAX_SKILLCOOLDOWN of them (the skill would run without its cooldown being recorded).
+bool skill_cooldown_blocked( map_session_data& sd, uint16 skill_id, uint16 skill_lv );
 bool skill_isNotOk_hom(homun_data *hd, uint16 skill_id, uint16 skill_lv);
 bool skill_isNotOk_mercenary( uint16 skill_id, s_mercenary_data& md);
 

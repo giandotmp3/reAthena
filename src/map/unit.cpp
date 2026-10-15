@@ -2135,6 +2135,11 @@ int32 unit_skilluse_id2(block_list *src, int32 target_id, uint16 skill_id, uint1
 		if(skill_isNotOk(skill_id, *sd))
 			return 0;
 
+		if (skill_cooldown_blocked(*sd, skill_id, skill_lv)) {
+			clif_skill_fail( *sd, skill_id, USESKILL_FAIL_SKILLINTERVAL );
+			return 0;
+		}
+
 		switch(skill_id) { // Check for skills that auto-select target
 			case MO_CHAINCOMBO:
 				if (sc && sc->getSCE(SC_BLADESTOP)) {
@@ -2643,6 +2648,10 @@ int32 unit_skilluse_pos2( block_list *src, int16 skill_x, int16 skill_y, uint16 
 	if( sd ) {
 		if( skill_isNotOk(skill_id, *sd) || !skill_check_condition_castbegin(*sd, skill_id, skill_lv) )
 			return 0;
+		if (skill_cooldown_blocked(*sd, skill_id, skill_lv)) {
+			clif_skill_fail( *sd, skill_id, USESKILL_FAIL_SKILLINTERVAL );
+			return 0;
+		}
 		if (skill_id == MG_FIREWALL && !skill_pos_maxcount_check(src, skill_x, skill_y, skill_id, skill_lv, BL_PC, true))
 			return 0; // Special check for Firewall only
 	}

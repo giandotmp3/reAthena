@@ -127,6 +127,15 @@ private:
 	std::vector<Entry> entries_;
 };
 
+/// BR-MAP-054 cast gate for the legacy cooldown map (`sd.scd`, one entry per active cooldown; the
+/// 20-entry limit is the char-server save format). The gate runs where a player cast begins and
+/// again where it ends, because the entry is only recorded after the skill has run.
+/// `active` is the number of entries, `already_present` whether this skill has one (the other
+/// cooldown check refuses it), `will_have_cooldown` whether this cast would add one.
+/// An autocast never records a cooldown, so it is never refused. A skill that would need a new
+/// entry while the list is full is refused, so it can't be cast and re-cast without a cooldown.
+bool cooldown_cast_allowed(std::size_t active, bool already_present, bool will_have_cooldown, bool autocast);
+
 // --- Natural regeneration (status.cpp status_natural_heal, status_calc_regen) -----------------
 
 inline constexpr std::int32_t kNaturalHealInterval = 500; // NATURAL_HEAL_INTERVAL: the regen timer period

@@ -146,6 +146,13 @@ void CooldownList::purge(Tick now) {
 	               entries_.end());
 }
 
+bool cooldown_cast_allowed(std::size_t active, bool already_present, bool will_have_cooldown, bool autocast) {
+	if (autocast || !will_have_cooldown || already_present) {
+		return true;
+	}
+	return active < kMaxSkillCooldowns;
+}
+
 CooldownList::StartResult CooldownList::start(std::uint16_t skill_id, std::int32_t cooldown_ms, Tick now) {
 	if (cooldown_ms <= 0) {
 		return StartResult::NoCooldown;

@@ -180,6 +180,21 @@ TEST(Skills, BR_MAP_054_FullListNeverLetsASkillBypassItsCooldown) {
 	EXPECT_EQ(cd.start(1, 20000, 10000), sk::CooldownList::StartResult::Started); // id 1 had expired
 }
 
+TEST(Skills, BR_MAP_054_CastGateForTheLegacyCooldownMap) {
+	const std::size_t full = sk::kMaxSkillCooldowns;
+	// Room left: any cast is allowed.
+	EXPECT_TRUE(sk::cooldown_cast_allowed(full - 1, false, true, false));
+	// Full: a skill that would add a cooldown is refused ...
+	EXPECT_FALSE(sk::cooldown_cast_allowed(full, false, true, false));
+	// ... but not one without a cooldown, an autocast (it never records one), or a skill that
+	// already has an entry (the separate "on cooldown" check handles that one).
+	EXPECT_TRUE(sk::cooldown_cast_allowed(full, false, false, false));
+	EXPECT_TRUE(sk::cooldown_cast_allowed(full, false, true, true));
+	EXPECT_TRUE(sk::cooldown_cast_allowed(full, true, true, false));
+	// Over the limit (defensive): still refused.
+	EXPECT_FALSE(sk::cooldown_cast_allowed(full + 3, false, true, false));
+}
+
 TEST(Skills, BR_MAP_054_ExpiredEntriesFreeCapacity) {
 	sk::CooldownList cd;
 	for (std::uint16_t id = 1; id <= sk::kMaxSkillCooldowns; ++id) {
