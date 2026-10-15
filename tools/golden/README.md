@@ -4,7 +4,7 @@ The reimagined rules in `modernized/rathena-reimagined/` are pinned to what the 
 actually computes. This directory captures those values from the real legacy servers.
 
 ```
-tools/golden/capture.sh            # everything: rng, re, prere
+tools/golden/capture.sh            # everything: rng, re, prere, chardel
 tools/golden/capture.sh re         # one mode
 ```
 
@@ -13,6 +13,7 @@ tools/golden/capture.sh re         # one mode
 | `rng` | `rng_capture.cpp` built against `src/common/random.cpp` | `core/tests/golden/rng.jsonl`: the seeded legacy stream |
 | `re` | renewal login/char/map servers | `map-rules/tests/golden/aspd_re_re.jsonl`: `status_base_amotion_pc` |
 | `prere` | pre-renewal servers (`PRERE`) | `map-rules/tests/golden/defense_{pc,mob}_pre_re.jsonl`: `battle_calc_defense_reduction` |
+| `chardel` | renewal servers, `golden_chardel.txt`, then a delete through the client (CH_DELETE_CHAR3) | `persistence/tests/golden/char_delete_sql.jsonl`: every statement `char_delete()` ran, in order (`GOLDEN_SQL_SCOPE`) |
 
 How a server capture works:
 

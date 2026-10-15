@@ -1,0 +1,30 @@
+//===== rAthena Script =======================================
+//= Golden-vector capture: character delete (tools/golden/capture.sh chardel)
+//===== Description: =========================================
+//= On login, gives the capture character something in the
+//= tables a delete cleans up (party and guild it leads, a pet
+//= egg, items, a skill, character variables, a received mail,
+//= a status change and a bonus script), then prints
+//= "GOLDEN SETUP DONE". capture.sh then logs out, deletes the
+//= character through the client packet and records the SQL the
+//= char-server runs in char_delete().
+//============================================================
+
+-	script	golden_chardel	-1,{
+OnPCLoginEvent:
+	sleep2 2000; // let the client finish loading
+	BaseLevel = 99;
+	GoldenNum = 1;
+	GoldenStr$ = "golden";
+	getitem 501, 5;          // Red Potion
+	makepet 1002;            // Poring egg: a pet row referenced from the inventory
+	skill 1, 9, SKILL_PERM;  // Basic Skill
+	sc_start SC_BLESSING, 600000, 10;
+	bonus_script "{ bonus bStr,1; }", 600;
+	mail getcharid(0), "Golden", "golden", "golden capture";
+	party_create("GoldenParty");
+	atcommand "@guild GoldenGuild";
+	sleep2 2000; // let the char-server store the party and guild
+	debugmes "GOLDEN SETUP DONE";
+	end;
+}

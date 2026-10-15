@@ -39,9 +39,52 @@ inline void golden_trace( const char* kind, std::initializer_list<std::pair<cons
 
 #define GOLDEN_TRACE( kind, ... ) golden_trace( kind, { __VA_ARGS__ } )
 
+/// Records `text` (a SQL statement) as {"kind":kind,"seq":n,"text":"..."}, numbered in call order.
+inline void golden_trace_text( const char* kind, const char* text ){
+	static FILE* out = [](){
+		const char* path = std::getenv( "RATHENA_GOLDEN_TRACE_FILE" );
+		return ( path != nullptr && *path != '\0' ) ? std::fopen( path, "a" ) : nullptr;
+	}();
+	static int64_t seq = 0;
+
+	if( out == nullptr ){
+		return;
+	}
+
+	std::fprintf( out, "{\"kind\":\"%s\",\"seq\":%" PRId64 ",\"text\":\"", kind, seq++ );
+	for( const char* c = text; *c != '\0'; c++ ){
+		if( *c == '"' || *c == '\\' ){
+			std::fputc( '\\', out );
+			std::fputc( *c, out );
+		}else if( static_cast<unsigned char>( *c ) < 0x20 ){
+			std::fputc( ' ', out );
+		}else{
+			std::fputc( *c, out );
+		}
+	}
+	std::fputs( "\"}\n", out );
+	std::fflush( out );
+}
+
+/// While non-zero, the SQL layer records every statement it executes (GOLDEN_SQL_SCOPE).
+inline int32_t golden_sql_scope = 0;
+
+/// Records the SQL statements executed until the end of the enclosing block under `kind`.
+struct golden_sql_scope_guard {
+	explicit golden_sql_scope_guard( const char* kind ){ golden_sql_kind() = kind; golden_sql_scope++; }
+	~golden_sql_scope_guard(){ golden_sql_scope--; }
+	static const char*& golden_sql_kind(){ static const char* kind = ""; return kind; }
+};
+
+#define GOLDEN_SQL_SCOPE( kind ) golden_sql_scope_guard golden_sql_scope_guard_instance( kind )
+#define GOLDEN_TRACE_SQL( text ) \
+	do{ if( golden_sql_scope > 0 ) golden_trace_text( golden_sql_scope_guard::golden_sql_kind(), text ); }while( 0 )
+
 #else
 
 #define GOLDEN_TRACE( kind, ... ) ( (void)0 )
+#define GOLDEN_SQL_SCOPE( kind ) ( (void)0 )
+#define GOLDEN_TRACE_SQL( text ) ( (void)0 )
 
 #endif
 

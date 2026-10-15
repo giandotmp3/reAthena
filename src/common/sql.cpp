@@ -32,6 +32,7 @@
 
 #include "cbasetypes.hpp"
 #include "cli.hpp"
+#include "golden_trace.hpp"
 #include "core.hpp"
 #include "malloc.hpp"
 #include "showmsg.hpp"
@@ -766,6 +767,7 @@ size_t Sql_EscapeStringLen(Sql* self, char *out_to, const char *from, size_t fro
 
 /// Runs the statement in self->buf.
 static int32 Sql_P_Run( Sql* self ){
+	GOLDEN_TRACE_SQL( StringBuf_Value( &self->buf ) );
 	const auto translated = dialect::translate( StringBuf_Value( &self->buf ), self->engine->sql_dialect() );
 	// PostgreSQL translation needs catalog lookups and happens inside the engine.
 	const std::string& sql = ( self->engine->sql_dialect() == dialect::Dialect::Sqlite ) ? translated.sql : std::string( StringBuf_Value( &self->buf ) );
@@ -988,6 +990,7 @@ int32 SqlStmt::BindParam(size_t idx, enum SqlDataType buffer_type, void* buffer,
 }
 
 int32 SqlStmt::Execute(){
+	GOLDEN_TRACE_SQL( StringBuf_Value( &this->buf ) );
 	this->FreeResult();
 	std::vector<Param> params( this->state->params.size() );
 	for( size_t i = 0; i < params.size(); ++i ){

@@ -15,6 +15,7 @@
 #include <common/cbasetypes.hpp>
 #include <common/cli.hpp>
 #include <common/core.hpp>
+#include <common/golden_trace.hpp>
 #include <common/db.hpp>
 #include <common/malloc.hpp>
 #include <common/mapindex.hpp>
@@ -1544,6 +1545,7 @@ int32 char_divorce_char_sql(int32 partner_id1, int32 partner_id2){
  * Returns < 0 for error
  */
 enum e_char_del_response char_delete(struct char_session_data* sd, uint32 char_id){
+	GOLDEN_SQL_SCOPE( "char_delete_sql" ); // golden vectors: the statements a delete runs, in order
 	char name[NAME_LENGTH];
 	char esc_name[NAME_LENGTH*2+1]; //Name needs be escaped.
 	uint32 account_id;

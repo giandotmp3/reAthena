@@ -1,0 +1,37 @@
+{"i": 0, "sql": "SELECT `name`,`account_id`,`party_id`,`guild_id`,`base_level`,`homun_id`,`partner_id`,`father`,`mother`,`elemental_id`,`delete_date` FROM `char` WHERE `account_id`='2000000' AND `char_id`='150000'"}
+{"i": 1, "sql": "UPDATE `char` SET `party_id`='0' WHERE `party_id`='1'"}
+{"i": 2, "sql": "DELETE FROM `party` WHERE `party_id`='1'"}
+{"i": 3, "sql": "DELETE FROM `pet` WHERE `char_id`='150000' AND `incubate` = '0'"}
+{"i": 4, "sql": "DELETE FROM `pet` WHERE `pet_id` IN (SELECT (`card1` | (`card2` << 16)) FROM `inventory` WHERE `char_id` = '150000' AND `card0` = 256)"}
+{"i": 5, "sql": "DELETE FROM `pet` WHERE `pet_id` IN (SELECT (`card1` | (`card2` << 16)) FROM `cart_inventory` WHERE `char_id` = '150000' AND `card0` = 256)"}
+{"i": 6, "sql": "DELETE FROM `skillcooldown_mercenary` WHERE `mer_id` IN ( SELECT `merc_id` FROM `mercenary_owner` WHERE `char_id` = '150000' )"}
+{"i": 7, "sql": "DELETE FROM `mercenary_owner` WHERE `char_id` = '150000'"}
+{"i": 8, "sql": "DELETE FROM `mercenary` WHERE `char_id` = '150000'"}
+{"i": 9, "sql": "DELETE FROM `friends` WHERE `char_id` = '150000'"}
+{"i": 10, "sql": "DELETE FROM `friends` WHERE `friend_id` = '150000'"}
+{"i": 11, "sql": "DELETE FROM `hotkey` WHERE `char_id`='150000'"}
+{"i": 12, "sql": "DELETE FROM `inventory` WHERE `char_id`='150000'"}
+{"i": 13, "sql": "DELETE FROM `cart_inventory` WHERE `char_id`='150000'"}
+{"i": 14, "sql": "DELETE FROM `memo` WHERE `char_id`='150000'"}
+{"i": 15, "sql": "DELETE FROM `char_reg_str` WHERE `char_id`='150000'"}
+{"i": 16, "sql": "DELETE FROM `char_reg_num` WHERE `char_id`='150000'"}
+{"i": 17, "sql": "DELETE FROM `skill` WHERE `char_id`='150000'"}
+{"i": 18, "sql": "DELETE FROM `mail` WHERE `dest_id`='150000'"}
+{"i": 19, "sql": "UPDATE `mail` SET `send_id`='0' WHERE `send_id`='150000'"}
+{"i": 20, "sql": "DELETE FROM `sc_data` WHERE `account_id` = '2000000' AND `char_id`='150000'"}
+{"i": 21, "sql": "DELETE FROM `bonus_script` WHERE `char_id` = '150000'"}
+{"i": 22, "sql": "DELETE FROM `quest` WHERE `char_id` = '150000'"}
+{"i": 23, "sql": "DELETE FROM `achievement` WHERE `char_id` = '150000'"}
+{"i": 24, "sql": "INSERT INTO `charlog`(`time`, `account_id`,`char_num`,`char_msg`,`name`) VALUES (NOW(), '2000000', '0', 'Deleted char (CID 150000)', 'Golden')"}
+{"i": 25, "sql": "DELETE FROM `char` WHERE `char_id`='150000'"}
+{"i": 26, "sql": "SELECT `guild_id` FROM `guild` WHERE `char_id` = '150000'"}
+{"i": 27, "sql": "DELETE FROM `guild` WHERE `guild_id` = '1'"}
+{"i": 28, "sql": "DELETE FROM `guild_member` WHERE `guild_id` = '1'"}
+{"i": 29, "sql": "DELETE FROM `guild_castle` WHERE `guild_id` = '1'"}
+{"i": 30, "sql": "DELETE FROM `guild_storage` WHERE `guild_id` = '1'"}
+{"i": 31, "sql": "DELETE FROM `guild_alliance` WHERE `guild_id` = '1' OR `alliance_id` = '1'"}
+{"i": 32, "sql": "DELETE FROM `guild_position` WHERE `guild_id` = '1'"}
+{"i": 33, "sql": "DELETE FROM `guild_skill` WHERE `guild_id` = '1'"}
+{"i": 34, "sql": "DELETE FROM `guild_expulsion` WHERE `guild_id` = '1'"}
+{"i": 35, "sql": "UPDATE `char` SET `guild_id`='0' WHERE `guild_id`='1'"}
+{"i": 36, "sql": "INSERT INTO `interlog` (`time`, `log`) VALUES (NOW(),  'guild GoldenGuild (id=1) broken ')"}

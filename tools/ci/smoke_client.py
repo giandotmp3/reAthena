@@ -58,6 +58,8 @@ def main() -> int:
     ap.add_argument("--stay", type=float, default=0, help="stay on the map this many seconds before quitting")
     ap.add_argument("--until-file", help="with --stay: leave as soon as this file contains --until-text")
     ap.add_argument("--until-text", default="")
+    ap.add_argument("--delete", type=int, metavar="CHAR_ID",
+                    help="delete this character (CH_DELETE_CHAR3 0x829, empty birthdate) instead of playing")
     args = ap.parse_args()
 
     # 1. login ------------------------------------------------------------------------------
@@ -85,6 +87,20 @@ def main() -> int:
         print(f"char: not accepted, raw={data[:32].hex()}")
         return 1
     print("char: entered")
+
+    if args.delete:
+        # CH_DELETE_CHAR3 0x829: char id, birthdate YYMMDD (all zero = the default empty birthdate).
+        # The char server must run with char_del_delay: 0 so no reservation is needed first.
+        c.sendall(struct.pack("<HI", 0x829, args.delete) + b"\0" * 6)
+        data = recv_for(c, 3.0)
+        c.close()
+        i = find(data, 0x082A)
+        if i < 0:
+            print(f"char: no delete answer, raw={data[:32].hex()}")
+            return 1
+        cid, result = struct.unpack_from("<II", data, i + 2)
+        print(f"char: delete char_id={cid} result={result}")
+        return 0 if result == 1 else 1
 
     if not args.no_create:
         # create (0xa39): name, slot, hair_color, hair_style, job, sex

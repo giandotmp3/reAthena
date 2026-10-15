@@ -17,7 +17,9 @@ add_executable(rathena_persistence_tests
 target_link_libraries(rathena_persistence_tests PRIVATE rathena::persistence GTest::gtest_main)
 # Generated schema files (read-only) for the importer tests in import_test.cpp
 target_compile_definitions(rathena_persistence_tests PRIVATE
-  RATHENA_LEGACY_SQL_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../../../sql-files")
+  RATHENA_LEGACY_SQL_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../../../sql-files"
+  # Golden vectors captured from the legacy servers by tools/golden/capture.sh
+  PERSISTENCE_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/golden")
 
 # Each test name embeds its BR-ID (or step id); ctest lists them individually. Tests that need
 # RATHENA_TEST_PG_URL skip without it; with it, each test process works in its own schema, so
