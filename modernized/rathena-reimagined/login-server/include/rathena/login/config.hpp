@@ -2,6 +2,7 @@
 // Typed, immutable login configuration. Shipped values are the code defaults
 // (spec §5.6). Secrets never live here; see InterServerCredentials.
 
+#include <cstdint>
 #include <map>
 #include <optional>
 #include <string>
@@ -79,6 +80,12 @@ struct LoginConfig {
   // Bounded hash worker pool (architecture §3, §7).
   unsigned hash_pool_workers = 0;  // 0 = std::thread::hardware_concurrency()
   std::size_t hash_pool_queue_depth = 256;
+
+  // Argon2id cost (S6, M6). Defaults: OWASP Password Storage Cheat Sheet (19 MiB, 2 passes,
+  // 1 lane). Rows hashed with less memory or fewer passes are rehashed on the next login.
+  std::uint32_t argon2_memory_kib = 19456;
+  std::uint32_t argon2_iterations = 2;
+  std::uint32_t argon2_parallelism = 1;
 };
 
 enum class ConfigKeyStatus { Applied, Unknown, Removed, Invalid };

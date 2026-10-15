@@ -4,6 +4,8 @@
 #include <cctype>
 #include <charconv>
 
+#include "rathena/login/argon2id.hpp"
+
 namespace rathena::login {
 namespace {
 
@@ -32,6 +34,13 @@ template <typename T>
 ConfigKeyStatus set_int(T& field, const std::string& v) {
   auto n = parse_int<T>(v);
   if (!n) return ConfigKeyStatus::Invalid;
+  field = *n;
+  return ConfigKeyStatus::Applied;
+}
+
+ConfigKeyStatus set_bounded(std::uint32_t& field, const std::string& v, std::uint32_t lo, std::uint32_t hi) {
+  auto n = parse_int<std::uint32_t>(v);
+  if (!n || *n < lo || *n > hi) return ConfigKeyStatus::Invalid;
   field = *n;
   return ConfigKeyStatus::Applied;
 }
@@ -78,6 +87,11 @@ ConfigKeyStatus apply_config_key(LoginConfig& cfg, const std::string& raw_key, c
   if (key == "md5_challenge_shim") return set_bool(cfg.md5_challenge_shim, value);
   if (key == "hash_pool_workers") return set_int(cfg.hash_pool_workers, value);
   if (key == "hash_pool_queue_depth") return set_int(cfg.hash_pool_queue_depth, value);
+  // Argon2id cost: the combination is checked again when the hasher is built
+  // (validate_argon2_params), so m < 8*p is caught at startup.
+  if (key == "argon2_memory_kib") return set_bounded(cfg.argon2_memory_kib, value, 8, kArgon2MaxMemoryKib);
+  if (key == "argon2_iterations") return set_bounded(cfg.argon2_iterations, value, 1, kArgon2MaxIterations);
+  if (key == "argon2_parallelism") return set_bounded(cfg.argon2_parallelism, value, 1, kArgon2MaxParallelism);
   return ConfigKeyStatus::Unknown;
 }
 

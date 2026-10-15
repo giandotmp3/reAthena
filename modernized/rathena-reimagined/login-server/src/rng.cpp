@@ -1,7 +1,9 @@
 #include "rathena/login/rng.hpp"
 
-#include <random>
+#include <array>
+#include <span>
 
+#include "rathena/login/argon2id.hpp"
 #include "rathena/login/types.hpp"
 
 namespace rathena::login {
@@ -14,8 +16,10 @@ std::uint32_t SeededRng::next_u32() {
 }
 
 std::uint32_t SystemRng::next_u32() {
-  thread_local std::random_device rd;
-  return rd();
+  std::array<std::uint8_t, 4> b{};
+  os_random_bytes(b);
+  return static_cast<std::uint32_t>(b[0]) | static_cast<std::uint32_t>(b[1]) << 8 |
+         static_cast<std::uint32_t>(b[2]) << 16 | static_cast<std::uint32_t>(b[3]) << 24;
 }
 
 std::string ipv4_to_string(Ipv4 ip) {

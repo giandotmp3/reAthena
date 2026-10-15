@@ -40,3 +40,8 @@ md5_challenge_shim: off
 // Password hashing pool (architecture §7): workers default to hardware cores.
 hash_pool_workers: 0
 hash_pool_queue_depth: 256
+// Argon2id password hashing cost (S6). OWASP defaults: 19 MiB, 2 passes, 1 lane.
+// Accounts hashed with less memory or fewer passes are rehashed on their next login.
+argon2_memory_kib: 19456
+argon2_iterations: 2
+argon2_parallelism: 1

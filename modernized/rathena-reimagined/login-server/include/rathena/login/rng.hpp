@@ -21,7 +21,8 @@ class SeededRng final : public Rng {
   std::uint64_t state_;
 };
 
-/// OS-entropy generator for production (std::random_device backed).
+/// OS-entropy generator for production: the OS CSPRNG (os_random_bytes in argon2id.hpp),
+/// not std::random_device, which is not guaranteed cryptographic.
 class SystemRng final : public Rng {
  public:
   std::uint32_t next_u32() override;
