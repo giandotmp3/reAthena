@@ -2,17 +2,33 @@
 //
 // ONE source of defaults (spec §5.6): the value shipped in conf/ is the code default.
 // Drift keys from spec §5.6 are marked [§5.6 drift: legacy code default -> shipped].
-// This is a representative subset of the 581 battle_config knobs; Phase E generates the
-// full list from the conf schema (architecture §2 "generated from the conf schema").
+//
+// Battle knobs come in two parts:
+//   RATHENA_BATTLE_KNOBS_TYPED      below, written by hand: the knobs the rules use, with the
+//                                   type and bounds the rules rely on.
+//   RATHENA_BATTLE_KNOBS_GENERATED  battle_knobs.gen.hpp, generated from legacy battle_data[]
+//                                   and conf/battle/*.conf by tools/codegen/battle_knobs.py:
+//                                   every other battle_config knob.
+// The generator checks every hand-typed knob against battle_data[] and the shipped conf, so
+// after editing this list (or conf/battle, or battle_data[]) run
+// `python3 tools/codegen/battle_knobs.py`. A knob's name is its conf key; a key that is not an
+// identifier ("feature.banking") gets '_' for '.' and is mapped back by
+// RATHENA_BATTLE_KNOB_CONF_KEYS.
 #pragma once
 
 #include <cstdint>
 #include <limits>
 
 #define RATHENA_I32_MAX (std::numeric_limits<std::int32_t>::max())
+#define RATHENA_I32_MIN (std::numeric_limits<std::int32_t>::min())
 
-// conf/battle/*.conf  ->  rathena::core::BattleConfig
-#define RATHENA_BATTLE_KNOBS(X)                                                        \
+#include "rathena/core/battle_knobs.gen.hpp"
+
+// conf/battle/*.conf  ->  rathena::core::BattleConfig (all of battle_data[])
+#define RATHENA_BATTLE_KNOBS(X) RATHENA_BATTLE_KNOBS_TYPED(X) RATHENA_BATTLE_KNOBS_GENERATED(X)
+
+// Hand-typed subset (rules depend on these names, types and bounds).
+#define RATHENA_BATTLE_KNOBS_TYPED(X)                                                      \
 	/* player.conf */                                                                  \
 	X(std::int32_t, max_parameter, 99, 10, 10000)                                      \
 	X(std::int32_t, max_third_parameter, 130, 10, 10000) /* [§5.6 drift: 135 -> 130] */ \

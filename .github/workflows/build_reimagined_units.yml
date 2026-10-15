@@ -14,18 +14,59 @@ on:
       - 'modernized/**'
       - 'sql-files/**'
       - 'tools/sql/**'
+      # Inputs of tools/codegen/battle_knobs.py (core/.../battle_knobs.gen.hpp)
+      - 'tools/codegen/**'
+      - 'src/map/battle.cpp'
+      - 'src/custom/battle_config_init.inc'
+      - 'src/config/core.hpp'
+      - 'src/common/mmo.hpp'
+      - 'src/map/path.hpp'
+      - 'src/map/map.hpp'
+      - 'src/map/mob.hpp'
+      - 'src/map/skill.hpp'
+      - 'src/map/status.hpp'
+      - 'conf/battle_athena.conf'
+      - 'conf/battle/**'
       - '.github/workflows/build_reimagined_units.yml'
   pull_request:
     paths:
       - 'modernized/**'
       - 'sql-files/**'
       - 'tools/sql/**'
+      # Inputs of tools/codegen/battle_knobs.py (core/.../battle_knobs.gen.hpp)
+      - 'tools/codegen/**'
+      - 'src/map/battle.cpp'
+      - 'src/custom/battle_config_init.inc'
+      - 'src/config/core.hpp'
+      - 'src/common/mmo.hpp'
+      - 'src/map/path.hpp'
+      - 'src/map/map.hpp'
+      - 'src/map/mob.hpp'
+      - 'src/map/skill.hpp'
+      - 'src/map/status.hpp'
+      - 'conf/battle_athena.conf'
+      - 'conf/battle/**'
       - '.github/workflows/build_reimagined_units.yml'
 
 permissions:
   contents: read
 
 jobs:
+  # The typed battle knob table is generated from legacy battle_data[] and conf/battle; fail fast
+  # when it is stale (the core unit's ctest runs the same check where Python 3.10+ is found).
+  codegen:
+    name: generated-battle-knobs
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Check core/include/rathena/core/battle_knobs.gen.hpp is up to date
+        run: python3 tools/codegen/battle_knobs.py --check
+
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}

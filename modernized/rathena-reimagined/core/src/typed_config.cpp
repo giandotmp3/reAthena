@@ -57,22 +57,37 @@ T convert(std::string_view key, std::string_view value, std::int64_t lo, std::in
 
 } // namespace detail
 
-#define RATHENA_KNOB_APPLY(T, name, def, lo, hi)                         \
-	if (key == #name) {                                                  \
-		name##_ = detail::convert<T>(key, value, (lo), (hi));            \
-		return true;                                                     \
+#define RATHENA_KNOB_APPLY(T, name, def, lo, hi)                                              \
+	if (constexpr std::string_view k_##name = detail::knob_conf_key(#name); key == k_##name) { \
+		name##_ = detail::convert<T>(key, value, (lo), (hi));                                 \
+		return true;                                                                          \
 	}
-#define RATHENA_KNOB_INFO(T, name, def, lo, hi) \
-	KnobInfo{#name, std::is_same_v<T, bool>, static_cast<std::int64_t>(def), (lo), (hi)},
+#define RATHENA_KNOB_INFO(T, name, def, lo, hi)                                                         \
+	KnobInfo{detail::knob_conf_key(#name), std::is_same_v<T, bool>, static_cast<std::int64_t>(def), (lo), \
+	         (hi), static_cast<std::int64_t>(def)},
+#define RATHENA_KNOB_INFO_PRE_RENEWAL(ident, value)                           \
+	for (KnobInfo & k : s) {                                                  \
+		if (k.name == detail::knob_conf_key(#ident)) {                        \
+			k.shipped_default_pre_renewal = static_cast<std::int64_t>(value); \
+		}                                                                     \
+	}
 
-#define RATHENA_DEFINE_TYPED_CONFIG(ClassName, KNOBS)                                                       \
+#define RATHENA_DEFINE_TYPED_CONFIG(ClassName, KNOBS, PRE_RENEWAL_DEFAULTS)                                 \
 	bool ClassName::apply(std::string_view key, std::string_view value) {                                   \
 		KNOBS(RATHENA_KNOB_APPLY)                                                                           \
 		return false;                                                                                       \
 	}                                                                                                       \
 	const std::vector<KnobInfo>& ClassName::schema() {                                                      \
-		static const std::vector<KnobInfo> s = {KNOBS(RATHENA_KNOB_INFO)};                                  \
-		return s;                                                                                           \
+		static const std::vector<KnobInfo> table = [] {                                                     \
+			std::vector<KnobInfo> s = {KNOBS(RATHENA_KNOB_INFO)};                                           \
+			PRE_RENEWAL_DEFAULTS(RATHENA_KNOB_INFO_PRE_RENEWAL)                                             \
+			return s;                                                                                       \
+		}();                                                                                                \
+		return table;                                                                                       \
+	}                                                                                                       \
+	ClassName ClassName::from_config(const Config& config, GameMode mode, UnknownKeyPolicy policy,          \
+	                                 std::vector<std::string>* unknown_keys) {                              \
+		return shipped(mode).overlaid_with(config, policy, unknown_keys);                                   \
 	}                                                                                                       \
 	ClassName ClassName::overlaid_with(const Config& config, UnknownKeyPolicy policy,                       \
 	                                   std::vector<std::string>* unknown_keys) const {                      \
@@ -95,10 +110,10 @@ T convert(std::string_view key, std::string_view value, std::int64_t lo, std::in
 		return ClassName{}.overlaid_with(config, policy, unknown_keys);                                     \
 	}
 
-RATHENA_DEFINE_TYPED_CONFIG(BattleConfig, RATHENA_BATTLE_KNOBS)
-RATHENA_DEFINE_TYPED_CONFIG(InterConfig, RATHENA_INTER_KNOBS)
-RATHENA_DEFINE_TYPED_CONFIG(CharConfig, RATHENA_CHAR_KNOBS)
-RATHENA_DEFINE_TYPED_CONFIG(LoginPolicyConfig, RATHENA_LOGIN_KNOBS)
+RATHENA_DEFINE_TYPED_CONFIG(BattleConfig, RATHENA_BATTLE_KNOBS, RATHENA_BATTLE_PRE_RENEWAL_DEFAULTS)
+RATHENA_DEFINE_TYPED_CONFIG(InterConfig, RATHENA_INTER_KNOBS, RATHENA_NO_MODE_DEFAULTS)
+RATHENA_DEFINE_TYPED_CONFIG(CharConfig, RATHENA_CHAR_KNOBS, RATHENA_NO_MODE_DEFAULTS)
+RATHENA_DEFINE_TYPED_CONFIG(LoginPolicyConfig, RATHENA_LOGIN_KNOBS, RATHENA_NO_MODE_DEFAULTS)
 
 // Cross-knob invariants.
 void BattleConfig::validate() const {
