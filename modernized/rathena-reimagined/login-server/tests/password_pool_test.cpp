@@ -66,15 +66,17 @@ TEST(LoginPassword, S6_Argon2idRealBinding) {
 }
 
 TEST(LoginHashPool, Arch3_QueueFullRejectsForRefuseCode3) {
-  HashWorkerPool pool(1, 2);
+  // Everything the jobs touch is declared before the pool, so the pool (and its worker
+  // threads) is destroyed first and no job can outlive the objects it references.
   std::promise<void> started, release;
   auto release_f = release.get_future().share();
+  std::atomic<int> ran{0};
+  HashWorkerPool pool(1, 2);
   ASSERT_TRUE(pool.try_submit([&] {
     started.set_value();
     release_f.wait();
   }));
   started.get_future().wait();  // the worker is now busy
-  std::atomic<int> ran{0};
   EXPECT_TRUE(pool.try_submit([&] { ++ran; }));
   EXPECT_TRUE(pool.try_submit([&] { ++ran; }));
   EXPECT_FALSE(pool.try_submit([&] { ++ran; }));  // back-pressure
