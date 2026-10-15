@@ -28,6 +28,7 @@
 #include "npc.hpp"
 #include "pc.hpp"
 #include "script.hpp"
+#include "script_host.hpp"
 #include "status.hpp"
 
 using namespace rathena;
@@ -684,7 +685,7 @@ void achievement_get_reward(map_session_data *sd, int32 achievement_id, time_t r
 	sd->achievement_data.achievements[i].rewarded = rewarded;
 	sd->achievement_data.save = true;
 
-	run_script(adb->rewards.script, 0, sd->id, fake_nd->id);
+	ScriptHost::run_as_server_npc( *sd, adb->rewards.script );
 	if (adb->rewards.title_id) {
 		sd->titles.push_back(adb->rewards.title_id);
 		clif_achievement_list_all(sd);
@@ -882,7 +883,7 @@ bool achievement_check_condition( struct script_code* condition, map_session_dat
 		script_detach_rid(previous_st);
 	}
 
-	run_script( condition, 0, sd->id, fake_nd->id );
+	ScriptHost::run_as_server_npc( *sd, condition );
 
 	struct script_state* st = sd->st;
 

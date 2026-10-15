@@ -50,6 +50,7 @@
 #include "pc.hpp"
 #include "pet.hpp"
 #include "quest.hpp"
+#include "script_host.hpp"
 #include "storage.hpp"
 #include "trade.hpp"
 
@@ -2245,7 +2246,7 @@ int32 map_quit(map_session_data *sd) {
 
 	pc_itemcd_do(sd,false);
 
-	npc_script_event( *sd, NPCE_LOGOUT );
+	ScriptHost::run_player_event( *sd, NPCE_LOGOUT );
 
 	//Unit_free handles clearing the player related data,
 	//map_quit handles extra specific data which is related to quitting normally
@@ -5019,6 +5020,7 @@ void MapServer::finalize(){
 #ifndef MAP_GENERATOR
 	do_final_clif();
 #endif
+	ScriptHost::collect_finished_calls( true );
 	do_final_npc();
 	do_final_quest();
 	do_final_achievement();
@@ -5420,7 +5422,7 @@ bool MapServer::initialize( int32 argc, char *argv[] ){
 	do_init_vending();
 	do_init_buyingstore();
 
-	npc_event_do_oninit();	// Init npcs (OnInit)
+	ScriptHost::run_oninit();	// Init npcs (OnInit)
 
 	if (battle_config.pk_mode)
 		ShowNotice("Server is running on '" CL_WHITE "PK Mode" CL_RESET "'.\n");

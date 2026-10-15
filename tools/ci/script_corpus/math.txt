@@ -1,0 +1,51 @@
+//===== rAthena Script =======================================
+//= Buildin corpus: arithmetic and math buildins
+//============================================================
+
+-	script	corpus_math	-1,{
+OnInit:
+	callfunc "corpus_begin", "math";
+
+	// operators (VM, not buildins) as a sanity baseline
+	callfunc "corpus_eq", "7/2", 7 / 2, 3;
+	callfunc "corpus_eq", "-7/2", -7 / 2, -3;
+	callfunc "corpus_eq", "7%3", 7 % 3, 1;
+	callfunc "corpus_eq", "1<<10", 1 << 10, 1024;
+	callfunc "corpus_eq", "0xF0|0x0F", 0xF0 | 0x0F, 255;
+	callfunc "corpus_eq", "5&3", 5 & 3, 1;
+	callfunc "corpus_eq", "5^3", 5 ^ 3, 6;
+	callfunc "corpus_eq", "~0", ~0, -1;
+	callfunc "corpus_eq", "ternary", (3 > 2) ? 10 : 20, 10;
+	callfunc "corpus_eq", "int64", 2147483647 + 1, 2147483648;
+
+	callfunc "corpus_eq", "min", min(5, 3, 9), 3;
+	callfunc "corpus_eq", "max", max(5, 3, 9), 9;
+	callfunc "corpus_eq", "pow", pow(2, 10), 1024;
+	callfunc "corpus_eq", "sqrt", sqrt(144), 12;
+	callfunc "corpus_eq", "sqrt floor", sqrt(10), 3;
+	callfunc "corpus_eq", "distance", distance(0, 0, 3, 4), 4;
+	callfunc "corpus_eq", "cap_value low", cap_value(-5, 0, 10), 0;
+	callfunc "corpus_eq", "cap_value high", cap_value(50, 0, 10), 10;
+	callfunc "corpus_eq", "cap_value mid", cap_value(7, 0, 10), 7;
+	callfunc "corpus_eq", "round", round(1234, 100), 1200;
+	callfunc "corpus_eq", "round up", round(1250, 100), 1300;
+	callfunc "corpus_eq", "ceil", ceil(1201, 100), 1300;
+	callfunc "corpus_eq", "ceil of a multiple", ceil(1200, 100), 1300;  // legacy: always adds a step
+	callfunc "corpus_eq", "floor", floor(1299, 100), 1200;
+
+	// rand: range and determinism of bounds
+	.@ok = 1;
+	for (.@i = 0; .@i < 200; .@i++) {
+		.@r = rand(10);
+		if (.@r < 0 || .@r > 9) .@ok = 0;
+		.@r = rand(5, 7);
+		if (.@r < 5 || .@r > 7) .@ok = 0;
+	}
+	callfunc "corpus_ok", "rand bounds", .@ok;
+	.@r = rand(2);
+	callfunc "corpus_ok", "rand(2)", .@r == 0 || .@r == 1;
+	// rand(1), rand(0) and rand(4,4) are refused ("no randomness possible") and end the script
+
+	callfunc "corpus_end";
+	end;
+}

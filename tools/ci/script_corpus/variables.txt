@@ -1,0 +1,82 @@
+//===== rAthena Script =======================================
+//= Buildin corpus: variables of every scope that works without
+//= a player, arrays, and the variable buildins
+//============================================================
+
+-	script	corpus_vars	-1,{
+OnInit:
+	callfunc "corpus_begin", "variables";
+
+	// scope variables (.@), NPC variables (.), temporary (\$@) and permanent (\$) server variables
+	set .@a, 5;
+	callfunc "corpus_eq", "set .@", .@a, 5;
+	.@a += 3;
+	callfunc "corpus_eq", "+=", .@a, 8;
+	.@a++;
+	callfunc "corpus_eq", "++", .@a, 9;
+	set .npcvar, 77;
+	callfunc "corpus_eq", "set .npcvar", .npcvar, 77;
+	set .npcstr$, "hello";
+	callfunc "corpus_eq", ".npcstr$", .npcstr$, "hello";
+	set $@corpus_tmp, 123;
+	callfunc "corpus_eq", "$@tmp", $@corpus_tmp, 123;
+	set $corpus_perm$, "kept";
+	callfunc "corpus_eq", "$perm$", $corpus_perm$, "kept";
+	setr .@r, 4;
+	callfunc "corpus_eq", "setr", .@r, 4;
+	callfunc "corpus_eq", "unset is 0", .@never_set, 0;
+	callfunc "corpus_eq", "unset str is empty", .@never_set$, "";
+
+	// setd / getd: dynamic names
+	setd ".@dyn_" + 3, 30;
+	callfunc "corpus_eq", "setd/getd", getd(".@dyn_3"), 30;
+	setd "$@corpus_dyn$", "d";
+	callfunc "corpus_eq", "setd str", getd("$@corpus_dyn$"), "d";
+	callfunc "corpus_eq", "getd direct", .@dyn_3, 30;
+
+	// getvariableofnpc: another NPC's . variable; donpcevent runs that NPC's label right away
+	set getvariableofnpc(.shared, "corpus_vars_peer"), 4242;
+	callfunc "corpus_eq", "getvariableofnpc", getvariableofnpc(.shared, "corpus_vars_peer"), 4242;
+	donpcevent "corpus_vars_peer::OnCheck";
+	callfunc "corpus_eq", "donpcevent saw .shared", $@corpus_peer_seen, 4242;
+	callfunc "corpus_eq", "own .shared untouched", .shared, 0;
+
+	// arrays
+	setarray .@arr, 100, 200, 300, 400, 500, 600;
+	callfunc "corpus_eq", "getarraysize", getarraysize(.@arr), 6;
+	callfunc "corpus_eq", "getelementofarray", getelementofarray(.@arr, 2), 300;
+	setarray .@arr[1], 201, 301;
+	callfunc "corpus_eq", "setarray offset", .@arr[2], 301;
+	copyarray .@copy[0], .@arr[2], 2;
+	callfunc "corpus_eq", "copyarray size", getarraysize(.@copy), 2;
+	callfunc "corpus_eq", "copyarray [1]", .@copy[1], 400;
+	callfunc "corpus_eq", "inarray", inarray(.@arr[0], 400), 3;
+	callfunc "corpus_eq", "inarray miss", inarray(.@arr[0], 800), -1;
+	setarray .@needles, 100, 500, 999;
+	callfunc "corpus_eq", "countinarray", countinarray(.@arr[0], .@needles[0]), 2;
+	deletearray .@arr[1], 2;
+	callfunc "corpus_eq", "deletearray size", getarraysize(.@arr), 4;
+	callfunc "corpus_eq", "deletearray shift", .@arr[1], 400;
+	cleararray .@arr[0], 7, 3;
+	callfunc "corpus_eq", "cleararray", .@arr[2], 7;
+	callfunc "corpus_eq", "cleararray keeps rest", .@arr[3], 600;
+	deletearray .@arr;
+	callfunc "corpus_eq", "deletearray all", getarraysize(.@arr), 0;
+	setarray .@sarr$, "a", "b", "c";
+	callfunc "corpus_eq", "string array", .@sarr$[2], "c";
+	callfunc "corpus_eq", "string array size", getarraysize(.@sarr$), 3;
+	callfunc "corpus_eq", "inarray str", inarray(.@sarr$, "b"), 1;
+	setarray $@corpus_srv, 1, 2, 3, 4;
+	callfunc "corpus_eq", "server array", getarraysize($@corpus_srv), 4;
+	.@big[1000] = 1;
+	callfunc "corpus_eq", "sparse array size", getarraysize(.@big), 1001;
+
+	callfunc "corpus_end";
+	end;
+}
+
+-	script	corpus_vars_peer	-1,{
+OnCheck:
+	$@corpus_peer_seen = .shared;
+	end;
+}

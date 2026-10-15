@@ -1,0 +1,76 @@
+//===== rAthena Script =======================================
+//= Buildin corpus: string buildins
+//============================================================
+
+-	script	corpus_strings	-1,{
+OnInit:
+	callfunc "corpus_begin", "strings";
+
+	callfunc "corpus_eq", "concat", "ab" + "cd", "abcd";
+	callfunc "corpus_eq", "concat int", "n=" + 5, "n=5";
+	callfunc "corpus_eq", "getstrlen", getstrlen("rAthena"), 7;
+	callfunc "corpus_eq", "getstrlen empty", getstrlen(""), 0;
+	callfunc "corpus_eq", "charisalpha", charisalpha("a1", 0), 1;
+	callfunc "corpus_eq", "charisalpha digit", charisalpha("a1", 1), 0;
+	// charisupper/charislower return the C library's isupper()/islower() value: non-zero, not 1
+	callfunc "corpus_ok", "charisupper", charisupper("rAthena", 1) != 0;
+	callfunc "corpus_eq", "charisupper no", charisupper("rAthena", 0), 0;
+	callfunc "corpus_ok", "charislower", charislower("rAthena", 0) != 0;
+	callfunc "corpus_eq", "charislower no", charislower("rAthena", 1), 0;
+	callfunc "corpus_eq", "charat", charat("This is a string", 10), "s";
+	callfunc "corpus_eq", "charat out of range", charat("abc", 10), "";
+	callfunc "corpus_eq", "setchar", setchar("Cat", "B", 0), "Bat";
+	callfunc "corpus_eq", "insertchar", insertchar("laughter", "s", 0), "slaughter";
+	callfunc "corpus_eq", "delchar", delchar("Diet", 3), "Die";
+	callfunc "corpus_eq", "strtoupper", strtoupper("The duck is blue!!"), "THE DUCK IS BLUE!!";
+	callfunc "corpus_eq", "strtolower", strtolower("MiXeD 42"), "mixed 42";
+	callfunc "corpus_eq", "substr", substr("foobar", 3, 5), "bar";
+	callfunc "corpus_eq", "substr bad range", substr("foobar", 4, 2), "";
+	callfunc "corpus_eq", "compare", compare("Bloody Murderer", "blood"), 1;
+	callfunc "corpus_eq", "compare miss", compare("Blood Butterfly", "Bloody"), 0;
+	callfunc "corpus_eq", "strcmp eq", strcmp("abc", "abc"), 0;
+	callfunc "corpus_ok", "strcmp lt", strcmp("abc", "abd") < 0;
+	callfunc "corpus_ok", "strcmp gt", strcmp("b", "a") > 0;
+	callfunc "corpus_eq", "strpos", strpos("foobar", "bar", 0), 3;
+	callfunc "corpus_eq", "strpos offset", strpos("foobarfoo", "foo", 1), 6;
+	callfunc "corpus_eq", "strpos miss", strpos("foobar", "baz"), -1;
+	callfunc "corpus_eq", "replacestr", replacestr("testing tester", "test", "dash"), "dashing dasher";
+	callfunc "corpus_eq", "replacestr nocase", replacestr("Donkey", "don", "mon", 0), "monkey";
+	callfunc "corpus_eq", "replacestr count", replacestr("test test test test test", "test", "yay", 0, 3), "yay yay yay test test";
+	callfunc "corpus_eq", "countstr", countstr("test test test Test", "test"), 3;
+	callfunc "corpus_eq", "countstr nocase", countstr("cake Cake", "Cake", 0), 2;
+	callfunc "corpus_eq", "atoi", atoi("11"), 11;
+	callfunc "corpus_eq", "atoi negative", atoi("-42abc"), -42;
+	callfunc "corpus_eq", "axtoi", axtoi("FF"), 255;
+	callfunc "corpus_eq", "strtol 16", strtol("11", 16), 17;
+	callfunc "corpus_eq", "strtol auto hex", strtol("0x11", 0), 17;
+	callfunc "corpus_eq", "strtol auto oct", strtol("011", 0), 9;
+	callfunc "corpus_eq", "strtol 2", strtol("11", 2), 3;
+	callfunc "corpus_eq", "md5", md5("rAthena"), "e1e277b316fc719984ed65afe7d9e10c";
+	callfunc "corpus_eq", "md5 empty", md5(""), "d41d8cd98f00b204e9800998ecf8427e";
+	callfunc "corpus_eq", "escape_sql", escape_sql("O'Brien"), "O''Brien";
+
+	callfunc "corpus_eq", "sprintf", sprintf("The %s contains %d monkeys", "zoo", 5), "The zoo contains 5 monkeys";
+	callfunc "corpus_eq", "sprintf pad", sprintf("[%05d|%-3s|%x]", 42, "a", 255), "[00042|a  |ff]";
+	// positional arguments ("%2$s") are not supported: glibc aborts the server
+	// ("invalid %N$ use detected"), so the corpus does not exercise them
+	callfunc "corpus_eq", "sprintf percent", sprintf("%d%%", 100), "100%";
+	callfunc "corpus_eq", "sprintf no arguments", sprintf("100%%"), "100%%";  // legacy: returned verbatim
+
+	.@n = sscanf("This is a test: 42 foobar", "This is a test: %d %s", .@num, .@str$);
+	callfunc "corpus_eq", "sscanf count", .@n, 2;
+	callfunc "corpus_eq", "sscanf int", .@num, 42;
+	callfunc "corpus_eq", "sscanf str", .@str$, "foobar";
+
+	explode(.@parts$, "Explode:Test:1965:red:PIE", ":");
+	callfunc "corpus_eq", "explode size", getarraysize(.@parts$), 5;
+	callfunc "corpus_eq", "explode [2]", .@parts$[2], "1965";
+	callfunc "corpus_eq", "explode [4]", .@parts$[4], "PIE";
+	callfunc "corpus_eq", "implode", implode(.@parts$, "-"), "Explode-Test-1965-red-PIE";
+	setarray .@words$, "This", "is", "a", "test";
+	callfunc "corpus_eq", "implode glue", implode(.@words$, " "), "This is a test";
+	callfunc "corpus_eq", "implode no glue", implode(.@words$), "Thisisatest";
+
+	callfunc "corpus_end";
+	end;
+}

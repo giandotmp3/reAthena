@@ -13,3 +13,12 @@ endif()
 set_target_properties( sql-test PROPERTIES COMPILE_FLAGS "${SQL_TEST_DEFINITIONS}" )
 add_test( NAME sql_test COMMAND sql-test WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}" )
 message( STATUS "Creating target sql-test - done" )
+
+# The script buildin inventory (doc/script_buildins.tsv) must list exactly the commands of
+# buildin_func[] in src/map/script.cpp: adding, removing or changing a buildin without
+# regenerating it (python3 tools/codegen/script_buildins.py) fails this test.
+find_package( Python3 COMPONENTS Interpreter )
+if( Python3_Interpreter_FOUND )
+	add_test( NAME script_buildins_manifest
+		COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/tools/codegen/script_buildins.py" --check )
+endif()

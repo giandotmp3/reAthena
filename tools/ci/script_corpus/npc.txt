@@ -1,0 +1,115 @@
+//===== rAthena Script =======================================
+//= Buildin corpus: NPC objects, timers, waiting rooms, shops
+//============================================================
+
+prontera,150,150,4	script	Corpus Guide#x::cg1	4_M_MANAGER,{
+	end;
+OnCorpusPing:
+OnCommandCorpusPing:
+	$@corpus_pinged++;
+	end;
+OnCorpusRoom:
+	waitingroom "Corpus Room", 15, "cg1::OnCorpusPing", 2;
+	end;
+OnCorpusWalk:
+	npcspeed 200;
+	npcwalkto 153, 151;
+	npcstop;
+	end;
+OnTimer1000:
+	end;
+OnTimer5000:
+	end;
+}
+
+prontera,152,150,4	shop	corpus_shop	4_M_MANAGER,501:-1,502:-1
+
+-	script	corpus_npc	-1,{
+OnInit:
+	callfunc "corpus_begin", "npc";
+
+	// names and ids
+	callfunc "corpus_eq", "strnpcinfo own unique", strnpcinfo(3), "corpus_npc";
+	.@id = getnpcid(0, "cg1");
+	callfunc "corpus_ok", "getnpcid other", .@id > 0;
+	callfunc "corpus_ok", "getnpcid self", getnpcid(0) > 0;
+	callfunc "corpus_eq", "getnpcid missing", getnpcid(0, "corpus_no_such_npc"), 0;
+	callfunc "corpus_eq", "strnpcinfo display", strnpcinfo(0, .@id), "Corpus Guide#x";
+	callfunc "corpus_eq", "strnpcinfo visible", strnpcinfo(1, .@id), "Corpus Guide";
+	callfunc "corpus_eq", "strnpcinfo hidden", strnpcinfo(2, .@id), "x";
+	callfunc "corpus_eq", "strnpcinfo unique", strnpcinfo(3, .@id), "cg1";
+	callfunc "corpus_eq", "strnpcinfo map", strnpcinfo(4, .@id), "prontera";
+	callfunc "corpus_eq", "rid2name", rid2name(.@id), "cg1";
+	callfunc "corpus_eq", "getunittype npc", getunittype(.@id), BL_NPC;
+	callfunc "corpus_eq", "getunitname npc", getunitname(.@id), "Corpus Guide#x";
+	callfunc "corpus_eq", "unitexists npc", unitexists(.@id), 1;
+	getmapxy(.@map$, .@x, .@y, BL_NPC, "cg1");
+	callfunc "corpus_eq", "getmapxy map", .@map$, "prontera";
+	callfunc "corpus_eq", "getmapxy x", .@x, 150;
+
+	// events
+	$@corpus_pinged = 0;
+	donpcevent "cg1::OnCorpusPing";
+	callfunc "corpus_eq", "donpcevent", $@corpus_pinged, 1;
+	cmdothernpc "cg1", "CorpusPing";
+	callfunc "corpus_eq", "cmdothernpc", $@corpus_pinged, 2;
+
+	// visibility and movement
+	disablenpc "cg1";
+	enablenpc "cg1";
+	hideonnpc "cg1";
+	hideoffnpc "cg1";
+	cloakonnpc "cg1";
+	cloakoffnpc "cg1";
+	movenpc "cg1", 151, 151;
+	getmapxy(.@map$, .@x, .@y, BL_NPC, "cg1");
+	callfunc "corpus_eq", "movenpc", .@x, 151;
+	npctalk "corpus says hello", "cg1";
+	donpcevent "cg1::OnCorpusWalk";
+	setnpcdisplay("cg1", "Renamed Guide", 4_F_KAFRA1);
+	callfunc "corpus_eq", "setnpcdisplay", strnpcinfo(1, .@id), "Renamed Guide";
+
+	// NPC timer (no player attached)
+	initnpctimer "cg1";
+	callfunc "corpus_eq", "getnpctimer labels", getnpctimer(1, "cg1"), 1;
+	setnpctimer 3000, "cg1";
+	callfunc "corpus_ok", "setnpctimer", getnpctimer(0, "cg1") >= 3000;
+	stopnpctimer "cg1";
+	.@t = getnpctimer(0, "cg1");
+	callfunc "corpus_ok", "stopnpctimer", .@t >= 3000 && .@t < 4000;
+	startnpctimer "cg1";
+	stopnpctimer "cg1";
+
+	// waiting room (chat) on an NPC
+	donpcevent "cg1::OnCorpusRoom";
+	callfunc "corpus_eq", "getwaitingroomstate users", getwaitingroomstate(0, "cg1"), 0;
+	callfunc "corpus_eq", "getwaitingroomstate limit", getwaitingroomstate(1, "cg1"), 15;
+	callfunc "corpus_eq", "getwaitingroomstate trigger", getwaitingroomstate(2, "cg1"), 2;  // the trigger count (the doc says 1)
+	callfunc "corpus_eq", "getwaitingroomstate title", getwaitingroomstate(4, "cg1"), "Corpus Room";
+	callfunc "corpus_eq", "getwaitingroomstate event", getwaitingroomstate(16, "cg1"), "cg1::OnCorpusPing";
+	disablewaitingroomevent "cg1";
+	callfunc "corpus_eq", "disablewaitingroomevent", getwaitingroomstate(3, "cg1"), 1;
+	enablewaitingroomevent "cg1";
+	callfunc "corpus_eq", "enablewaitingroomevent", getwaitingroomstate(3, "cg1"), 0;
+	getwaitingroomusers "cg1";
+	callfunc "corpus_eq", "getwaitingroomusers", .@waitingroom_usercount, 0;
+	kickwaitingroomall "cg1";
+	delwaitingroom "cg1";
+	callfunc "corpus_eq", "delwaitingroom", getwaitingroomstate(0, "cg1"), -1;
+
+	// shops
+	npcshopitem "corpus_shop", 501, 20, 502, 60;
+	npcshopadditem "corpus_shop", 503, 180;
+	npcshopdelitem "corpus_shop", 502;
+	callfunc "corpus_eq", "npcshopattach", npcshopattach("corpus_shop", 0), 1;
+
+	// duplicates
+	.@dup$ = duplicate("cg1", "prontera", 155, 155, "Corpus Copy");
+	callfunc "corpus_ok", "duplicate", .@dup$ != "" && getnpcid(0, .@dup$) > 0;
+	callfunc "corpus_eq", "duplicate display name", strnpcinfo(0, getnpcid(0, .@dup$)), "Corpus Copy";
+	unloadnpc .@dup$;
+	callfunc "corpus_eq", "unloadnpc", getnpcid(0, .@dup$), 0;
+
+	callfunc "corpus_end";
+	end;
+}

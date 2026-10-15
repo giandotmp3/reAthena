@@ -1,0 +1,98 @@
+//===== rAthena Script =======================================
+//= Buildin corpus: control flow, functions and subroutines
+//============================================================
+
+function	script	corpus_fn_add	{
+	return getarg(0) + getarg(1, 100);
+}
+
+function	script	corpus_fn_count	{
+	return getargcount();
+}
+
+function	script	corpus_fn_byref	{
+	// a reference argument writes the caller's variable
+	set getarg(0), getarg(1);
+	return;
+}
+
+-	script	corpus_control	-1,{
+	function local_twice;
+
+OnInit:
+	callfunc "corpus_begin", "control";
+
+	callfunc "corpus_eq", "callfunc", callfunc("corpus_fn_add", 2, 3), 5;
+	callfunc "corpus_eq", "getarg default", callfunc("corpus_fn_add", 2), 102;
+	callfunc "corpus_eq", "getargcount", callfunc("corpus_fn_count", 1, "two", 3), 3;
+	callfunc "corpus_fn_byref", .@out, 9;
+	callfunc "corpus_eq", "by reference", .@out, 9;
+	callfunc "corpus_eq", "is_function", is_function("corpus_fn_add"), 1;
+	callfunc "corpus_eq", "is_function miss", is_function("corpus_no_such_fn"), 0;
+	callfunc "corpus_eq", "local function", local_twice(21), 42;
+	callfunc "corpus_eq", "callsub", callsub(S_Square, 7), 49;
+	// a global function from npc/other/Global_Functions.txt
+	callfunc "corpus_eq", "F_InsertComma", callfunc("F_InsertComma", 1234567), "1,234,567";
+
+	.@n = 0;
+	goto L_Skip;
+	.@n = 1;
+L_Skip:
+	callfunc "corpus_eq", "goto", .@n, 0;
+
+	.@i = 0;
+	jump_zero(0), L_Zero;
+	.@i = 1;
+L_Zero:
+	callfunc "corpus_eq", "jump_zero", .@i, 0;
+
+	.@sum = 0;
+	for (.@i = 1; .@i <= 10; .@i++)
+		.@sum += .@i;
+	callfunc "corpus_eq", "for", .@sum, 55;
+	.@i = 0;
+	while (.@i < 5)
+		.@i++;
+	callfunc "corpus_eq", "while", .@i, 5;
+	.@i = 0;
+	do {
+		.@i += 2;
+	} while (.@i < 7);
+	callfunc "corpus_eq", "do-while", .@i, 8;
+	for (.@i = 0; .@i < 10; .@i++) {
+		if (.@i == 3) break;
+	}
+	callfunc "corpus_eq", "break", .@i, 3;
+	.@odd = 0;
+	for (.@i = 0; .@i < 10; .@i++) {
+		if (.@i % 2 == 0) continue;
+		.@odd++;
+	}
+	callfunc "corpus_eq", "continue", .@odd, 5;
+	switch (3) {
+	case 1: .@s$ = "one"; break;
+	case 3: .@s$ = "three"; break;
+	default: .@s$ = "other"; break;
+	}
+	callfunc "corpus_eq", "switch", .@s$, "three";
+
+	// freeloop lets a long loop run past the infinite-loop guard
+	freeloop(1);
+	callfunc "corpus_eq", "freeloop on", freeloop(), 1;
+	.@sum = 0;
+	for (.@i = 0; .@i < 200000; .@i++)
+		.@sum++;
+	freeloop(0);
+	callfunc "corpus_eq", "freeloop loop", .@sum, 200000;
+	callfunc "corpus_eq", "freeloop off", freeloop(), 0;
+
+	callfunc "corpus_end";
+	end;
+
+S_Square:
+	return getarg(0) * getarg(0);
+
+function local_twice {
+	return getarg(0) * 2;
+}
+}

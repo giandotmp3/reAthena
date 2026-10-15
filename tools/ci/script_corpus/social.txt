@@ -1,0 +1,69 @@
+//===== rAthena Script =======================================
+//= Buildin corpus: guilds, parties, castles, instances and
+//= area commands, with nobody online
+//============================================================
+
+prontera,140,150,4	script	Corpus Arena::corpus_arena	4_M_MANAGER,{
+	end;
+OnCorpusArena:
+	waitingroom "Corpus Arena", 10, "corpus_arena::OnCorpusFull", 1;
+	disablearena;
+	enablearena;
+	warpwaitingpc "prontera", 150, 150;
+	$@corpus_arena_warped = $@warpwaitingpcnum;
+	waitingroomkick "corpus_arena", "Nobody";
+	delwaitingroom;
+	emotion ET_SMILE;
+	npcskilleffect AL_HEAL, 10, 140, 150;
+	progressbar_npc "0xFFFF00", 1;
+	showscript "corpus";
+	classchange 4_F_KAFRA1, "corpus_arena";
+	end;
+OnCorpusFull:
+	end;
+}
+
+-	script	corpus_social	-1,{
+OnInit:
+	callfunc "corpus_begin", "social";
+
+	// guilds and parties that do not exist
+	// (getguildinfo on an unknown guild is an error that ends the script, so it is not called here)
+	callfunc "corpus_eq", "getpartyleader name", getpartyleader(999999), "null";
+	callfunc "corpus_eq", "getpartyleader id", getpartyleader(999999, 1), -1;
+	callfunc "corpus_eq", "instance_check_party", instance_check_party(999999), 0;
+	callfunc "corpus_eq", "getguildalliance", getguildalliance(999998, 999999), -2;
+
+	// castles (db/castle_db.yml)
+	.@old = getcastledata("prtg_cas01", CD_CURRENT_ECONOMY);
+	setcastledata "prtg_cas01", CD_CURRENT_ECONOMY, .@old + 1;
+	callfunc "corpus_eq", "setcastledata", getcastledata("prtg_cas01", CD_CURRENT_ECONOMY), .@old + 1;
+	setcastledata "prtg_cas01", CD_CURRENT_ECONOMY, .@old;
+	callfunc "corpus_eq", "guardianinfo none", guardianinfo("prtg_cas01", 0, 0), 0;
+
+	// instances (db/<mode>/instance_db.yml)
+	callfunc "corpus_ok", "instance_info id", instance_info("Endless Tower", IIT_ID) > 0;
+	callfunc "corpus_ok", "instance_info enter map", getstrlen(instance_info("Endless Tower", IIT_ENTER_MAP)) > 0;
+	callfunc "corpus_eq", "instance_info unknown", instance_info("Corpus Nowhere", IIT_ID), -1;
+	callfunc "corpus_eq", "instance_id none", instance_id(), 0;
+	callfunc "corpus_eq", "instance_list", instance_list("prontera"), 0;
+
+	// item groups
+	callfunc "corpus_ok", "groupranditem", getiteminfo(groupranditem(IG_TAMING), ITEMINFO_ID) > 0;
+
+	// area commands on an empty map
+	areawarp "prontera", 100, 100, 110, 110, "prontera", 150, 150;
+	mapwarp "prontera", "prontera", 150, 150;
+	areapercentheal "prontera", 100, 100, 110, 110, 100, 100;
+	cleanarea "prontera", 100, 100, 110, 110;
+	cleanmap "prontera";
+
+	// waiting room arena of an NPC on a map
+	$@corpus_arena_warped = -1;
+	donpcevent "corpus_arena::OnCorpusArena";
+	callfunc "corpus_eq", "warpwaitingpc", $@corpus_arena_warped, 0;
+	callfunc "corpus_eq", "arena room deleted", getwaitingroomstate(0, "corpus_arena"), -1;
+
+	callfunc "corpus_end";
+	end;
+}

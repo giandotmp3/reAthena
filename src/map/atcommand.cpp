@@ -51,6 +51,7 @@
 #include "pet.hpp"
 #include "quest.hpp"
 #include "script.hpp"
+#include "script_host.hpp"
 #include "storage.hpp"
 #include "trade.hpp"
 #include "vending.hpp"
@@ -1734,7 +1735,7 @@ ACMD_FUNC(baselevelup)
 		party_send_levelup(sd);
 
 	if( level > 0 && battle_config.atcommand_levelup_events )
-		npc_script_event( *sd, NPCE_BASELVUP );
+		ScriptHost::run_player_event( *sd, NPCE_BASELVUP );
 
 	return 0;
 }
@@ -1792,7 +1793,7 @@ ACMD_FUNC(joblevelup)
 	status_calc_pc(sd, SCO_FORCE);
 
 	if( level > 0 && battle_config.atcommand_levelup_events )
-		npc_script_event( *sd, NPCE_JOBLVUP );
+		ScriptHost::run_player_event( *sd, NPCE_JOBLVUP );
 
 	return 0;
 }
@@ -4415,8 +4416,7 @@ ACMD_FUNC(reloadscript){
 
 	flush_fifos();
 	map_reloadnpc(true); // reload config files seeking for npcs
-	script_reload();
-	npc_reload();
+	ScriptHost::reload();
 
 	clif_displaymessage(fd, msg_txt(sd,100)); // Scripts have been reloaded.
 
@@ -5361,15 +5361,13 @@ ACMD_FUNC(loadnpc)
 	char path[1024];
 	atcommand_normalize_npc_path(path, message, sizeof(path));
 
-	if (!npc_addsrcfile(path, true)) {
+	if (!ScriptHost::load_file(path)) {
 		clif_displaymessage(fd, msg_txt(sd,261)); // Script could not be loaded.
 		return -1;
 	}
 
-	npc_read_event_script();
-
 	ShowStatus( "NPC file '" CL_WHITE "%s" CL_RESET "' was loaded.\n", path );
-	npc_event_doall_path( script_config.init_event_name, path );
+	ScriptHost::run_label_in_file( script_config.init_event_name, path );
 
 	clif_displaymessage(fd, msg_txt(sd,262)); // Script loaded.
 	return 0;
@@ -5393,9 +5391,7 @@ ACMD_FUNC(unloadnpc)
 		return -1;
 	}
 
-	npc_unload_duplicates(nd);
-	npc_unload(nd,true);
-	npc_read_event_script();
+	ScriptHost::unload_npc(*nd);
 	clif_displaymessage(fd, msg_txt(sd,112)); // Npc Disabled.
 	return 0;
 }
@@ -5409,18 +5405,16 @@ ACMD_FUNC(reloadnpcfile) {
 	char path[1024];
 	atcommand_normalize_npc_path(path, message, sizeof(path));
 
-	if (npc_unloadfile(path))
+	if (ScriptHost::unload_file(path))
 		clif_displaymessage(fd, msg_txt(sd,1386)); // File unloaded. Be aware that mapflags and monsters spawned directly are not removed.
 
-	if (!npc_addsrcfile(path, true)) {
+	if (!ScriptHost::load_file(path)) {
 		clif_displaymessage(fd, msg_txt(sd,261)); // Script could not be loaded.
 		return -1;
 	}
 
-	npc_read_event_script();
-
 	ShowStatus( "NPC file '" CL_WHITE "%s" CL_RESET "' was reloaded.\n", path );
-	npc_event_doall_path( script_config.init_event_name, path );
+	ScriptHost::run_label_in_file( script_config.init_event_name, path );
 
 	clif_displaymessage(fd, msg_txt(sd,262)); // Script loaded.
 	return 0;
@@ -6853,7 +6847,7 @@ ACMD_FUNC(autotrade) {
 	}
 
 	if (battle_config.at_logout_event)
-		npc_script_event( *sd, NPCE_LOGOUT );
+		ScriptHost::run_player_event( *sd, NPCE_LOGOUT );
 
 	channel_pcquit(sd,0xF); //leave all chan
 	clif_authfail_fd(sd->fd, 15);
@@ -10208,9 +10202,9 @@ ACMD_FUNC(set) {
 	// Only set the variable if there is a value for it
 	if( toset >= 2 ){
 		if( is_str ){
-			setd_sub_str( nullptr, sd, name, index, val, nullptr );
+			ScriptHost::set_var_str( sd, name, val, index );
 		}else{
-			setd_sub_num( nullptr, sd, name, index, strtoll( val, nullptr, 10 ), nullptr );
+			ScriptHost::set_var_num( sd, name, strtoll( val, nullptr, 10 ), index );
 		}
 	}
 
@@ -10374,7 +10368,7 @@ ACMD_FUNC(unloadnpcfile) {
 	char path[1024];
 	atcommand_normalize_npc_path(path, message, sizeof(path));
 
-	if( npc_unloadfile(path) ) {
+	if( ScriptHost::unload_file(path) ) {
 		clif_displaymessage(fd, msg_txt(sd,1386)); // File unloaded. Be aware that mapflags and monsters spawned directly are not removed.
 		ShowStatus( "NPC file '" CL_WHITE "%s" CL_RESET "' was unloaded.\n", path );
 	}

@@ -2313,6 +2313,7 @@ void run_script(struct script_code *rootscript,int32 pos,int32 rid,int32 oid);
 bool set_reg_num(struct script_state* st, map_session_data* sd, int64 num, const char* name, const int64 value, struct reg_db *ref);
 bool set_reg_str(struct script_state* st, map_session_data* sd, int64 num, const char* name, const char* value, struct reg_db* ref);
 bool set_var_str(map_session_data *sd, const char* name, const char* val);
+struct script_data* get_val_(struct script_state* st, struct script_data* data, map_session_data* sd);
 bool clear_reg( struct script_state* st, map_session_data* sd, int64 num, const char* name, struct reg_db *ref );
 int64 conv_num64(struct script_state *st, struct script_data *data);
 int32 conv_num(struct script_state *st, struct script_data *data);

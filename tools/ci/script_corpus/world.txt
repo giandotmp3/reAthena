@@ -1,0 +1,93 @@
+//===== rAthena Script =======================================
+//= Buildin corpus: maps, cells, map flags, time, castles,
+//= announcements and server-wide state
+//============================================================
+
+-	script	corpus_world	-1,{
+OnInit:
+	callfunc "corpus_begin", "world";
+
+	// maps
+	.@m = mapname2id("prontera");
+	callfunc "corpus_ok", "mapname2id", .@m >= 0;
+	callfunc "corpus_eq", "mapid2name", mapid2name(.@m), "prontera";
+	callfunc "corpus_eq", "mapname2id missing", mapname2id("corpus_nomap"), -1;
+	callfunc "corpus_eq", "getmapusers", getmapusers("prontera"), 0;
+	callfunc "corpus_eq", "getmapusers missing", getmapusers("corpus_nomap"), -1;
+	callfunc "corpus_eq", "getareausers", getareausers("prontera", 100, 100, 200, 200), 0;
+	callfunc "corpus_eq", "getmapguildusers", getmapguildusers("prontera", 1), 0;
+	callfunc "corpus_eq", "getareadropitem", getareadropitem("prontera", 0, 0, 300, 300, 501), 0;
+
+	// cells and walls
+	callfunc "corpus_eq", "checkcell walkable", checkcell("prontera", 156, 191, cell_chkpass), 1;
+	setcell "prontera", 156, 191, 156, 191, cell_walkable, 0;
+	callfunc "corpus_eq", "setcell", checkcell("prontera", 156, 191, cell_chkpass), 0;
+	setcell "prontera", 156, 191, 156, 191, cell_walkable, 1;
+	callfunc "corpus_eq", "setcell restore", checkcell("prontera", 156, 191, cell_chkpass), 1;
+	setwall "prontera", 160, 160, 3, DIR_EAST, false, "corpus_wall";
+	callfunc "corpus_eq", "checkwall", checkwall("corpus_wall"), 1;
+	delwall "corpus_wall";
+	callfunc "corpus_eq", "delwall", checkwall("corpus_wall"), 0;
+
+	// map flags
+	callfunc "corpus_eq", "getmapflag", getmapflag("prontera", MF_PVP), 0;
+	setmapflag "prontera", MF_NOTRADE;
+	callfunc "corpus_eq", "setmapflag", getmapflag("prontera", MF_NOTRADE), 1;
+	removemapflag "prontera", MF_NOTRADE;
+	callfunc "corpus_eq", "removemapflag", getmapflag("prontera", MF_NOTRADE), 0;
+	pvpon "prontera";
+	callfunc "corpus_eq", "pvpon", getmapflag("prontera", MF_PVP), 1;
+	pvpoff "prontera";
+	callfunc "corpus_eq", "pvpoff", getmapflag("prontera", MF_PVP), 0;
+	gvgon "prontera";
+	callfunc "corpus_eq", "gvgon", getmapflag("prontera", MF_GVG), 1;
+	gvgoff "prontera";
+	callfunc "corpus_eq", "gvgoff", getmapflag("prontera", MF_GVG), 0;
+	gvgon3 "prontera";
+	callfunc "corpus_eq", "gvgon3", getmapflag("prontera", MF_GVG_TE), 1;
+	gvgoff3 "prontera";
+	callfunc "corpus_eq", "gvgoff3", getmapflag("prontera", MF_GVG_TE), 0;
+	setmapflagnosave "prontera", "prontera", 156, 191;
+	callfunc "corpus_eq", "setmapflagnosave", getmapflag("prontera", MF_NOSAVE), 1;
+	removemapflag "prontera", MF_NOSAVE;
+
+	// time
+	callfunc "corpus_ok", "gettimetick(2)", gettimetick(2) > 1600000000;
+	callfunc "corpus_ok", "gettimetick(1)", gettimetick(1) >= 0 && gettimetick(1) < 86400;
+	callfunc "corpus_ok", "gettime year", gettime(DT_YEAR) >= 2024;
+	callfunc "corpus_ok", "gettime month", gettime(DT_MONTH) >= 1 && gettime(DT_MONTH) <= 12;
+	callfunc "corpus_eq", "gettime yyyymmdd", gettime(DT_YYYYMMDD), gettime(DT_YEAR) * 10000 + gettime(DT_MONTH) * 100 + gettime(DT_DAYOFMONTH);
+	callfunc "corpus_eq", "gettimestr", gettimestr("%Y-%m-%d", 11, 0), "1970-01-01";
+	callfunc "corpus_eq", "gettimestr length", getstrlen(gettimestr("%Y-%m/%d %H:%M:%S", 21)), 19;
+	callfunc "corpus_ok", "isday xor isnight", isday() != isnight();
+
+	// War of Emperium state and castles (db/castle_db.yml)
+	callfunc "corpus_eq", "agitcheck", agitcheck(), 0;
+	callfunc "corpus_eq", "agitcheck2", agitcheck2(), 0;
+	callfunc "corpus_eq", "agitcheck3", agitcheck3(), 0;
+	callfunc "corpus_eq", "getcastlename", getcastlename("prtg_cas01"), "Kriemhild";
+	callfunc "corpus_eq", "getcastlename missing", getcastlename("prontera"), "";
+	callfunc "corpus_ok", "getcastledata economy", getcastledata("prtg_cas01", CD_CURRENT_ECONOMY) >= 0;
+	callfunc "corpus_eq", "getguildname none", getguildname(999999), "null";
+	callfunc "corpus_eq", "getpartyname none", getpartyname(999999), "null";
+	callfunc "corpus_eq", "getguildmaster none", getguildmaster(999999), "null";
+	callfunc "corpus_eq", "getguildmasterid none", getguildmasterid(999999), 0;
+
+	// announcements reach nobody but must not fail
+	announce "corpus announce", bc_all;
+	mapannounce "prontera", "corpus map announce", bc_map;
+	areaannounce "prontera", 100, 100, 200, 200, "corpus area announce", bc_area;
+	globalmes "corpus global message";
+	debugmes "corpus debug message";
+	logmes "corpus logmes";
+
+	// online state with no player connected
+	callfunc "corpus_eq", "getusers", getusers(1), 0;
+	callfunc "corpus_eq", "playerattached", playerattached(), 0;
+	callfunc "corpus_eq", "getattachedrid", getattachedrid(), 0;
+	callfunc "corpus_eq", "isloggedin", isloggedin(2000000), 0;
+	callfunc "corpus_eq", "attachrid offline", attachrid(2000000), 0;
+
+	callfunc "corpus_end";
+	end;
+}

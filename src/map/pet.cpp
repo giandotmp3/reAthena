@@ -27,6 +27,7 @@
 #include "mob.hpp"
 #include "npc.hpp"
 #include "pc.hpp"
+#include "script_host.hpp"
 
 using namespace rathena;
 
@@ -563,7 +564,7 @@ static int32 pet_reload_sub( map_session_data *sd, va_list args ){
 	pd->db = mob_db.find( pet_db_ptr->class_ );
 
 	if( battle_config.pet_status_support ){
-		run_script( pet_db_ptr->pet_support_script, 0, sd->id, 0 );
+		ScriptHost::run_item_script( *sd, pet_db_ptr->pet_support_script );
 	}
 
 	// Recalculate the player status based on the new data
@@ -1044,7 +1045,7 @@ bool pet_data_init(map_session_data *sd, struct s_pet *pet)
 
 	if( pet_db_ptr != nullptr ) {
 		if( battle_config.pet_status_support )
-			run_script(pet_db_ptr->pet_support_script,0,sd->id,0);
+			ScriptHost::run_item_script(*sd, pet_db_ptr->pet_support_script);
 
 		if( pet_db_ptr->pet_bonus_script )
 			status_calc_pc(sd,SCO_NONE);
@@ -2422,7 +2423,7 @@ void pet_delautobonus(map_session_data &sd, std::vector<std::shared_ptr<s_petaut
 		std::shared_ptr<s_petautobonus> b = *it;
 
 		if (b->timer != INVALID_TIMER && !b->bonus_script.empty() && restore) {
-			script_run_petautobonus(b->bonus_script, sd);
+			ScriptHost::run_pet_autobonus(sd, b->bonus_script);
 		}
 
 		if (restore) {
@@ -2445,7 +2446,7 @@ void pet_exeautobonus(map_session_data &sd, std::vector<std::shared_ptr<s_petaut
 		delete_timer(autobonus->timer, pet_endautobonus);
 
 	if (!autobonus->other_script.empty()) {
-		script_run_petautobonus(autobonus->other_script, sd);
+		ScriptHost::run_pet_autobonus(sd, autobonus->other_script);
 	}
 
 	autobonus->timer = add_timer(gettick() + autobonus->duration, pet_endautobonus, sd.id, (intptr_t)bonus);

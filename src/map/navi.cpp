@@ -23,6 +23,7 @@
 #include "navi.hpp"
 #include "npc.hpp"
 #include "path.hpp"
+#include "script_host.hpp"
 
 
 std::string filePrefix = "generated/clientside/data/luafiles514/lua files/navigation/";
@@ -635,7 +636,7 @@ void navi_create_lists() {
 
 	auto starttime = std::chrono::system_clock::now();
 
-	npc_event_runall(script_config.navi_generate_name);
+	ScriptHost::run_label_everywhere_logged(script_config.navi_generate_name);
 
 	write_object_lists();
 	auto currenttime = std::chrono::system_clock::now();

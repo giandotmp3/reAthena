@@ -207,6 +207,7 @@
     <ClInclude Include="..\..\modernized\rathena-reimagined\map-rules\include\rathena\map_rules\skills.hpp" />
     <ClInclude Include="..\..\modernized\rathena-reimagined\map-rules\include\rathena\map_rules\trade.hpp" />
     <ClInclude Include="rules_bridge.hpp" />
+    <ClInclude Include="script_host.hpp" />
     <ClInclude Include="achievement.hpp" />
     <ClInclude Include="atcommand.hpp" />
     <ClInclude Include="battle.hpp" />
@@ -1530,6 +1531,7 @@
       <ObjectFileName>$(IntDir)map_rules\</ObjectFileName>
     </ClCompile>
     <ClCompile Include="rules_bridge.cpp" />
+    <ClCompile Include="script_host.cpp" />
     <ClCompile Include="battleground.cpp" />
     <ClCompile Include="buyingstore.cpp" />
     <ClCompile Include="cashshop.cpp" />

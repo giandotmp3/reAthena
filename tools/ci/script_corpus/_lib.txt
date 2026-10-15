@@ -1,0 +1,49 @@
+//===== rAthena Script =======================================
+//= Buildin corpus: assertion helpers
+//===== Description: =========================================
+//= Loaded first by tools/ci/script_corpus.sh. Every corpus NPC
+//= runs its checks in OnInit, headless (no player attached):
+//=   callfunc "corpus_begin", "<test name>";
+//=   callfunc "corpus_eq", "<what>", <got>, <want>;   // ints or strings
+//=   callfunc "corpus_ok", "<what>", <condition>;
+//=   callfunc "corpus_end";
+//= and prints "CORPUS PASS <test>" or "CORPUS FAIL <test> ..."
+//= through debugmes. The runner fails on any FAIL line and on
+//= any test whose PASS line is missing (e.g. the script aborted).
+//============================================================
+
+function	script	corpus_begin	{
+	if ($@corpus_test$ != "")
+		debugmes "CORPUS FAIL " + $@corpus_test$ + " did not reach corpus_end";
+	$@corpus_test$ = getarg(0);
+	$@corpus_failures = 0;
+	$@corpus_checks = 0;
+	return;
+}
+
+function	script	corpus_eq	{
+	$@corpus_checks++;
+	if (getarg(1) != getarg(2)) {
+		$@corpus_failures++;
+		debugmes "CORPUS FAIL " + $@corpus_test$ + " " + getarg(0) + ": got '" + getarg(1) + "', want '" + getarg(2) + "'";
+	}
+	return;
+}
+
+function	script	corpus_ok	{
+	$@corpus_checks++;
+	if (!getarg(1)) {
+		$@corpus_failures++;
+		debugmes "CORPUS FAIL " + $@corpus_test$ + " " + getarg(0) + ": condition is false";
+	}
+	return;
+}
+
+function	script	corpus_end	{
+	if ($@corpus_failures == 0)
+		debugmes "CORPUS PASS " + $@corpus_test$ + " (" + $@corpus_checks + " checks)";
+	else
+		debugmes "CORPUS FAIL " + $@corpus_test$ + " " + $@corpus_failures + " of " + $@corpus_checks + " checks failed";
+	$@corpus_test$ = "";
+	return;
+}

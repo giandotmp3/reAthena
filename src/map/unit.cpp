@@ -35,6 +35,7 @@
 #include "path.hpp"
 #include "pc.hpp"
 #include "pet.hpp"
+#include "script_host.hpp"
 #include "storage.hpp"
 #include "trade.hpp"
 
@@ -659,7 +660,7 @@ static TIMER_FUNC(unit_walktoxy_timer)
 			ud->state.walk_script = true;
 
 			// Execute the event
-			npc_event_do_id(walk_done_event,bl->id);
+			ScriptHost::run_event_as(walk_done_event,bl->id);
 
 			ud->state.walk_script = false;
 

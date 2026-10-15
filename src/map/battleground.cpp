@@ -25,6 +25,7 @@
 #include "party.hpp"
 #include "pc.hpp"
 #include "pet.hpp"
+#include "script_host.hpp"
 
 using namespace rathena;
 
@@ -607,7 +608,7 @@ int32 bg_team_leave(map_session_data *sd, bool quit, bool deserter)
 		clif_bg_message(bgteam.get(), 0, "Server", output, strlen(output) + 1);
 
 		if (!bgteam->logout_event.empty() && quit)
-			npc_event(sd, bgteam->logout_event.c_str(), 0);
+			ScriptHost::run_player_npc_event(*sd, bgteam->logout_event.c_str());
 
 		if (deserter) {
 			std::shared_ptr<s_battleground_type> bg = battleground_db.find(bg_id);
@@ -1401,7 +1402,7 @@ void bg_join_active(map_session_data *sd, std::shared_ptr<s_battleground_queue> 
 
 	pc_delete_bg_queue_timer(sd); // Cancel timer so player doesn't leave the queue.
 
-	int32 bg_id_team_1 = static_cast<int32>(mapreg_readreg(add_str(queue->map->team1.bg_id_var.c_str())));
+	int32 bg_id_team_1 = static_cast<int32>(ScriptHost::get_server_var(queue->map->team1.bg_id_var.c_str()));
 	std::shared_ptr<s_battleground_data> bgteam_1 = util::umap_find(bg_team_db, bg_id_team_1);
 
 	for (auto &pl_sd : queue->teama_members) {
@@ -1417,11 +1418,11 @@ void bg_join_active(map_session_data *sd, std::shared_ptr<s_battleground_queue> 
 
 		clif_bg_queue_entry_init(pl_sd);
 		bg_team_join(bg_id_team_1, pl_sd, true);
-		npc_event(pl_sd, bgteam_1->active_event.c_str(), 0);
+		ScriptHost::run_player_npc_event(*pl_sd, bgteam_1->active_event.c_str());
 		return;
 	}
 
-	int32 bg_id_team_2 = static_cast<int32>(mapreg_readreg(add_str(queue->map->team2.bg_id_var.c_str())));
+	int32 bg_id_team_2 = static_cast<int32>(ScriptHost::get_server_var(queue->map->team2.bg_id_var.c_str()));
 	std::shared_ptr<s_battleground_data> bgteam_2 = util::umap_find(bg_team_db, bg_id_team_2);
 
 	for (auto &pl_sd : queue->teamb_members) {
@@ -1437,7 +1438,7 @@ void bg_join_active(map_session_data *sd, std::shared_ptr<s_battleground_queue> 
 
 		clif_bg_queue_entry_init(pl_sd);
 		bg_team_join(bg_id_team_2, pl_sd, true);
-		npc_event(pl_sd, bgteam_2->active_event.c_str(), 0);
+		ScriptHost::run_player_npc_event(*pl_sd, bgteam_2->active_event.c_str());
 		return;
 	}
 
@@ -1566,9 +1567,9 @@ void bg_queue_start_battleground(std::shared_ptr<s_battleground_queue> queue)
 		bg_team_join(bg_team_2, sd, true);
 	}
 
-	mapreg_setreg(add_str(queue->map->team1.bg_id_var.c_str()), bg_team_1);
-	mapreg_setreg(add_str(queue->map->team2.bg_id_var.c_str()), bg_team_2);
-	npc_event_do(queue->map->bgcallscript.c_str());
+	ScriptHost::set_server_var(queue->map->team1.bg_id_var.c_str(), bg_team_1);
+	ScriptHost::set_server_var(queue->map->team2.bg_id_var.c_str(), bg_team_2);
+	ScriptHost::run_event(queue->map->bgcallscript.c_str());
 	queue->state = QUEUE_STATE_ACTIVE;
 
 	bg_queue_clear(queue, false);

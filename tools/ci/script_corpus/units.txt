@@ -1,0 +1,85 @@
+//===== rAthena Script =======================================
+//= Buildin corpus: monsters and units without a player
+//============================================================
+
+-	script	corpus_units	-1,{
+OnInit:
+	callfunc "corpus_begin", "units";
+
+	// a map of our own: no permanent spawns interfere
+	.@map$ = "prontera";
+	killmonster .@map$, "corpus_units::OnMobDead";
+
+	monster .@map$, 150, 160, "Corpus Poring", 1002, 3, "corpus_units::OnMobDead";
+	.@mob = $@mobid[0];
+	callfunc "corpus_eq", "mobcount", mobcount(.@map$, "corpus_units::OnMobDead"), 3;
+	callfunc "corpus_eq", "getunittype", getunittype(.@mob), BL_MOB;
+	callfunc "corpus_eq", "getunitname", getunitname(.@mob), "Corpus Poring";
+	callfunc "corpus_eq", "unitexists", unitexists(.@mob), 1;
+	callfunc "corpus_eq", "rid2name mob", rid2name(.@mob), "Corpus Poring";
+
+	getunitdata .@mob, .@data;
+	callfunc "corpus_eq", "getunitdata class", .@data[UMOB_CLASS], 1002;
+	callfunc "corpus_eq", "getunitdata level", .@data[UMOB_LEVEL], 1;
+	setunitdata .@mob, UMOB_LEVEL, 7;
+	getunitdata .@mob, .@data;
+	callfunc "corpus_eq", "setunitdata level", .@data[UMOB_LEVEL], 7;
+	setunitname .@mob, "Renamed Poring";
+	callfunc "corpus_eq", "setunitname", getunitname(.@mob), "Renamed Poring";
+	setunittitle .@mob, "the Tested";
+	callfunc "corpus_eq", "setunittitle", getunittitle(.@mob), "the Tested";
+
+	unitwarp .@mob, .@map$, 155, 165;
+	getunitdata .@mob, .@data;
+	callfunc "corpus_eq", "unitwarp x", .@data[UMOB_X], 155;
+	callfunc "corpus_eq", "unitwarp y", .@data[UMOB_Y], 165;
+	callfunc "corpus_eq", "unitwarp map", .@data[UMOB_MAPID], mapname2id(.@map$);
+	unitwalk .@mob, 157, 165;
+	unitstopwalk .@mob;
+	unitwalkto .@mob, $@mobid[1];
+	unitstopwalk .@mob;
+	unittalk .@mob, "corpus unit talk";
+	unitblockmove .@mob, 1;
+	unitblockmove .@mob, 0;
+	unitblockskill .@mob, 1;
+	unitblockskill .@mob, 0;
+	unitattack .@mob, $@mobid[1];
+	unitstopattack .@mob;
+	getmapunits(BL_MOB, .@map$, .@units);
+	callfunc "corpus_ok", "getmapunits", inarray(.@units, .@mob) >= 0;
+	getareaunits(BL_MOB, .@map$, 150, 160, 160, 170, .@area);
+	callfunc "corpus_ok", "getareaunits", inarray(.@area, .@mob) >= 0;
+	callfunc "corpus_ok", "getunits", getunits(BL_MOB) >= 3;
+
+	$@corpus_dead = 0;
+	unitkill .@mob;
+	callfunc "corpus_eq", "unitkill event", $@corpus_dead, 1;
+	callfunc "corpus_eq", "unitkill count", mobcount(.@map$, "corpus_units::OnMobDead"), 2;
+	callfunc "corpus_eq", "unitexists dead", unitexists(.@mob), 0;
+
+	areamonster .@map$, 140, 140, 145, 145, "Corpus Area", 1002, 2, "corpus_units::OnMobDead";
+	callfunc "corpus_eq", "areamonster", mobcount(.@map$, "corpus_units::OnMobDead"), 4;
+	killmonster .@map$, "corpus_units::OnMobDead";
+	callfunc "corpus_eq", "killmonster", mobcount(.@map$, "corpus_units::OnMobDead"), 0;
+	monster .@map$, 150, 160, "Corpus Poring", 1002, 2;
+	killmonsterall .@map$;
+	callfunc "corpus_eq", "killmonsterall", mobcount(.@map$, "all"), 0;
+
+	// status changes on a unit
+	monster .@map$, 150, 160, "Corpus Poring", 1002, 1;
+	.@mob = $@mobid[0];
+	sc_start SC_BLESSING, 10000, 5, 10000, SCSTART_NOAVOID, .@mob;
+	sc_start2 SC_POISON, 10000, 1, 10000, 10000, SCSTART_NOAVOID, .@mob;
+	sc_start4 SC_ADRENALINE, 10000, 1, 0, 0, 0, 10000, SCSTART_NOAVOID, .@mob;
+	sc_end SC_BLESSING, .@mob;
+	sc_end SC_POISON, .@mob;
+	callfunc "corpus_eq", "getscrate", getscrate(SC_STUN, 10000, .@mob) <= 10000, 1;
+	unitkill .@mob;
+
+	callfunc "corpus_end";
+	end;
+
+OnMobDead:
+	$@corpus_dead++;
+	end;
+}

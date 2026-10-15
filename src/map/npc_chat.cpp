@@ -14,6 +14,7 @@
 
 #include "mob.hpp" // mob_data
 #include "pc.hpp" // map_session_data
+#include "script_host.hpp"
 
 /**
  *  Written by MouseJstr in a vision... (2/21/2005)
@@ -387,7 +388,7 @@ int32 npc_chat_sub(block_list* bl, va_list ap)
 				}
 				
 				// run the npc script
-				run_script(nd->u.scr.script,lst[i].pos,sd->id,nd->id);
+				ScriptHost::run(nd->u.scr.script,lst[i].pos,sd->id,nd->id);
 				return 0;
 			}
 		}

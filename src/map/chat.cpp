@@ -17,9 +17,10 @@
 #include "battle.hpp" // struct battle_config
 #include "clif.hpp"
 #include "map.hpp"
-#include "npc.hpp" // npc_event_do()
+#include "npc.hpp"
 #include "pc.hpp"
 #include "pc_groups.hpp"
+#include "script_host.hpp"
 
 int32 chat_triggerevent(chat_data *cd); // forward declaration
 
@@ -459,7 +460,7 @@ int32 chat_triggerevent(chat_data *cd)
 	nullpo_ret(cd);
 
 	if( cd->users >= cd->trigger && cd->npc_event[0] )
-		npc_event_do(cd->npc_event);
+		ScriptHost::run_event(cd->npc_event);
 
 	return 0;
 }

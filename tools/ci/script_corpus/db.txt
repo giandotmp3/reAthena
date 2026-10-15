@@ -1,0 +1,58 @@
+//===== rAthena Script =======================================
+//= Buildin corpus: item, monster, job and server databases
+//============================================================
+
+-	script	corpus_db	-1,{
+OnInit:
+	callfunc "corpus_begin", "db";
+
+	// items (db/<mode>/item_db_*.yml)
+	callfunc "corpus_eq", "getitemname id", getitemname(501), "Red Potion";
+	callfunc "corpus_eq", "getitemname aegis", getitemname("Red_Potion"), "Red Potion";
+	callfunc "corpus_eq", "getitemname missing", getitemname(1), "null";
+	callfunc "corpus_eq", "getiteminfo buy", getiteminfo(501, ITEMINFO_BUY), 10;
+	callfunc "corpus_eq", "getiteminfo sell", getiteminfo(501, ITEMINFO_SELL), 5;
+	callfunc "corpus_eq", "getiteminfo weight", getiteminfo(501, ITEMINFO_WEIGHT), 70;
+	callfunc "corpus_eq", "getiteminfo type", getiteminfo(501, ITEMINFO_TYPE), IT_HEALING;
+	callfunc "corpus_eq", "getiteminfo id by name", getiteminfo("Red_Potion", ITEMINFO_ID), 501;
+	callfunc "corpus_eq", "getiteminfo aegis", getiteminfo(501, ITEMINFO_AEGISNAME), "Red_Potion";
+	callfunc "corpus_eq", "getiteminfo missing", getiteminfo(1, ITEMINFO_BUY), -1;
+	callfunc "corpus_eq", "getitemslots", getitemslots(1201), 3;  // Knife
+	callfunc "corpus_eq", "getitemslots none", getitemslots(501), 0;
+
+	// monsters (db/<mode>/mob_db.yml)
+	callfunc "corpus_eq", "getmonsterinfo name", getmonsterinfo(1002, MOB_NAME), "Poring";
+	callfunc "corpus_eq", "getmonsterinfo by name", getmonsterinfo("PORING", MOB_ID), 1002;
+	callfunc "corpus_eq", "getmonsterinfo lv", getmonsterinfo(1002, MOB_LV), 1;
+	callfunc "corpus_eq", "getmonsterinfo maxhp", getmonsterinfo(1002, MOB_MAXHP), checkre(0) ? 55 : 50;
+	callfunc "corpus_eq", "getmonsterinfo element", getmonsterinfo(1002, MOB_ELEMENT), ELE_WATER;
+	callfunc "corpus_eq", "getmonsterinfo race", getmonsterinfo(1002, MOB_RACE), RC_PLANT;
+	callfunc "corpus_eq", "getmonsterinfo missing", getmonsterinfo(1, MOB_LV), -1;
+	callfunc "corpus_eq", "getmonsterinfo missing name", getmonsterinfo(1, MOB_NAME), "null";
+	callfunc "corpus_eq", "getmobdrops", getmobdrops(1002), 1;
+	callfunc "corpus_ok", "getmobdrops count", $@MobDrop_count > 0;
+	callfunc "corpus_eq", "getmobdrops jellopy", inarray($@MobDrop_item, 909) >= 0, 1;
+	callfunc "corpus_eq", "getmobdrops missing", getmobdrops(1), 0;
+	.@mob = getrandmobid(MOBG_BRANCH_OF_DEAD_TREE);
+	callfunc "corpus_ok", "getrandmobid", .@mob > 1000 && getmonsterinfo(.@mob, MOB_LV) > 0;
+	addmonsterdrop 1002, 512, 1000;  // Apple
+	getmobdrops(1002);
+	callfunc "corpus_ok", "addmonsterdrop", inarray($@MobDrop_item, 512) >= 0;
+	delmonsterdrop 1002, 512;
+	getmobdrops(1002);
+	callfunc "corpus_eq", "delmonsterdrop", inarray($@MobDrop_item, 512) >= 0 && inarray($@MobDrop_item, 512) < $@MobDrop_count, 0;
+
+	// jobs, modes, configuration
+	callfunc "corpus_eq", "jobname", jobname(Job_Swordman), "Swordsman";
+	callfunc "corpus_ok", "checkre(0)", checkre(0) == 0 || checkre(0) == 1;
+	callfunc "corpus_eq", "getbattleflag", getbattleflag("base_exp_rate"), 100;
+	setbattleflag "base_exp_rate", 250;
+	callfunc "corpus_eq", "setbattleflag", getbattleflag("base_exp_rate"), 250;
+	setbattleflag "base_exp_rate", 100;
+	callfunc "corpus_ok", "get_revision", get_revision() >= -1;
+	callfunc "corpus_ok", "get_githash", getstrlen(get_githash()) >= 0;
+	callfunc "corpus_eq", "constant", Job_Novice, 0;
+
+	callfunc "corpus_end";
+	end;
+}

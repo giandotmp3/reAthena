@@ -1,7 +1,8 @@
 name: Servers on SQLite and PostgreSQL
 # build_servers_database.yml
 # Builds the servers with both database backends, runs the Sql/SqlStmt contract tests on SQLite
-# and PostgreSQL, then drives a full login -> char -> map session (tools/ci/smoke.sh) on each.
+# and PostgreSQL, then drives a full login -> char -> map session (tools/ci/smoke.sh) on each,
+# and finally runs the script buildin corpus through the real VM (tools/ci/script_corpus.sh).
 
 concurrency:
   group: ${{ github.repository }}-${{ github.workflow }}-${{ github.ref }}
@@ -17,6 +18,8 @@ on:
       - 'conf/**'
       - 'tools/ci/**'
       - 'tools/sql/**'
+      - 'tools/codegen/script_buildins.py'
+      - 'doc/script_buildins.tsv'
       - '**/CMakeLists.txt'
       - '.github/workflows/build_servers_database.yml'
   pull_request:
@@ -27,6 +30,8 @@ on:
       - 'conf/**'
       - 'tools/ci/**'
       - 'tools/sql/**'
+      - 'tools/codegen/script_buildins.py'
+      - 'doc/script_buildins.tsv'
       - '**/CMakeLists.txt'
       - '.github/workflows/build_servers_database.yml'
 
@@ -64,6 +69,9 @@ jobs:
       - name: Generated schemas are up to date
         run: python3 tools/sql/mysql2portable.py --check
 
+      - name: Script buildin manifest is up to date
+        run: python3 tools/codegen/script_buildins.py --check
+
       - name: Configure
         run: cmake -S . -B cbuild -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON -DWITH_POSTGRESQL=ON
 
@@ -73,7 +81,7 @@ jobs:
       - name: Sql/SqlStmt contract tests (SQLite and PostgreSQL)
         env:
           RATHENA_TEST_PG: 127.0.0.1:5432:rathena:${{ env.PGPASSWORD }}:rathena_test
-        run: ctest --test-dir cbuild --output-on-failure -R sql_test
+        run: ctest --test-dir cbuild --output-on-failure -R "sql_test|script_buildins_manifest"
 
       - name: Smoke test on SQLite
         run: tools/ci/smoke.sh sqlite
@@ -85,12 +93,17 @@ jobs:
           psql -h 127.0.0.1 -U rathena -d rathena_test -c "CREATE DATABASE rathena_smoke"
           tools/ci/smoke.sh postgresql
 
+      - name: Script buildin corpus (headless VM)
+        run: tools/ci/script_corpus.sh
+
       - name: Server logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: smoke-logs
-          path: smoke-logs/
+          path: |
+            smoke-logs/
+            corpus-run/map.log
           if-no-files-found: ignore
 
   # The other platforms: build with the embedded SQLite engine and run the contract tests.

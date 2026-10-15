@@ -1,0 +1,63 @@
+//===== rAthena Script =======================================
+//= Buildin corpus: channels, battlegrounds, @command bindings,
+//= item scripts and regular expressions
+//============================================================
+
+-	script	corpus_misc	-1,{
+OnInit:
+	callfunc "corpus_begin", "misc";
+
+	// chat channels
+	callfunc "corpus_eq", "channel_create", channel_create("#corpus", "[Corpus]"), 1;
+	callfunc "corpus_eq", "channel_setopt", channel_setopt("#corpus", CHAN_OPT_MSG_DELAY, 1500), 1;
+	callfunc "corpus_eq", "channel_getopt", channel_getopt("#corpus", CHAN_OPT_MSG_DELAY), 1500;
+	callfunc "corpus_eq", "channel_setcolor", channel_setcolor("#corpus", 0xFF0000), 1;
+	callfunc "corpus_eq", "channel_setpass", channel_setpass("#corpus", "secret"), 1;
+	callfunc "corpus_eq", "channel_chat", channel_chat("#corpus", "hello"), 1;
+	callfunc "corpus_eq", "channel_ban", channel_ban("#corpus", 150000), 1;
+	callfunc "corpus_eq", "channel_unban", channel_unban("#corpus", 150000), 1;
+	callfunc "corpus_eq", "channel_delete", channel_delete("#corpus"), 0;  // channel_delete()'s 0 = deleted
+	callfunc "corpus_eq", "channel_delete again", channel_delete("#corpus"), -1;
+
+	// battleground groups
+	.@bg = bg_create("prontera", 150, 150, "corpus_misc::OnQuit", "corpus_misc::OnDeath");
+	callfunc "corpus_ok", "bg_create", .@bg > 0;
+	callfunc "corpus_eq", "bg_get_data", bg_get_data(.@bg, 0), 0;
+	callfunc "corpus_eq", "bg_getareausers", bg_getareausers(.@bg, "prontera", 0, 0, 300, 300), 0;
+	bg_team_setxy .@bg, 151, 151;
+	bg_destroy .@bg;
+	callfunc "corpus_eq", "bg_get_data destroyed", bg_get_data(.@bg, 0), 0;
+
+	// script-bound @commands
+	bindatcmd "corpuscmd", "corpus_misc::OnCmd";
+	unbindatcmd "corpuscmd";
+
+	// item scripts (restored afterwards)
+	callfunc "corpus_eq", "setitemscript", setitemscript(512, "{ heal 1, 0; }"), 1;
+	callfunc "corpus_eq", "setitemscript restore", setitemscript(512, "{ itemheal rand(16,22),0; }"), 1;
+	.@w = getiteminfo(512, ITEMINFO_WEIGHT);
+	setiteminfo 512, ITEMINFO_WEIGHT, .@w + 1;
+	callfunc "corpus_eq", "setiteminfo", getiteminfo(512, ITEMINFO_WEIGHT), .@w + 1;
+	setiteminfo 512, ITEMINFO_WEIGHT, .@w;
+
+	// regular expressions (PCRE builds; 0 without PCRE)
+	callfunc "corpus_ok", "preg_match", preg_match("^[a-z]+([0-9]+)$", "corpus42") >= 0;
+
+	// random option groups
+	randomoptgroup(5);
+	callfunc "corpus_ok", "randomoptgroup", getarraysize(.@opt_id) >= 0;
+
+	// item links are plain strings
+	callfunc "corpus_ok", "itemlink", getstrlen(itemlink(501)) > 0;
+
+	// guild data for a guild that does not exist
+	callfunc "corpus_eq", "getgdskilllv none", getgdskilllv(999999, "GD_EXTENSION"), -1;
+
+	callfunc "corpus_end";
+	end;
+
+OnQuit:
+OnDeath:
+OnCmd:
+	end;
+}

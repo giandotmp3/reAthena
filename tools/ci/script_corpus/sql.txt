@@ -1,0 +1,35 @@
+//===== rAthena Script =======================================
+//= Buildin corpus: synchronous SQL from scripts (query_sql,
+//= query_logsql, escape_sql). Runs on the corpus' own database.
+//============================================================
+
+-	script	corpus_sql	-1,{
+OnInit:
+	callfunc "corpus_begin", "sql";
+
+	callfunc "corpus_eq", "select constant", query_sql("SELECT 1 + 1", .@two), 1;
+	callfunc "corpus_eq", "select constant value", .@two, 2;
+
+	query_sql "DROP TABLE IF EXISTS corpus_sql";
+	query_sql "CREATE TABLE corpus_sql (id INTEGER NOT NULL, name VARCHAR(24) NOT NULL)";
+	.@name$ = "O'Brien";
+	callfunc "corpus_eq", "insert", query_sql("INSERT INTO corpus_sql (id, name) VALUES (1, 'alpha'), (2, 'beta'), (3, '" + escape_sql(.@name$) + "')"), 0;
+	callfunc "corpus_eq", "rows", query_sql("SELECT id, name FROM corpus_sql ORDER BY id", .@ids, .@names$), 3;
+	callfunc "corpus_eq", "int column", .@ids[2], 3;
+	callfunc "corpus_eq", "string column", .@names$[1], "beta";
+	callfunc "corpus_eq", "escaped round trip", .@names$[2], "O'Brien";
+	callfunc "corpus_eq", "count", query_sql("SELECT COUNT(*) FROM corpus_sql WHERE id > 1", .@n), 1;
+	callfunc "corpus_eq", "count value", .@n, 2;
+	query_sql "UPDATE corpus_sql SET name = 'gamma' WHERE id = 2";
+	query_sql "SELECT name FROM corpus_sql WHERE id = 2", .@after$;
+	callfunc "corpus_eq", "update", .@after$, "gamma";
+	callfunc "corpus_eq", "no rows", query_sql("SELECT id FROM corpus_sql WHERE id = 99", .@none), 0;
+	query_sql "DROP TABLE corpus_sql";
+
+	// the log database connection
+	callfunc "corpus_eq", "query_logsql", query_logsql("SELECT 6 * 7", .@answer), 1;
+	callfunc "corpus_eq", "query_logsql value", .@answer, 42;
+
+	callfunc "corpus_end";
+	end;
+}
