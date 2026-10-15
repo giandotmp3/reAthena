@@ -1,0 +1,27 @@
+# Fails when a BR-ID in rule_manifest.hpp has no TEST(...) whose name contains it ('-' -> '_').
+file(READ "${MANIFEST}" manifest)
+string(REGEX MATCHALL "BR-[A-Z]+-[0-9][0-9][0-9]" ids "${manifest}")
+list(REMOVE_DUPLICATES ids)
+
+file(GLOB test_sources "${TEST_DIR}/test_*.cpp")
+set(all_tests "")
+foreach(src IN LISTS test_sources)
+  file(READ "${src}" body)
+  string(REGEX MATCHALL "TEST(_F)?\\([A-Za-z0-9_]+, *[A-Za-z0-9_]+" decls "${body}")
+  string(APPEND all_tests "${decls};")
+endforeach()
+
+set(missing "")
+foreach(id IN LISTS ids)
+  string(REPLACE "-" "_" token "${id}")
+  string(FIND "${all_tests}" "${token}_" pos)
+  if(pos EQUAL -1)
+    list(APPEND missing "${id}")
+  endif()
+endforeach()
+
+list(LENGTH ids n)
+if(missing)
+  message(FATAL_ERROR "Rules without an acceptance test: ${missing}")
+endif()
+message(STATUS "All ${n} manifest rules have at least one test.")

@@ -2,7 +2,7 @@
 
 **System:** `rathena` (legacy source: repo root `src/`, `conf/`, `db/`, `sql-files/` @ `d4b8e7b`)
 **Target vision:** Modern C++20 refactor of the whole server suite (login, char, map, web)
-**Status:** Phase A complete. Awaiting HITL checkpoint #1 (P0 capability selection).
+**Status:** HITL #1 and #2 complete; architecture approved; Phase E scaffold in `modernized/rathena-reimagined/`.
 **Brief:** none (`analysis/rathena/MODERNIZATION_BRIEF.md` does not exist). No phase constraints apply.
 
 The legacy system is the **specification source**, not the structural template. All credential values are masked. Connection details appear only as env-var placeholders.
@@ -314,11 +314,11 @@ components:
   schemas:
     Error: { type: string, example: "Error" }
 paths:
-  /userconfig/load:   { post: { security: [], summary: "LEGACY UNAUTHENTICATED (BR-WEB-010)", requestBody: { content: { multipart/form-data: { schema: { properties: { AID: {type: integer}, WorldName: {type: string} } } } } }, responses: { "200": { description: JSON config } , "400": { $ref: "#/components/schemas/Error" } } } }
+  /userconfig/load:   { post: { security: [ { WebToken: [] } ], summary: "auth required (BR-WEB-010 inverted, HITL #1); legacy was unauthenticated", requestBody: { content: { multipart/form-data: { schema: { properties: { AID: {type: integer}, WorldName: {type: string} } } } } }, responses: { "200": { description: JSON config } , "400": { $ref: "#/components/schemas/Error" } } } }
   /userconfig/save:   { post: { security: [ { WebToken: [] } ], summary: "merge; null deletes (BR-WEB-009)" } }
-  /charconfig/load:   { post: { security: [], summary: "LEGACY UNAUTHENTICATED" } }
+  /charconfig/load:   { post: { security: [ { WebToken: [] } ], summary: "auth required (HITL #1)" } }
   /charconfig/save:   { post: { security: [ { WebToken: [] } ], summary: "merge; null preserves (BR-WEB-011)" } }
-  /MerchantStore/load: { post: { security: [] } }
+  /MerchantStore/load: { post: { security: [ { WebToken: [] } ], summary: "auth required (HITL #1)" } }
   /MerchantStore/save: { post: { security: [ { WebToken: [] } ] } }
   /emblem/download:   { post: { security: [ { WebToken: [] } ], responses: { "200": { content: { image/bmp: {}, image/gif: {} } }, "404": {} } } }
   /emblem/upload:     { post: { security: [ { WebToken: [] } ], summary: "guild master only; BMP/GIF <= 50,000 bytes; version++" } }
@@ -329,7 +329,7 @@ paths:
   /party/list:   { post: { security: [ { WebToken: [] } ], responses: { "200": { description: '{"Type":1,"totalPage":n,"data":[...]}' } } } }
   /party/search: { post: { security: [ { WebToken: [] } ] } }
 ```
-The game client calls these routes, so the request/response shapes stay compatible. The auth gaps on the load routes are a decision for HITL #1.
+The game client calls these routes, so the request/response shapes stay compatible. Per HITL #1 the `*/load` routes now require WebToken (legacy left them unauthenticated).
 
 ### 3.5 Persistence, config and outbound
 - **Database:** MySQL, one logical DB plus an optional log DB. Connections: `${LOGIN_DB_URL}`, `${CHAR_DB_URL}`, `${MAP_DB_URL}`, `${WEB_DB_URL}`, `${LOG_DB_URL}` (each defaults to `${DATABASE_URL}`). 66 tables across `main.sql`, `logs.sql` and `web.sql`. Table names can be overridden.

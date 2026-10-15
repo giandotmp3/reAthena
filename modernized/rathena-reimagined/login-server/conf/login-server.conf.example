@@ -1,0 +1,42 @@
+// login-server configuration (example). Values shown are the SHIPPED defaults
+// (spec §5.6: shipped values are the code defaults). No credential literal is
+// ever placed in this file: secrets are read from the environment only.
+//
+// Required environment:
+//   ${LOGIN_DB_URL}       (falls back to ${DATABASE_URL})
+//   ${LOG_DB_URL}         (falls back to ${DATABASE_URL})
+//   ${INTER_SERVER_USER}  char-server registration account (BR-LOGIN-025)
+//   ${INTER_SERVER_PASS}  never a literal (BR-INTER-016)
+//   ${LOGIN_BIND}         listen address, port 6900
+
+login_port: 6900
+new_account: no
+acc_name_min_length: 4
+password_min_length: 4
+allowed_regs: 1
+time_allowed: 10
+start_limited_time: -1
+case_sensitive: yes
+group_id_to_connect: -1
+min_group_id_to_connect: -1
+chars_per_account: 0
+vip_group: 5
+vip_char_increase: 6
+client_hash_check: off
+usercount_disable: no
+usercount_low: 200
+usercount_medium: 500
+usercount_high: 1000
+ipban_enable: yes
+dynamic_pass_failure_ban: yes
+dynamic_pass_failure_ban_interval: 5
+dynamic_pass_failure_ban_limit: 7
+dynamic_pass_failure_ban_duration: 5
+ipban_cleanup_interval: 60
+log_login: yes
+// MD5 challenge/response wire shim for old clients (BR-LOGIN-003, M6b).
+// Opt-in, default OFF. Documented residual risk when enabled.
+md5_challenge_shim: off
+// Password hashing pool (architecture §7): workers default to hardware cores.
+hash_pool_workers: 0
+hash_pool_queue_depth: 256
