@@ -1,6 +1,9 @@
 // Acceptance tests: rules/skills, BR-MAP-051..055 (spec §5.4, CAP-16).
 #include <gtest/gtest.h>
 
+#include <set>
+
+#include "golden_vectors.hpp"
 #include "rathena/map_rules/skills.hpp"
 
 namespace mr = rathena::map_rules;
@@ -153,6 +156,49 @@ TEST(Skills, BR_MAP_053_DelayRateScalesLast) {
 	EXPECT_EQ(sk::after_cast_delay({.base_delay_ms = 1000, .status_reduction_pct = 50}, cfg), 250);
 	cfg.delay_rate = 0;
 	EXPECT_EQ(sk::after_cast_delay({.base_delay_ms = 1000}, cfg), 0);
+}
+
+TEST(Skills, BR_MAP_053_MatchesGoldenAfterCastDelays) {
+	// Captured from legacy skill_delayfix (the code as it was before the rule moved here, run next to
+	// the rule on every call: tools/golden/capture.sh re). A priest cast skills over AGI x DEX, with
+	// delay_dependon_dex/agi and delay_rate changed through setbattleflag, Poem of Bragi, bDelayRate
+	// and bSkillDelay. Not covered by the capture: monk combos, soul-link halving, Basilica and the
+	// DelayNo* flags (no shipped skill sets them); they stay with the worked examples above.
+	const auto vectors = golden::load("skill_delay_re.jsonl");
+	ASSERT_GE(vectors.size(), 80u) << "golden vectors missing; run tools/golden/capture.sh re";
+	std::set<std::int64_t> bases;
+	bool saw_dex_reduction = false, saw_agi_reduction = false, saw_status = false, saw_item = false;
+	for (const auto& v : vectors) {
+		sk::AfterCastDelayInput in;
+		in.kind = static_cast<sk::DelaySkillKind>(golden::at(v, "delay_kind"));
+		in.unit_type = static_cast<std::int32_t>(golden::at(v, "unit_type"));
+		in.base_delay_ms = static_cast<std::int32_t>(golden::at(v, "base_delay_ms"));
+		in.amotion = static_cast<std::int32_t>(golden::at(v, "amotion"));
+		in.delaynodex = static_cast<std::uint8_t>(golden::at(v, "delaynodex"));
+		in.agi = static_cast<std::int32_t>(golden::at(v, "agi"));
+		in.dex = static_cast<std::int32_t>(golden::at(v, "dex"));
+		in.basilica_active = golden::at(v, "basilica_active") != 0;
+		in.soul_link_halves = golden::at(v, "soul_link_halves") != 0;
+		in.status_reduction_pct = static_cast<std::int32_t>(golden::at(v, "status_reduction_pct"));
+		in.bonus_delay_rate = static_cast<std::int32_t>(golden::at(v, "bonus_delay_rate"));
+		in.bonus_skill_delay_ms = static_cast<std::int32_t>(golden::at(v, "bonus_skill_delay_ms"));
+		mr::BattleConfig cfg;
+		cfg.delay_dependon_dex = golden::at(v, "cfg_delay_dependon_dex") != 0;
+		cfg.delay_dependon_agi = golden::at(v, "cfg_delay_dependon_agi") != 0;
+		cfg.castrate_dex_scale = static_cast<std::int32_t>(golden::at(v, "cfg_castrate_dex_scale"));
+		cfg.delay_rate = static_cast<std::int32_t>(golden::at(v, "cfg_delay_rate"));
+		EXPECT_EQ(sk::after_cast_delay(in, cfg), golden::at(v, "result")) << golden::str(v);
+		bases.insert(in.base_delay_ms);
+		saw_dex_reduction |= cfg.delay_dependon_dex;
+		saw_agi_reduction |= cfg.delay_dependon_agi;
+		saw_status |= in.status_reduction_pct != 0;
+		saw_item |= in.bonus_delay_rate != 0 || in.bonus_skill_delay_ms != 0;
+	}
+	// The capture must have exercised every branch it claims to cover.
+	EXPECT_GE(bases.size(), 4u);
+	EXPECT_TRUE(saw_dex_reduction && saw_agi_reduction) << "no delay_dependon_dex/agi vectors";
+	EXPECT_TRUE(saw_status) << "no Poem of Bragi vectors";
+	EXPECT_TRUE(saw_item) << "no bDelayRate/bSkillDelay vectors";
 }
 
 TEST(Skills, BR_MAP_054_CooldownBlocksRecast) {

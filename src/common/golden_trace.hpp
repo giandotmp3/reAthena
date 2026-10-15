@@ -17,7 +17,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <initializer_list>
+#include <string>
 #include <utility>
+#include <vector>
 
 inline void golden_trace( const char* kind, std::initializer_list<std::pair<const char*, int64_t>> fields ){
 	static FILE* out = [](){
@@ -38,6 +40,25 @@ inline void golden_trace( const char* kind, std::initializer_list<std::pair<cons
 }
 
 #define GOLDEN_TRACE( kind, ... ) golden_trace( kind, { __VA_ARGS__ } )
+
+/// The same record with field names built at run time (a variable number of fields).
+inline void golden_trace_fields( const char* kind, const std::vector<std::pair<std::string, int64_t>>& fields ){
+	static FILE* out = [](){
+		const char* path = std::getenv( "RATHENA_GOLDEN_TRACE_FILE" );
+		return ( path != nullptr && *path != '\0' ) ? std::fopen( path, "a" ) : nullptr;
+	}();
+
+	if( out == nullptr ){
+		return;
+	}
+
+	std::fprintf( out, "{\"kind\":\"%s\"", kind );
+	for( const auto& field : fields ){
+		std::fprintf( out, ",\"%s\":%" PRId64, field.first.c_str(), field.second );
+	}
+	std::fputs( "}\n", out );
+	std::fflush( out );
+}
 
 /// Records `text` (a SQL statement) as {"kind":kind,"seq":n,"text":"..."}, numbered in call order.
 inline void golden_trace_text( const char* kind, const char* text ){

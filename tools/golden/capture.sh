@@ -102,9 +102,17 @@ capture() {
 import json, sys, collections
 trace, out_dir, mode = sys.argv[1:]
 by_kind = collections.defaultdict(set)
+# The drop and after-cast delay sweeps run last. They change jobs, stats, equipment and buffs, and
+# fight, so the traces of the earlier sweeps (ASPD, defense) would depend on their timing: once the
+# first record of a late sweep is seen, only the late sweeps' own kinds are kept.
+LATE_SWEEPS = {"skull_drop", "nightmare_drop", "skill_delay"}
+late = False
 for line in open(trace):
     rec = json.loads(line)
     kind = rec.pop("kind")
+    late = late or kind in LATE_SWEEPS
+    if late and kind not in LATE_SWEEPS:
+        continue
     by_kind[kind].add(json.dumps(rec, sort_keys=True))
 for kind, rows in by_kind.items():
     name = f"{kind}_{'pre_re' if mode == 'prere' else 're'}.jsonl"

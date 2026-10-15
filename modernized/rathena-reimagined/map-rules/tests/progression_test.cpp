@@ -4,9 +4,12 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <vector>
 
+#include "golden_vectors.hpp"
 #include "rathena/map_rules/progression.hpp"
+#include "rathena/map_rules/rng.hpp"
 
 namespace mr = rathena::map_rules;
 namespace pg = rathena::map_rules::progression;
@@ -264,6 +267,32 @@ TEST(Progression, BR_MAP_033_SkullCarriesVictimCharIdAsCreator) {
 	EXPECT_EQ(skull->card, cards);
 }
 
+TEST(Progression, BR_MAP_033_MatchesGoldenSkullDrops) {
+	// Captured from legacy pc_dead (the bone_drop test and the skull as they were before the rule moved
+	// here, evaluated next to it on every death: tools/golden/capture.sh re). bone_drop 0/1/2 on maps with
+	// and without the pvp mapflag, for the capture character.
+	const auto vectors = golden::load("skull_drop_re.jsonl");
+	ASSERT_GE(vectors.size(), 6u) << "golden vectors missing; run tools/golden/capture.sh re";
+	bool dropped = false, kept = false;
+	for (const auto& v : vectors) {
+		auto cfg = re();
+		cfg.bone_drop = static_cast<std::int32_t>(golden::at(v, "cfg_bone_drop"));
+		const auto skull = pg::death_skull_drop({static_cast<std::int32_t>(golden::at(v, "char_id"))},
+		                                         golden::at(v, "pvp_map") != 0, cfg);
+		ASSERT_EQ(skull.has_value(), golden::at(v, "legacy_drops") != 0) << golden::str(v);
+		(skull ? dropped : kept) = true;
+		if (!skull) continue;
+		EXPECT_EQ(skull->nameid, golden::at(v, "legacy_nameid")) << golden::str(v);
+		EXPECT_EQ(skull->amount, 1) << golden::str(v);
+		EXPECT_EQ(skull->identify ? 1 : 0, golden::at(v, "legacy_identify")) << golden::str(v);
+		EXPECT_EQ(skull->card[0], golden::at(v, "legacy_card0")) << golden::str(v);
+		EXPECT_EQ(skull->card[1], 0) << golden::str(v);
+		EXPECT_EQ(skull->card[2], golden::at(v, "legacy_card2")) << golden::str(v);
+		EXPECT_EQ(skull->card[3], golden::at(v, "legacy_card3")) << golden::str(v);
+	}
+	EXPECT_TRUE(dropped && kept) << "the capture must cover both outcomes";
+}
+
 // --- BR-MAP-034: pc.cpp pc_dead (MF_PVP_NIGHTMAREDROP) ---------------------------------------
 
 namespace {
@@ -361,3 +390,40 @@ TEST(Progression, BR_MAP_034_RandomDropAlwaysPicksAnEligibleSlotSeeded) {
 	EXPECT_LT(drops, 600);
 }
 
+TEST(Progression, BR_MAP_034_MatchesGoldenNightmareDrops) {
+	// Captured from legacy pc_dead (the selection as it was before the rule moved here, run next to it
+	// from the same generator state on every death in a pvp_nightmaredrop map: tools/golden/capture.sh re).
+	// Each vector holds the rule, the occupied inventory slots and the raw rnd() values the original code
+	// drew. Replaying those values through the rule must pick the same slot and draw the same number.
+	const auto vectors = golden::load("nightmare_drop_re.jsonl");
+	ASSERT_GE(vectors.size(), 20u) << "golden vectors missing; run tools/golden/capture.sh re";
+	bool random_rule = false, item_rule = false, picked = false, missed = false, rolled_twice = false;
+	for (const auto& v : vectors) {
+		const pg::NightmareDropRule rule{static_cast<std::int32_t>(golden::at(v, "drop_id")),
+		                                  static_cast<std::int32_t>(golden::at(v, "drop_per")),
+		                                  static_cast<std::uint8_t>(golden::at(v, "drop_type"))};
+		std::vector<pg::NightmareSlot> slots;
+		for (std::int64_t k = 0; k < golden::at(v, "slots"); ++k) {
+			const std::string name = "s" + std::to_string(k);
+			slots.push_back({static_cast<std::int32_t>(golden::at(v, (name + "_nameid").c_str())),
+			                 static_cast<std::int32_t>(golden::at(v, (name + "_amount").c_str())),
+			                 golden::at(v, (name + "_equip").c_str()) != 0,
+			                 golden::at(v, (name + "_droppable").c_str()) != 0});
+		}
+		std::vector<std::uint32_t> draws;
+		for (std::int64_t k = 0; k < golden::at(v, "draws"); ++k) {
+			draws.push_back(static_cast<std::uint32_t>(golden::at(v, ("d" + std::to_string(k)).c_str())));
+		}
+		mr::SequenceRng rng(draws);
+		const auto pick = pg::nightmare_drop_pick(rule, slots, rng);
+		EXPECT_EQ(pick.has_value() ? static_cast<std::int64_t>(*pick) : -1, golden::at(v, "legacy_pick")) << golden::str(v);
+		EXPECT_EQ(rng.calls(), draws.size()) << "the rule drew a different number of values: " << golden::str(v);
+		EXPECT_EQ(golden::at(v, "same_stream"), 1) << "the live rule left the generator elsewhere: " << golden::str(v);
+		(rule.drop_id == -1 ? random_rule : item_rule) = true;
+		(pick ? picked : missed) = true;
+		rolled_twice |= draws.size() >= 2;
+	}
+	EXPECT_TRUE(random_rule && item_rule) << "the capture must cover 'random' and item-id rules";
+	EXPECT_TRUE(picked && missed) << "the capture must cover drops and misses";
+	EXPECT_TRUE(rolled_twice) << "no random pick (roll + index) captured";
+}

@@ -6,18 +6,37 @@
 //= walks through stat, class and weapon combinations so the
 //= traced legacy functions record their inputs and outputs:
 //=  - renewal build:     ASPD (status_base_amotion_pc) for many
-//=                       class x weapon x AGI x DEX combinations
+//=                       class x weapon x AGI x DEX combinations, and
+//=                       the skull and nightmare drops of a dying player
+//=                       (pc_dead), and the after-cast delay
+//=                       (skill_delayfix) of skills cast over AGI x DEX x
+//=                       delay settings x statuses
 //=  - pre-renewal build: defense reduction with monsters hitting
 //=                       the character and the character hitting
 //=                       monsters, over a range of VIT/DEF values
 //= Prints "GOLDEN DONE" when finished.
 //============================================================
 
+// Nightmare drop rules of the map the capture character stands on, tried in this order on every death:
+// "random" and item-id rules, on worn and carried items, at uncertain and certain rates. (The script command
+// setmapflag only installs the standard random,equip,300 rule, so the rules are defined here.)
+iz_int	mapflag	pvp_nightmaredrop	random,all,5000
+iz_int	mapflag	pvp_nightmaredrop	random,all,2500
+iz_int	mapflag	pvp_nightmaredrop	501,inventory,5000
+iz_int	mapflag	pvp_nightmaredrop	1201,all,7000
+iz_int	mapflag	pvp_nightmaredrop	2101,equip,10000
+iz_int	mapflag	pvp_nightmaredrop	501,all,10000
+iz_int	mapflag	pvp_nightmaredrop	909,all,10000
+iz_int	mapflag	pvp_nightmaredrop	random,inventory,10000
+iz_int	mapflag	pvp_nightmaredrop	random,equip,10000
+
 -	script	golden_driver	-1,{
 OnPCLoginEvent:
 	sleep2 2000; // let the client finish loading
 	if (checkre(0)) {
 		callsub S_Aspd;
+		callsub S_Drops;
+		callsub S_Delay;
 	} else {
 		BaseLevel = 99; // survives the fights; stats are set per round
 		percentheal 100, 100;
@@ -33,6 +52,128 @@ OnPCLoginEvent:
 // Sets base stat <param> of character <cid> to <value>.
 S_SetStat:
 	statusup2 getarg(1), getarg(2) - readparam(getarg(1), getarg(0)), getarg(0);
+	return;
+
+// Kills the character <account id> (<char id>) and revives it. Detached from it, as a script cannot kill the
+// player it runs for.
+S_Die:
+	.@aid = getarg(0);
+	.@cid = getarg(1);
+	detachrid;
+	unitkill .@aid;
+	sleep 700;
+	recovery 0, .@cid;
+	sleep 300;
+	attachrid(.@aid);
+	return;
+
+S_Drops:
+	.@aid = getcharid(3);
+	.@cid = getcharid(0);
+	getmapxy(.@map$, .@x, .@y, BL_PC);
+	// Skull: bone_drop 0 (never), 1 (PvP maps) and 2 (always), on a map with and without the pvp mapflag
+	for (.@pvp = 0; .@pvp < 2; .@pvp++) {
+		if (.@pvp)
+			setmapflag .@map$, mf_pvp;
+		else
+			removemapflag .@map$, mf_pvp;
+		for (.@bone = 0; .@bone < 3; .@bone++) {
+			setbattleflag "bone_drop", .@bone;
+			callsub S_Die, .@aid, .@cid;
+		}
+	}
+	removemapflag .@map$, mf_pvp;
+	setbattleflag "bone_drop", 0;
+	// Nightmare drops (the rules above) over five inventories, four deaths each
+	for (.@v = 0; .@v < 5; .@v++) {
+		for (.@n = 0; .@n < 4; .@n++) {
+			clearitem;
+			if (.@v < 4) {
+				getitem 501, 5; // Red Potion x5
+				getitem 502, 1; // Orange Potion
+				getitem 909, 2; // Jellopy x2
+			}
+			if (.@v < 2) {
+				getitem 1201, 1; // Knife
+				getitem 2101, 1; // Guard
+			}
+			if (.@v == 0) {
+				getitem 1101, 1; // spare Sword
+				equip 1201;
+				equip 2101;
+			}
+			if (.@v == 2) {
+				getitem 1201, 1;
+				equip 1201;
+			}
+			callsub S_Die, .@aid, .@cid;
+		}
+	}
+	clearitem;
+	return;
+
+// Casts <skill id>, <level> at the character itself or at the monster <target gid>, then waits for the
+// after-cast delay to pass. Runs detached from the character (a character busy with a script cannot cast),
+// so the caller passes its account id.
+S_Cast:
+	.@aid = getarg(0);
+	detachrid;
+	unitskilluseid .@aid, getarg(1), getarg(2), getarg(3);
+	sleep getarg(4);
+	attachrid(.@aid);
+	return;
+
+S_Delay:
+	.@aid = getcharid(3);
+	getmapxy(.@map$, .@x, .@y, BL_PC);
+	jobchange 8; // Priest: any class works, the skills below only need SP
+	BaseLevel = 99;
+	statusup2 bStr, 99 - readparam(bStr);
+	statusup2 bInt, 99 - readparam(bInt);
+	// self-cast skills: id, level, wait (ms: the after-cast delay plus the cast time).
+	// Increase AGI (400 ms delay), Heal (500), Impositio Manus (1000), Kyrie Eleison (2000)
+	setarray .@self[0], 29, 10, 2000, 28, 10, 1800, 66, 5, 3000, 73, 10, 4500;
+	// skills cast at a monster: Cold Bolt (1400 ms delay)
+	setarray .@tgt[0], 14, 10, 4500;
+	// AGI x DEX: the lowest, mid, the highest, and both mixed
+	setarray .@agi[0], 1, 60, 130, 30;
+	setarray .@dex[0], 1, 30, 130, 130;
+	// delay_dependon_dex, delay_dependon_agi, delay_rate: the shipped values, then each feature on
+	setarray .@cfg[0], 0, 0, 100, 1, 0, 100, 0, 1, 100, 1, 1, 100, 1, 1, 50;
+	for (.@c = 0; .@c < getarraysize(.@cfg); .@c += 3) {
+		setbattleflag "delay_dependon_dex", .@cfg[.@c];
+		setbattleflag "delay_dependon_agi", .@cfg[.@c + 1];
+		setbattleflag "delay_rate", .@cfg[.@c + 2];
+		for (.@a = 0; .@a < getarraysize(.@agi); .@a++) {
+			statusup2 bAgi, .@agi[.@a] - readparam(bAgi);
+			statusup2 bDex, .@dex[.@a] - readparam(bDex);
+			// the first stat set is swept with the status and item modifiers as well
+			.@variants = (.@c == 0 && .@a == 0) ? 3 : 1;
+			for (.@v = 0; .@v < .@variants; .@v++) {
+				if (.@v == 1)
+					sc_start4 SC_POEMBRAGI, 60000, 10, 10, 30, 0; // val3: 30% less after-cast delay
+				else if (.@v == 2) {
+					sc_end SC_POEMBRAGI;
+					bonus_script "{ bonus bDelayRate,-20; bonus2 bSkillDelay,\"AL_HEAL\",300; }", 600;
+				}
+				for (.@s = 0; .@s < getarraysize(.@self); .@s += 3) {
+					percentheal 100, 100;
+					callsub S_Cast, .@aid, .@self[.@s], .@self[.@s + 1], .@aid, .@self[.@s + 2];
+				}
+				for (.@s = 0; .@s < getarraysize(.@tgt); .@s += 3) {
+					percentheal 100, 100;
+					monster .@map$, .@x, .@y, "--ja--", 1002, 1; // the bolts kill it, so one per cast
+					callsub S_Cast, .@aid, .@tgt[.@s], .@tgt[.@s + 1], $@mobid[0], .@tgt[.@s + 2];
+				}
+			}
+			bonus_script_clear;
+			sc_end SC_POEMBRAGI;
+		}
+	}
+	killmonster .@map$, "All";
+	setbattleflag "delay_dependon_dex", 0;
+	setbattleflag "delay_dependon_agi", 0;
+	setbattleflag "delay_rate", 100;
 	return;
 
 S_Aspd:

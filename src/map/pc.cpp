@@ -17,6 +17,7 @@
 #include <common/core.hpp> // get_svn_revision()
 #include <common/database.hpp>
 #include <common/ers.hpp>  // ers_destroy
+#include <common/golden_trace.hpp>
 #include <common/grfio.hpp>
 #include <common/malloc.hpp>
 #include <common/mmo.hpp> //NAME_LENGTH
@@ -9727,6 +9728,109 @@ void pc_close_npc(map_session_data *sd,int32 flag)
 	}
 }
 
+#ifdef RATHENA_GOLDEN_TRACE
+// The nightmare-drop selection of before BR-MAP-034 moved to map-rules, minus its side effects: the
+// inventory index it would have dropped (-1: none), with every rnd() it drew in `draws`. Capture builds
+// run it next to the rule from the same generator state (tools/golden/capture.sh), so the golden
+// vectors come from the original code, not from the rule they test.
+static int32 pc_nightmare_pick_legacy( map_session_data& sd, int32 id, int32 per, int32 type, std::vector<int32>& draws ){
+	const auto draw = [&draws]() -> int32 {
+		const int32 value = rnd();
+		draws.push_back( value );
+		return value;
+	};
+	struct item* items = sd.inventory.u.items_inventory;
+
+	if( id == -1 ){
+		int32 eq_num = 0, eq_n[MAX_INVENTORY];
+		memset( eq_n, 0, sizeof( eq_n ) );
+		for( int32 i = 0; i < MAX_INVENTORY; i++ ){
+			if( items[i].nameid == 0 ){
+				continue;
+			}
+
+			if( !pc_candrop( &sd, &items[i] ) ){
+				continue;
+			}
+
+			if( ( type&NMDT_INVENTORY && !items[i].equip )
+				|| ( type&NMDT_EQUIP && items[i].equip )
+				|| type == NMDT_ALL )
+			{
+				eq_n[eq_num++] = i;
+			}
+		}
+		if( eq_num > 0 ){
+			if( draw()%10000 < per ){
+				return eq_n[draw() % eq_num];
+			}
+		}
+	}else if( id > 0 ){
+		for( int32 i = 0; i < MAX_INVENTORY; i++ ){
+			if( items[i].nameid == id
+				&& pc_candrop( &sd, &items[i] )
+				&& draw()%10000 < per
+				&& ( ( type&NMDT_INVENTORY && !items[i].equip )
+					|| ( type&NMDT_EQUIP && items[i].equip )
+					|| type == NMDT_ALL ) ){
+				return i;
+			}
+		}
+	}
+
+	return -1;
+}
+
+// Records one nightmare-drop decision: the rule, the occupied inventory slots, the raw draws the original
+// code made, and what it and the map-rules function picked (as indexes into the occupied slots, -1: none).
+static void pc_nightmare_trace( map_session_data& sd, int32 id, int32 per, int32 type, const std::vector<int32>& draws, int32 legacy_pick, int32 rule_pick, bool same_stream ){
+	constexpr size_t MAX_TRACED = 16;
+	std::vector<int32> occupied;
+
+	for( int32 i = 0; i < MAX_INVENTORY; i++ ){
+		if( sd.inventory.u.items_inventory[i].nameid != 0 ){
+			occupied.push_back( i );
+		}
+	}
+
+	if( occupied.size() > MAX_TRACED || draws.size() > MAX_TRACED ){
+		return;
+	}
+
+	const auto compact = [&occupied]( int32 index ) -> int64 {
+		for( size_t k = 0; k < occupied.size(); k++ ){
+			if( occupied[k] == index ){
+				return static_cast<int64>( k );
+			}
+		}
+		return -1;
+	};
+	// The fixed fields, then one group per occupied slot and one per draw (golden_trace takes a flat list).
+	std::vector<std::pair<std::string, int64>> fields = {
+		{ "drop_id", id }, { "drop_per", per }, { "drop_type", type },
+		{ "slots", static_cast<int64>( occupied.size() ) }, { "draws", static_cast<int64>( draws.size() ) },
+		{ "legacy_pick", legacy_pick < 0 ? -1 : compact( legacy_pick ) }, { "rule_pick", rule_pick < 0 ? -1 : compact( rule_pick ) },
+		{ "same_stream", same_stream },
+	};
+
+	for( size_t k = 0; k < occupied.size(); k++ ){
+		struct item& inv = sd.inventory.u.items_inventory[occupied[k]];
+		const std::string name = "s" + std::to_string( k );
+
+		fields.push_back( { name + "_nameid", static_cast<int64>( inv.nameid ) } );
+		fields.push_back( { name + "_amount", static_cast<int64>( inv.amount ) } );
+		fields.push_back( { name + "_equip", static_cast<int64>( inv.equip != 0 ) } );
+		fields.push_back( { name + "_droppable", static_cast<int64>( pc_candrop( &sd, &inv ) ) } );
+	}
+
+	for( size_t k = 0; k < draws.size(); k++ ){
+		fields.push_back( { "d" + std::to_string( k ), draws[k] } );
+	}
+
+	golden_trace_fields( "nightmare_drop", fields );
+}
+#endif
+
 /*==========================================
  * Invoked when a player has negative current hp
  *------------------------------------------*/
@@ -9950,6 +10054,21 @@ int32 pc_dead(map_session_data *sd,block_list *src)
 	}
 
 	// BR-MAP-033 (map-rules): bone_drop 2 everywhere, 1 on PvP maps: a skull carrying the victim's char id.
+#ifdef RATHENA_GOLDEN_TRACE
+	{
+		// The bone_drop test and the skull as they were before BR-MAP-033 moved to map-rules.
+		const bool legacy_drops = battle_config.bone_drop == 2 || ( battle_config.bone_drop == 1 && mapdata->getMapFlag( MF_PVP ) );
+		const std::optional<rules::Item> rule_skull = rules::progression::death_skull_drop( rules::CharId{ static_cast<int32>( sd->status.char_id ) }, mapdata->getMapFlag( MF_PVP ) != 0, rules_config() );
+
+		GOLDEN_TRACE( "skull_drop",
+			{ "char_id", sd->status.char_id }, { "pvp_map", mapdata->getMapFlag( MF_PVP ) != 0 }, { "cfg_bone_drop", battle_config.bone_drop },
+			{ "legacy_drops", legacy_drops }, { "legacy_nameid", legacy_drops ? ITEMID_SKULL_ : 0 }, { "legacy_identify", legacy_drops ? 1 : 0 },
+			{ "legacy_card0", legacy_drops ? CARD0_CREATE : 0 }, { "legacy_card2", legacy_drops ? GetWord( sd->status.char_id, 0 ) : 0 },
+			{ "legacy_card3", legacy_drops ? GetWord( sd->status.char_id, 1 ) : 0 },
+			{ "rule_drops", rule_skull.has_value() }, { "rule_nameid", rule_skull.has_value() ? rule_skull->nameid : 0 } );
+	}
+#endif
+
 	if( const std::optional<rules::Item> skull = rules::progression::death_skull_drop( rules::CharId{ static_cast<int32>( sd->status.char_id ) }, mapdata->getMapFlag( MF_PVP ) != 0, rules_config() ); skull.has_value() )
 	{
 		struct item item_tmp;
@@ -10054,7 +10173,17 @@ int32 pc_dead(map_session_data *sd,block_list *src)
 				slots[i].droppable = pc_candrop( sd, &sd->inventory.u.items_inventory[i] );
 			}
 
+#ifdef RATHENA_GOLDEN_TRACE
+			const std::mt19937 rng_before = generator;
+			std::vector<int32> legacy_draws;
+			const int32 legacy_pick = pc_nightmare_pick_legacy( *sd, it.drop_id, it.drop_per, it.drop_type, legacy_draws );
+			const std::mt19937 rng_after_legacy = generator;
+			generator = rng_before; // the rule starts from the same state as the original code did
+#endif
 			const std::optional<size_t> pick = rules::progression::nightmare_drop_pick( rule, slots, rules_rng() );
+#ifdef RATHENA_GOLDEN_TRACE
+			pc_nightmare_trace( *sd, it.drop_id, it.drop_per, it.drop_type, legacy_draws, legacy_pick, pick.has_value() ? static_cast<int32>( *pick ) : -1, generator == rng_after_legacy );
+#endif
 
 			if( pick.has_value() ){
 				int32 n = static_cast<int32>( *pick );

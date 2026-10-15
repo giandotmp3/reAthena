@@ -11,7 +11,7 @@ tools/golden/capture.sh re         # one mode
 | Mode | What runs | Output |
 |---|---|---|
 | `rng` | `rng_capture.cpp` built against `src/common/random.cpp` | `core/tests/golden/rng.jsonl`: the seeded legacy stream |
-| `re` | renewal login/char/map servers | `map-rules/tests/golden/aspd_re_re.jsonl`: `status_base_amotion_pc` |
+| `re` | renewal login/char/map servers | `map-rules/tests/golden/aspd_re_re.jsonl`: `status_base_amotion_pc`; `skill_delay_re.jsonl`: `skill_delayfix`; `skull_drop_re.jsonl`, `nightmare_drop_re.jsonl`: the death drops of `pc_dead` (the last three come from the pre-delegation code kept as an oracle in capture builds) |
 | `prere` | pre-renewal servers (`PRERE`) | `map-rules/tests/golden/defense_{pc,mob}_pre_re.jsonl`: `battle_calc_defense_reduction` |
 | `chardel` | renewal servers, `golden_chardel.txt`, then a delete through the client (CH_DELETE_CHAR3) | `persistence/tests/golden/char_delete_sql.jsonl`: every statement `char_delete()` ran, in order (`GOLDEN_SQL_SCOPE`) |
 
@@ -27,6 +27,8 @@ How a server capture works:
    pre-renewal it has monsters of varied VIT/DEF fight the character over a range of VIT.
 4. Each traced call appends one JSON line to `RATHENA_GOLDEN_TRACE_FILE`. The script writes the
    de-duplicated, sorted vectors per kind into the test trees.
+
+Rules already delegated to map-rules are pinned through an oracle: keep the original code under `#ifdef RATHENA_GOLDEN_TRACE`, run it next to the rule on every call and trace its result with the inputs (see `skill_delayfix_legacy` in `src/map/skill.cpp`), so the vectors do not come from the rule they test. `golden_trace_fields()` records a variable number of fields. A sweep that changes jobs, stats or equipment must be listed in `LATE_SWEEPS` in `capture.sh`.
 
 Adding a vector kind: put a `GOLDEN_TRACE( "kind", { "field", value }, ... )` where the legacy code
 computes the value (record the inputs the modern rule takes and the result), drive it from

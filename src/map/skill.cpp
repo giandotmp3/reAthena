@@ -12,6 +12,7 @@
 
 #include <common/cbasetypes.hpp>
 #include <common/ers.hpp>
+#include <common/golden_trace.hpp>
 #include <common/malloc.hpp>
 #include <common/nullpo.hpp>
 #include <common/random.hpp>
@@ -10417,6 +10418,122 @@ int32 skill_vfcastfix(block_list *bl, double time, uint16 skill_id, uint16 skill
 /*==========================================
  * Does delay reductions based on dex/agi, sc data, item bonuses, ...
  *------------------------------------------*/
+#ifdef RATHENA_GOLDEN_TRACE
+// The skill_delayfix of before BR-MAP-053 moved to map-rules, verbatim. Capture builds run it next to
+// the rule on every call and record its result (tools/golden/capture.sh), so the golden vectors come
+// from the original code, not from the rule they test.
+static int32 skill_delayfix_legacy(block_list *bl, uint16 skill_id, uint16 skill_lv)
+{
+	nullpo_ret(bl);
+
+	if (skill_id == SA_ABRACADABRA)
+		return 0; //Will use picked skill's delay.
+
+	if (bl->type&battle_config.no_skill_delay)
+		return battle_config.min_skill_delay_limit;
+
+	int32 delaynodex = skill_get_delaynodex(skill_id);
+	double time = skill_get_delay(skill_id, skill_lv);
+
+	if (time < 0)
+		time = -time + status_get_amotion(bl);	// If set to <0, add to attack motion.
+
+	status_change* sc = status_get_sc(bl);
+
+	// Delay reductions
+	switch (skill_id) {	//Monk combo skills have their delay reduced by agi/dex.
+		case MO_TRIPLEATTACK:
+		case MO_CHAINCOMBO:
+		case MO_COMBOFINISH:
+		case CH_TIGERFIST:
+		case CH_CHAINCRUSH:
+		case SR_DRAGONCOMBO:
+		case SR_FALLENEMPIRE:
+		case SJ_PROMINENCEKICK:
+			//If delay not specified, it will be 1000 - 4*agi - 2*dex
+			if (time == 0)
+				time = 1000;
+			time -= (4 * status_get_agi(bl) + 2 * status_get_dex(bl));
+			break;
+#ifndef RENEWAL
+		case HP_BASILICA:
+			if (sc && !sc->getSCE(SC_BASILICA))
+				time = 0; // There is no Delay on Basilica creation, only on cancel
+			break;
+#endif
+		default:
+			if (battle_config.delay_dependon_dex && !(delaynodex&1)) { // if skill delay is allowed to be reduced by dex
+				int32 scale = battle_config.castrate_dex_scale - status_get_dex(bl);
+
+				if (scale > 0)
+					time = time * scale / battle_config.castrate_dex_scale;
+				else //To be capped later to minimum.
+					time = 0;
+			}
+			if (battle_config.delay_dependon_agi && !(delaynodex&1)) { // if skill delay is allowed to be reduced by agi
+				int32 scale = battle_config.castrate_dex_scale - status_get_agi(bl);
+
+				if (scale > 0)
+					time = time * scale / battle_config.castrate_dex_scale;
+				else //To be capped later to minimum.
+					time = 0;
+			}
+	}
+
+	if (sc != nullptr && !sc->empty()) {
+		if (sc->getSCE(SC_SPIRIT)) {
+			switch (skill_id) {
+				case CR_SHIELDBOOMERANG:
+					if (sc->getSCE(SC_SPIRIT)->val2 == SL_CRUSADER)
+						time /= 2;
+					break;
+				case AS_SONICBLOW:
+					if (!map_flag_gvg2(bl->m) && !map_getmapflag(bl->m, MF_BATTLEGROUND) && sc->getSCE(SC_SPIRIT)->val2 == SL_ASSASIN)
+						time /= 2;
+					break;
+			}
+		}
+	}
+
+	int32 delay = 0;
+
+	if (!(delaynodex&2)) {
+		if (sc != nullptr && !sc->empty()) {
+			if (sc->getSCE(SC_POEMBRAGI))
+				delay += sc->getSCE(SC_POEMBRAGI)->val3;
+			if (sc->getSCE(SC_WIND_INSIGNIA) && sc->getSCE(SC_WIND_INSIGNIA)->val1 == 3 && skill_get_type(skill_id) == BF_MAGIC && skill_get_ele(skill_id, skill_lv) == ELE_WIND)
+				delay += 50; // After Delay of Wind element spells reduced by 50%.
+			if (sc->getSCE(SC_MAGICMUSHROOM) && sc->getSCE(SC_MAGICMUSHROOM)->val3 == 0)
+				delay += sc->getSCE(SC_MAGICMUSHROOM)->val2;
+		}
+	}
+
+	if (!(delaynodex&4) && bl->type == BL_PC) {
+		map_session_data* sd = (map_session_data*)bl;
+
+		if (sd->bonus.delayrate != 0) // bonus bDelayRate
+			delay += sd->bonus.delayrate;
+
+		for (auto &it : sd->skilldelay) { // bonus2 bSkillDelay
+			if (it.id == skill_id) {
+				time += it.val;
+				break;
+			}
+		}
+	}
+
+	if (delay != 0)
+		time = time * (1 - (float)min(delay, 100) / 100);
+
+	if (battle_config.delay_rate != 100)
+		time = time * battle_config.delay_rate / 100;
+
+	//ShowInfo("Delay delayfix = %f\n",time);
+
+	return max((int32)time,0);
+}
+#endif
+
 int32 skill_delayfix(block_list *bl, uint16 skill_id, uint16 skill_lv)
 {
 	nullpo_ret(bl);
@@ -10496,7 +10613,21 @@ int32 skill_delayfix(block_list *bl, uint16 skill_id, uint16 skill_lv)
 		}
 	}
 
+#ifdef RATHENA_GOLDEN_TRACE
+	const int32 rule_result = rules::skills::after_cast_delay( in, rules_config() );
+	GOLDEN_TRACE( "skill_delay",
+		{ "delay_kind", static_cast<int64>( in.kind ) }, { "unit_type", in.unit_type }, { "base_delay_ms", in.base_delay_ms },
+		{ "amotion", in.amotion }, { "delaynodex", in.delaynodex }, { "agi", in.agi }, { "dex", in.dex },
+		{ "basilica_active", in.basilica_active }, { "soul_link_halves", in.soul_link_halves },
+		{ "status_reduction_pct", in.status_reduction_pct }, { "bonus_delay_rate", in.bonus_delay_rate },
+		{ "bonus_skill_delay_ms", in.bonus_skill_delay_ms },
+		{ "cfg_delay_dependon_dex", battle_config.delay_dependon_dex }, { "cfg_delay_dependon_agi", battle_config.delay_dependon_agi },
+		{ "cfg_castrate_dex_scale", battle_config.castrate_dex_scale }, { "cfg_delay_rate", battle_config.delay_rate },
+		{ "result", skill_delayfix_legacy( bl, skill_id, skill_lv ) }, { "rule_result", rule_result } );
+	return rule_result;
+#else
 	return rules::skills::after_cast_delay( in, rules_config() );
+#endif
 }
 
 
