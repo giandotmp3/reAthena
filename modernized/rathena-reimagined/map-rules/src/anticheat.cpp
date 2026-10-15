@@ -20,22 +20,31 @@ Tick logout_lock_remaining(Tick now, Tick last_combat_tick, const BattleConfig& 
 	return cfg.prevent_logout - elapsed + 1;
 }
 
-ChatCheck validate_chat_line(std::string_view own_name, std::string_view raw) {
+ChatSpeakerCheck check_chat_speaker(std::string_view own_name, std::string_view raw) {
 	constexpr std::string_view kSep = " : ";
-	ChatCheck c;
+	ChatSpeakerCheck c;
 	const std::string_view name = own_name.substr(0, std::min(own_name.size(), kNameLength - 1));
-	if (name.empty() || raw.size() < name.size() + kSep.size() + 1) {
-		return c;
+	if (raw.size() < name.size() + kSep.size() + 1) {
+		return c; // Malformed
 	}
 	if (raw.substr(0, name.size()) != name || raw.substr(name.size(), kSep.size()) != kSep) {
-		return c; // speaker-name spoof
+		c.verdict = ChatSpeaker::Spoofed;
+		return c;
 	}
-	std::string_view text = raw.substr(name.size() + kSep.size());
+	c.verdict = ChatSpeaker::Ok;
+	c.message_offset = name.size() + kSep.size();
+	return c;
+}
+
+ChatCheck validate_chat_line(std::string_view own_name, std::string_view raw) {
+	ChatCheck c;
+	const ChatSpeakerCheck speaker = check_chat_speaker(own_name, raw);
+	if (speaker.verdict != ChatSpeaker::Ok) {
+		return c;
+	}
+	std::string_view text = raw.substr(speaker.message_offset);
 	if (const auto nul = text.find('\0'); nul != std::string_view::npos) {
 		text = text.substr(0, nul);
-	}
-	if (text.empty()) {
-		return c;
 	}
 	c.ok = true;
 	c.message = std::string(text);
@@ -51,6 +60,7 @@ FrameCheck check_frame(std::int32_t db_len, std::size_t available, std::uint16_t
 	FrameCheck f;
 	if (db_len == 0) {
 		f.verdict = FrameVerdict::Disconnect; // unknown opcode
+		f.error = FrameError::UnknownOpcode;
 		return f;
 	}
 	std::int32_t len = db_len;
@@ -59,18 +69,21 @@ FrameCheck check_frame(std::int32_t db_len, std::size_t available, std::uint16_t
 			return f; // NeedMore
 		}
 		len = declared_len;
+		f.length = len; // reported in the disconnect warnings too
 		if (len < 4 || len > 32768) {
 			f.verdict = FrameVerdict::Disconnect;
+			f.error = FrameError::BadDeclaredLength;
 			return f;
 		}
 	}
+	f.length = len;
 	if (available < static_cast<std::size_t>(len)) {
 		// Legacy disconnects when the remaining bytes are short of a complete packet.
 		f.verdict = FrameVerdict::Disconnect;
+		f.error = FrameError::Truncated;
 		return f;
 	}
 	f.verdict = FrameVerdict::Ok;
-	f.length = len;
 	return f;
 }
 
@@ -81,7 +94,7 @@ bool packet_allowed(SessionPhase phase, PacketKind kind) {
 	case SessionPhase::Authed:
 		return kind == PacketKind::LoadEndAck;
 	case SessionPhase::OnMap:
-		return kind != PacketKind::WantToConnection;
+		return true;
 	}
 	return false;
 }

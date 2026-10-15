@@ -52,12 +52,15 @@
 #include "pc_groups.hpp"
 #include "pet.hpp"
 #include "quest.hpp"
+#include "rules_bridge.hpp"
 #include "script.hpp"
 #include "skill.hpp"
 #include "status.hpp"
 #include "storage.hpp"
 #include "unit.hpp"
 #include "vending.hpp"
+
+#include <rathena/map_rules/anticheat.hpp>
 
 using namespace rathena;
 
@@ -2137,16 +2140,20 @@ static TIMER_FUNC(clif_delayquit){
  *
  *------------------------------------------*/
 void clif_quitsave(int32 fd,map_session_data *sd) {
-	if (!battle_config.prevent_logout ||
-		sd->canlog_tick == 0 ||
-		DIFF_TICK(gettick(), sd->canlog_tick) > battle_config.prevent_logout)
+	// BR-MAP-056 (map-rules): the combat logout lock lasts prevent_logout ms after the last combat action.
+	const t_tick tick = gettick();
+	const t_tick lock_remaining = rules::anticheat::logout_lock_remaining( tick, sd->canlog_tick, rules_config() );
+
+	if (lock_remaining == 0)
 		map_quit(sd);
 	else if (session_isValid(sd->fd)) {
 		//Disassociate session from player (session is deleted after this function was called)
 		//And set a timer to make him quit later.
 		session[sd->fd]->session_data = nullptr;
 		sd->fd = 0;
-		add_timer(gettick() + 10000, clif_delayquit, sd->id, 0);
+		// [DEFECT fixed] the character used to stay a flat 10000 ms whatever prevent_logout said; it now
+		// leaves when its lock ends.
+		add_timer(tick + lock_remaining, clif_delayquit, sd->id, 0);
 	}
 }
 
@@ -10485,30 +10492,28 @@ static bool clif_process_message(map_session_data* sd, bool whisperFormat, char*
 		messageLength = inputLength - NAME_LENGTH;		
 	}else{
 		// name and message are separated by ' : '
-		size_t separatorLength = strnlen( separator, NAME_LENGTH );
-
 		nameLength = strnlen( sd->status.name, NAME_LENGTH - 1 ); // name length (w/o zero byte)
-		
-		// check if there's enough data provided
-		if( inputLength < nameLength + separatorLength + 1 ){
-			ShowWarning("clif_process_message: Received malformed packet from player '%s' (no username data)!\n", sd->status.name);
-			return false;
-		}
-
 		name = input;
 
-		// validate name
-		if( strncmp( name, sd->status.name, nameLength ) || // the text must start with the speaker's name
-			strncmp( name + nameLength, separator, separatorLength ) ) // followed by the separator
-		{
-			//Hacked message, or infamous "client desynch" issue where they pick one char while loading another.
-			ShowWarning("clif_process_message: Player '%s' sent a message using an incorrect name! Forcing a relog...\n", sd->status.name);
-			set_eof(sd->fd); // Just kick them out to correct it.
-			return false;
+		// BR-MAP-057 (map-rules): the text must start with the speaker's own name followed by the separator,
+		// with at least one byte after it.
+		const rules::anticheat::ChatSpeakerCheck speaker = rules::anticheat::check_chat_speaker( std::string_view( sd->status.name, nameLength ), std::string_view( input, inputLength ) );
+
+		switch( speaker.verdict ){
+			case rules::anticheat::ChatSpeaker::Malformed: // not enough data provided
+				ShowWarning("clif_process_message: Received malformed packet from player '%s' (no username data)!\n", sd->status.name);
+				return false;
+			case rules::anticheat::ChatSpeaker::Spoofed:
+				//Hacked message, or infamous "client desynch" issue where they pick one char while loading another.
+				ShowWarning("clif_process_message: Player '%s' sent a message using an incorrect name! Forcing a relog...\n", sd->status.name);
+				set_eof(sd->fd); // Just kick them out to correct it.
+				return false;
+			default:
+				break;
 		}
 
-		message = input + nameLength + separatorLength;
-		messageLength = inputLength - nameLength - separatorLength;
+		message = input + speaker.message_offset;
+		messageLength = inputLength - speaker.message_offset;
 	}
 
 #if PACKETVER < 20151001
@@ -10614,8 +10619,6 @@ inline void clif_pk_mode_message(map_session_data * sd)
 // Only the first 'invalid' error that appears is used.
 static int32 clif_parse_WantToConnection_sub(int32 fd)
 {
-	int32 value; //Value is used to temporarily store account/char_id/sex
-
 	//By default, start searching on the default one.
 	uint16 cmd = RFIFOW(fd, 0);
 	int16 packet_len;
@@ -10626,18 +10629,17 @@ static int32 clif_parse_WantToConnection_sub(int32 fd)
 	// Figure out, when it happens, that only part of the packet is
 	// received, or fix the function to be able to deal with that
 	// case.
-	if( packet_len != packet_db[cmd].len )
-		return 1; /* wrong length */
-	else if( (value=(int32)RFIFOL(fd, packet_db[cmd].pos[0])) < START_ACCOUNT_NUM || value > END_ACCOUNT_NUM )
-		return 2; /* invalid account_id */
-	else if( (value=(int32)RFIFOL(fd, packet_db[cmd].pos[1])) <= 0 )
-		return 3; /* invalid char_id */
-	/*                   RFIFOL(fd, packet_db[cmd].pos[2]) - don't care about login_id1 */
-	/*                   RFIFOL(fd, packet_db[cmd].pos[3]) - don't care about client_tick */
-	else if( (value=(int32)RFIFOB(fd, packet_db[cmd].pos[4])) != 0 && value != 1 )
-		return 6; /* invalid sex */
-	else
-		return 0;
+	// BR-MAP-060 (map-rules): length, account id range, char id, sex; the first failure is reported.
+	// login_id1 and client_tick are not checked. A negative length (more than 32767 bytes pending) is
+	// passed as a huge size, so it never matches, as before.
+	rules::anticheat::ConnectPacket packet;
+
+	packet.account_id = (int32)RFIFOL(fd, packet_db[cmd].pos[0]);
+	packet.char_id = (int32)RFIFOL(fd, packet_db[cmd].pos[1]);
+	packet.sex = RFIFOB(fd, packet_db[cmd].pos[4]);
+
+	static_assert( START_ACCOUNT_NUM == rules::kStartAccountNum && END_ACCOUNT_NUM == rules::kEndAccountNum );
+	return static_cast<int32>( rules::anticheat::validate_connect( static_cast<size_t>( packet_len ), static_cast<size_t>( packet_db[cmd].len ), packet, false ) );
 }
 
 /// Request to connect to map-server.
@@ -10651,7 +10653,8 @@ void clif_parse_WantToConnection(int32 fd, map_session_data* sd)
 	int32 cmd, account_id, char_id, login_id1, sex, err;
 	t_tick client_tick; //The client tick is a tick, therefore it needs be unsigned. [Skotlex]
 
-	if (sd) {
+	// BR-MAP-060 (map-rules): a connect packet on a session that already has a character is refused.
+	if (rules::anticheat::validate_connect( 0, 0, {}, sd != nullptr ) == rules::anticheat::ConnectError::AlreadyLoggedIn) {
 		ShowError("clif_parse_WantToConnection : invalid request (character already logged in)\n");
 		return;
 	}
@@ -11451,7 +11454,7 @@ void clif_parse_QuitGame(int32 fd, map_session_data *sd)
 {
 	/*	Rovert's prevent logout option fixed [Valaris]	*/
 	if( !sd->sc.getSCE(SC_CLOAKING) && !sd->sc.getSCE(SC_HIDING) && !sd->sc.getSCE(SC_CHASEWALK) && !sd->sc.getSCE(SC_CLOAKINGEXCEED) && !sd->sc.getSCE(SC_SUHIDE) && !sd->sc.getSCE(SC_NEWMOON) &&
-		(!battle_config.prevent_logout || sd->canlog_tick == 0 || DIFF_TICK(gettick(), sd->canlog_tick) > battle_config.prevent_logout) )
+		rules::anticheat::can_logout( gettick(), sd->canlog_tick, rules_config() ) ) // BR-MAP-056 (map-rules)
 	{
 		clif_disconnect_ack(sd, 0);
 		flush_fifo( fd );
@@ -11845,7 +11848,7 @@ void clif_parse_Restart(int32 fd, map_session_data *sd)
 	case 0x01:
 		/*	Rovert's Prevent logout option - Fixed [Valaris]	*/
 		if( !sd->sc.getSCE(SC_CLOAKING) && !sd->sc.getSCE(SC_HIDING) && !sd->sc.getSCE(SC_CHASEWALK) && !sd->sc.getSCE(SC_CLOAKINGEXCEED) && !sd->sc.getSCE(SC_SUHIDE) && !sd->sc.getSCE(SC_NEWMOON) &&
-			(!battle_config.prevent_logout || sd->canlog_tick == 0 || DIFF_TICK(gettick(), sd->canlog_tick) > battle_config.prevent_logout) )
+			rules::anticheat::can_logout( gettick(), sd->canlog_tick, rules_config() ) ) // BR-MAP-056 (map-rules)
 		{	//Send to char-server for character selection.
 			chrif_charselectreq(sd, session[fd]->client_addr);
 		} else {
@@ -25724,8 +25727,13 @@ static int32 clif_parse(int32 fd)
 	}
 #endif
 
+	// BR-MAP-059 (map-rules): framing. An opcode outside the packet db counts as unknown (length 0);
+	// the declared length of a variable-length packet is only read once 4 bytes are there.
+	const int32 db_len = ( cmd > MAX_PACKET_DB || cmd < MIN_PACKET_DB ) ? 0 : packet_db[cmd].len;
+	const rules::anticheat::FrameCheck frame = rules::anticheat::check_frame( db_len, RFIFOREST(fd), ( db_len == -1 && RFIFOREST(fd) >= 4 ) ? RFIFOW(fd,2) : 0 );
+
 	// filter out invalid / unsupported packets
-	if (cmd > MAX_PACKET_DB || cmd < MIN_PACKET_DB || packet_db[cmd].len == 0) {
+	if (frame.error == rules::anticheat::FrameError::UnknownOpcode) {
 		ShowWarning("clif_parse: Received unsupported packet (packet 0x%04x, %d bytes received), disconnecting session #%d.\n", cmd, RFIFOREST(fd), fd);
 
 #ifdef DUMP_INVALID_PACKET
@@ -25755,22 +25763,18 @@ static int32 clif_parse(int32 fd)
 	}
 
 	// determine real packet length
-	packet_len = packet_db[cmd].len;
-	if (packet_len == -1) { // variable-length packet
-		if (RFIFOREST(fd) < 4)
-			return 0;
-
-		packet_len = RFIFOW(fd,2);
-		if (packet_len < 4 || packet_len > 32768) {
-			ShowWarning("clif_parse: Received packet 0x%04x specifies invalid packet_len (%d), disconnecting session #%d.\n", cmd, packet_len, fd);
+	if (frame.verdict == rules::anticheat::FrameVerdict::NeedMore) // variable-length packet without its length yet
+		return 0;
+	packet_len = frame.length;
+	if (frame.error == rules::anticheat::FrameError::BadDeclaredLength) {
+		ShowWarning("clif_parse: Received packet 0x%04x specifies invalid packet_len (%d), disconnecting session #%d.\n", cmd, packet_len, fd);
 #ifdef DUMP_INVALID_PACKET
-			ShowDump(RFIFOP(fd,0), RFIFOREST(fd));
+		ShowDump(RFIFOP(fd,0), RFIFOREST(fd));
 #endif
-			set_eof(fd);
-			return 0;
-		}
+		set_eof(fd);
+		return 0;
 	}
-	if ((int32)RFIFOREST(fd) < packet_len){
+	if (frame.error == rules::anticheat::FrameError::Truncated){
 		ShowWarning( "clif_parse: Received packet 0x%04x with expected packet length %d, but only %d bytes remaining, disconnecting session #%d.\n", cmd, packet_len, RFIFOREST( fd ), fd );
 #ifdef DUMP_INVALID_PACKET
 		ShowDump( RFIFOP( fd, 0 ), RFIFOREST( fd ) );
@@ -25788,12 +25792,14 @@ static int32 clif_parse(int32 fd)
 	if( packet_db[cmd].func == clif_parse_debug )
 		packet_db[cmd].func(fd, sd);
 	else if( packet_db[cmd].func != nullptr ) {
-		if( !sd && packet_db[cmd].func != clif_parse_WantToConnection )
-			; //Only valid packet when there is no session
-		else
-		if( sd && sd->prev == nullptr && packet_db[cmd].func != clif_parse_LoadEndAck )
-			; //Only valid packet when player is not on a map
-		else
+		// BR-MAP-059 (map-rules): without a session only the connect packet is processed, before the map is
+		// loaded only LoadEndAck.
+		const rules::anticheat::SessionPhase phase = !sd ? rules::anticheat::SessionPhase::NoSession
+			: sd->prev == nullptr ? rules::anticheat::SessionPhase::Authed : rules::anticheat::SessionPhase::OnMap;
+		const rules::anticheat::PacketKind kind = packet_db[cmd].func == clif_parse_WantToConnection ? rules::anticheat::PacketKind::WantToConnection
+			: packet_db[cmd].func == clif_parse_LoadEndAck ? rules::anticheat::PacketKind::LoadEndAck : rules::anticheat::PacketKind::Other;
+
+		if( rules::anticheat::packet_allowed( phase, kind ) )
 			packet_db[cmd].func(fd, sd);
 	}
 #ifdef DUMP_UNKNOWN_PACKET

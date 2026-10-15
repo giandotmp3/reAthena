@@ -1,6 +1,9 @@
 // Acceptance tests: rules/anticheat, BR-MAP-056..061 (spec §5.4, CAP-20).
 #include <gtest/gtest.h>
 
+#include <string>
+#include <string_view>
+
 #include "rathena/map_rules/anticheat.hpp"
 
 namespace mr = rathena::map_rules;
@@ -32,6 +35,28 @@ TEST(AntiCheat, BR_MAP_057_ChatSpeakerNameCannotBeSpoofed) {
 	EXPECT_FALSE(ac::validate_chat_line("Alice", "Alicex : hi").ok);
 }
 
+TEST(AntiCheat, BR_MAP_057_SpeakerCheckMatchesClifProcessMessage) {
+	using ac::ChatSpeaker;
+	// Too short for "<name> : " plus one byte: dropped (legacy warns, no kick).
+	EXPECT_EQ(ac::check_chat_speaker("Alice", "Alice : ").verdict, ChatSpeaker::Malformed);
+	EXPECT_EQ(ac::check_chat_speaker("Alice", "Bob").verdict, ChatSpeaker::Malformed);
+	// Wrong name or separator: spoof (legacy kicks the session).
+	EXPECT_EQ(ac::check_chat_speaker("Alice", "Mallory : hi").verdict, ChatSpeaker::Spoofed);
+	EXPECT_EQ(ac::check_chat_speaker("Alice", "Alice: hello").verdict, ChatSpeaker::Spoofed);
+	const auto ok = ac::check_chat_speaker("Alice", "Alice : hi");
+	EXPECT_EQ(ok.verdict, ChatSpeaker::Ok);
+	EXPECT_EQ(ok.message_offset, 8u);
+	// One byte after the separator is enough, even a NUL: legacy accepts an empty message.
+	using namespace std::string_view_literals;
+	EXPECT_EQ(ac::check_chat_speaker("Alice", "Alice : \0"sv).verdict, ChatSpeaker::Ok);
+	const auto empty = ac::validate_chat_line("Alice", "Alice : \0"sv);
+	EXPECT_TRUE(empty.ok);
+	EXPECT_EQ(empty.message, "");
+	// Only the first NAME_LENGTH - 1 = 23 bytes of the own name are compared.
+	const std::string longname(30, 'n');
+	EXPECT_EQ(ac::check_chat_speaker(longname, std::string(23, 'n') + " : x").verdict, ChatSpeaker::Ok);
+}
+
 TEST(AntiCheat, BR_MAP_058_NameRequestForHiddenGmIsFlagged) {
 	EXPECT_TRUE(ac::is_suspicious_name_request({.invisible = true}, 0, 60));
 	EXPECT_FALSE(ac::is_suspicious_name_request({.invisible = true}, 60, 60));     // GM may see
@@ -48,6 +73,16 @@ TEST(AntiCheat, BR_MAP_059_VariableLengthFramingBounds) {
 	EXPECT_EQ(ok.length, 8);
 	EXPECT_EQ(ac::check_frame(0, 8, 0).verdict, ac::FrameVerdict::Disconnect); // unknown opcode
 	EXPECT_EQ(ac::check_frame(19, 10, 0).verdict, ac::FrameVerdict::Disconnect); // truncated fixed packet
+	// Each disconnect says why (legacy logs a different warning), with the length it expected.
+	EXPECT_EQ(ac::check_frame(0, 8, 0).error, ac::FrameError::UnknownOpcode);
+	const auto bad = ac::check_frame(-1, 40000, 32769);
+	EXPECT_EQ(bad.error, ac::FrameError::BadDeclaredLength);
+	EXPECT_EQ(bad.length, 32769);
+	const auto cut = ac::check_frame(19, 10, 0);
+	EXPECT_EQ(cut.error, ac::FrameError::Truncated);
+	EXPECT_EQ(cut.length, 19);
+	EXPECT_EQ(ac::check_frame(-1, 6, 8).error, ac::FrameError::Truncated);
+	EXPECT_EQ(ac::check_frame(-1, 8, 8).error, ac::FrameError::None);
 }
 
 TEST(AntiCheat, BR_MAP_059_PacketsBeforeLoadEndAreRejected) {
@@ -58,7 +93,10 @@ TEST(AntiCheat, BR_MAP_059_PacketsBeforeLoadEndAreRejected) {
 	EXPECT_TRUE(ac::packet_allowed(SessionPhase::Authed, PacketKind::LoadEndAck));
 	EXPECT_FALSE(ac::packet_allowed(SessionPhase::Authed, PacketKind::Other));
 	EXPECT_TRUE(ac::packet_allowed(SessionPhase::OnMap, PacketKind::Other));
-	EXPECT_FALSE(ac::packet_allowed(SessionPhase::OnMap, PacketKind::WantToConnection));
+	// On the map a repeated connect packet still reaches its handler, which refuses it
+	// (validate_connect: AlreadyLoggedIn).
+	EXPECT_TRUE(ac::packet_allowed(SessionPhase::OnMap, PacketKind::WantToConnection));
+	EXPECT_FALSE(ac::packet_allowed(SessionPhase::Authed, PacketKind::WantToConnection));
 }
 
 TEST(AntiCheat, BR_MAP_060_ConnectPacketSanity) {

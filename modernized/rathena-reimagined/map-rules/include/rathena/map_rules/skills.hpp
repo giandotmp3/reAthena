@@ -13,20 +13,49 @@
 
 namespace rathena::map_rules::skills {
 
-/// BR-MAP-051: pre-RE cast time = base x (castrate_dex_scale - DEX) / castrate_dex_scale; DEX at or
-/// above the scale casts instantly.
+/// BR-MAP-051 (skill_castfix, pre-renewal): the DEX step of the cast time, computed as legacy does in
+/// double: time x (float)(castrate_dex_scale - DEX) / castrate_dex_scale. `instant` when DEX is at or
+/// above the scale: legacy then returns 0 at once, before any item or status bonus is applied.
+struct PreReDexCast {
+	bool instant = false;
+	double time = 0;
+};
+PreReDexCast cast_time_pre_re_dex(double time, std::int32_t dex, const BattleConfig& cfg);
+/// BR-MAP-051: the DEX step alone, truncated: base x (castrate_dex_scale - DEX) / castrate_dex_scale,
+/// 0 at or above the scale, never negative.
 std::int32_t cast_time_pre_re(std::int32_t base_ms, std::int32_t dex, const BattleConfig& cfg);
+
+// BR-MAP-052 (skill_vfcastfix, renewal) in legacy's three steps. Item and status modifiers are applied
+// by the caller between the steps, exactly where legacy applies them.
+
+/// Step 1: variable/fixed split. A skill without its own fixed time (`fixed` < 0) gets
+/// default_fixed_castrate% of the cast time as fixed time, computed on the truncated time in integers
+/// ((int32)time x rate / 100), and keeps time x (100 - rate) / 100 in double as variable time;
+/// with default_fixed_castrate <= 0 the fixed time is 0. A skill's own fixed time is kept as is.
+struct CastSplit {
+	double variable = 0;
+	std::int32_t fixed = 0;
+};
+CastSplit cast_split_re(double time, std::int32_t fixed, const BattleConfig& cfg);
+/// Step 2: variable x (1 - sqrt((float)(2 x DEX + INT) / vcast_stat_scale)). Not clamped: a stat
+/// sum above the scale makes it negative, and step 3 caps it at 0.
+double cast_variable_by_stats_re(double variable, std::int32_t dex, std::int32_t int_, const BattleConfig& cfg);
+/// Step 3: variable x (1 - min(var%, 100) / 100), truncated and capped at 0, plus
+/// (1 - min(fixed%, 100) / 100) x max(fixed, 0); the factors and the sum are in float, as in legacy.
+/// Negative percentages lengthen the cast.
+std::int32_t cast_combine_re(double variable, std::int32_t var_reduction_pct, std::int32_t fixed,
+                             std::int32_t fixed_reduction_pct);
 
 struct CastReInput {
 	std::int32_t base_ms = 0;
 	std::int32_t fixed_ms = -1;          // skill_db FixedCastTime; < 0 = default_fixed_castrate% of base
 	std::int32_t dex = 0;
 	std::int32_t int_ = 0;
-	std::int32_t var_reduction_pct = 0;  // reduce_cast_rate (capped at 100)
-	std::int32_t fixed_reduction_pct = 0; // fixcast_r (capped at 100)
+	std::int32_t var_reduction_pct = 0;  // reduce_cast_rate (at most 100 counts)
+	std::int32_t fixed_reduction_pct = 0; // fixcast_r (at most 100 counts)
 };
 /// BR-MAP-052: RE cast = variable x (1 - sqrt((2 x DEX + INT) / vcast_stat_scale)) + fixed
-/// (default fixed = 20% of base). Never negative.
+/// (default fixed = 20% of base): the three steps above with no other modifier. Never negative.
 std::int32_t cast_time_re(const CastReInput& in, const BattleConfig& cfg);
 
 /// Legacy bl_type bits (map.hpp) for `no_skill_delay`.

@@ -102,31 +102,35 @@ bool may_pick_up(const LootRights& r, CharId who, Tick now, const Position& item
 }
 
 VendingOpenError validate_vending_open(const VendingOpenRequest& req, const BattleConfig& cfg) {
+	(void)cfg;
 	if (req.vending_skill_lv <= 0) {
 		return VendingOpenError::NoSkill;
 	}
 	if (!req.has_cart) {
 		return VendingOpenError::NoCart;
 	}
-	if (req.prices.empty()) {
+	if (req.item_count < 1) {
 		return VendingOpenError::NoItems;
 	}
-	if (req.prices.size() > static_cast<std::size_t>(2 + req.vending_skill_lv)) {
+	if (req.item_count > kMaxVendingItems || req.item_count > 2 + req.vending_skill_lv) {
 		return VendingOpenError::TooManyItems;
-	}
-	for (const auto p : req.prices) {
-		if (p < 1 || p > cfg.vending_max_value) {
-			return VendingOpenError::PriceOutOfRange;
-		}
 	}
 	return VendingOpenError::None;
 }
 
-std::int64_t vending_tax(std::int64_t total, const BattleConfig& cfg) {
-	if (cfg.vending_tax <= 0 || total < cfg.vending_tax_min) {
-		return 0;
+std::uint32_t vending_listed_price(std::uint32_t requested, const BattleConfig& cfg) {
+	return std::min(requested, static_cast<std::uint32_t>(cfg.vending_max_value));
+}
+
+double vending_proceeds(double total, const BattleConfig& cfg) {
+	if (cfg.vending_tax != 0 && total >= cfg.vending_tax_min) {
+		total -= total * (cfg.vending_tax / 10000.);
 	}
-	return total * cfg.vending_tax / 10000;
+	return total;
+}
+
+std::int64_t vending_tax(std::int64_t total, const BattleConfig& cfg) {
+	return total - static_cast<std::int64_t>(vending_proceeds(static_cast<double>(total), cfg));
 }
 
 VendingBuyResult vending_buy(const VendingPurchase& p, const BattleConfig& cfg) {
@@ -137,14 +141,13 @@ VendingBuyResult vending_buy(const VendingPurchase& p, const BattleConfig& cfg) 
 		r.error = VendingBuyError::BadAmount;
 		return r;
 	}
-	if (p.amount > p.stock) {
-		r.error = VendingBuyError::OutOfStock;
+	const std::int64_t total = static_cast<std::int64_t>(p.unit_price) * p.amount;
+	if (total > p.buyer_zeny.value() || total > kMaxZeny) {
+		r.error = VendingBuyError::NotEnoughZeny;
 		return r;
 	}
-	const std::int64_t total = static_cast<std::int64_t>(p.unit_price) * p.amount;
-	const auto buyer_after = p.buyer_zeny.debited(total);
-	if (!buyer_after) {
-		r.error = VendingBuyError::NotEnoughZeny;
+	if (total + p.seller_zeny.value() > kMaxZeny) {
+		r.error = VendingBuyError::SellerZenyOverflow; // checked before tax, as legacy does
 		return r;
 	}
 	if (static_cast<std::int64_t>(p.buyer_weight) + static_cast<std::int64_t>(p.item_weight) * p.amount >
@@ -152,15 +155,14 @@ VendingBuyResult vending_buy(const VendingPurchase& p, const BattleConfig& cfg) 
 		r.error = VendingBuyError::Overweight;
 		return r;
 	}
-	const std::int64_t tax = vending_tax(total, cfg);
-	const std::int64_t proceeds = total - tax;
-	if (static_cast<std::int64_t>(p.seller_zeny.value()) + proceeds > kMaxZeny) {
-		r.error = VendingBuyError::SellerZenyOverflow; // refuse rather than silently burn zeny
+	if (p.amount > p.stock) {
+		r.error = VendingBuyError::OutOfStock;
 		return r;
 	}
-	r.buyer_zeny = *buyer_after;
+	const auto proceeds = static_cast<std::int32_t>(vending_proceeds(static_cast<double>(total), cfg));
+	r.buyer_zeny = *p.buyer_zeny.debited(total);
 	r.seller_zeny = p.seller_zeny.credited(proceeds);
-	r.tax = tax;
+	r.tax = total - proceeds;
 	return r;
 }
 

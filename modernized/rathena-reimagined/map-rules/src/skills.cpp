@@ -6,31 +6,56 @@
 
 namespace rathena::map_rules::skills {
 
-std::int32_t cast_time_pre_re(std::int32_t base_ms, std::int32_t dex, const BattleConfig& cfg) {
-	if (base_ms <= 0 || cfg.castrate_dex_scale <= 0) {
-		return 0;
-	}
-	const std::int64_t scale = static_cast<std::int64_t>(cfg.castrate_dex_scale) - dex;
+PreReDexCast cast_time_pre_re_dex(double time, std::int32_t dex, const BattleConfig& cfg) {
+	const std::int32_t scale = cfg.castrate_dex_scale - dex;
 	if (scale <= 0) {
-		return 0;
+		return {true, 0};
 	}
-	return static_cast<std::int32_t>(static_cast<std::int64_t>(base_ms) * scale / cfg.castrate_dex_scale);
+	// Legacy: time * (float)scale / castrate_dex_scale, in double.
+	return {false, time * static_cast<float>(scale) / cfg.castrate_dex_scale};
+}
+
+std::int32_t cast_time_pre_re(std::int32_t base_ms, std::int32_t dex, const BattleConfig& cfg) {
+	const PreReDexCast r = cast_time_pre_re_dex(base_ms, dex, cfg);
+	return r.instant ? 0 : std::max(static_cast<std::int32_t>(r.time), 0);
+}
+
+CastSplit cast_split_re(double time, std::int32_t fixed, const BattleConfig& cfg) {
+	if (fixed >= 0) {
+		return {time, fixed};
+	}
+	if (cfg.default_fixed_castrate <= 0) {
+		return {time, 0};
+	}
+	return {time * (100 - cfg.default_fixed_castrate) / 100,
+	        static_cast<std::int32_t>(time) * cfg.default_fixed_castrate / 100};
+}
+
+double cast_variable_by_stats_re(double variable, std::int32_t dex, std::int32_t int_, const BattleConfig& cfg) {
+	const float ratio = static_cast<float>(dex * 2 + int_) / static_cast<float>(cfg.vcast_stat_scale);
+	// Unqualified on purpose: legacy calls `sqrt` on this float the same way, so both pick the same
+	// overload on every standard library (::sqrt(double) on libstdc++, the float overload where the
+	// library declares one in the global namespace).
+	return variable * (1 - sqrt(ratio));
+}
+
+std::int32_t cast_combine_re(double variable, std::int32_t var_reduction_pct, std::int32_t fixed,
+                             std::int32_t fixed_reduction_pct) {
+	variable = variable * (1 - static_cast<float>(std::min(var_reduction_pct, 100)) / 100);
+	// int + float x int: legacy converts both ints to float, so the sum is a float.
+	const float fixed_factor = 1 - static_cast<float>(std::min(fixed_reduction_pct, 100)) / 100;
+	const double total = static_cast<float>(std::max(static_cast<std::int32_t>(variable), 0)) +
+	                     fixed_factor * static_cast<float>(std::max(fixed, 0));
+	return static_cast<std::int32_t>(total);
 }
 
 std::int32_t cast_time_re(const CastReInput& in, const BattleConfig& cfg) {
-	double var = std::max(in.base_ms, 0);
-	double fixed = in.fixed_ms;
-	if (in.fixed_ms < 0) {
-		fixed = var * cfg.default_fixed_castrate / 100.0;
-		var -= fixed;
+	if (in.base_ms < 0) {
+		return 0;
 	}
-	if (cfg.vcast_stat_scale > 0) {
-		const double stat = static_cast<double>(in.dex * 2 + in.int_) / cfg.vcast_stat_scale;
-		var *= std::max(0.0, 1.0 - std::sqrt(std::max(stat, 0.0)));
-	}
-	var *= 1.0 - std::clamp(in.var_reduction_pct, 0, 100) / 100.0;
-	const double fixed_part = (1.0 - std::clamp(in.fixed_reduction_pct, 0, 100) / 100.0) * std::max(fixed, 0.0);
-	return static_cast<std::int32_t>(std::max(static_cast<std::int32_t>(var), 0) + fixed_part);
+	const CastSplit split = cast_split_re(in.base_ms, in.fixed_ms, cfg);
+	const double variable = cast_variable_by_stats_re(split.variable, in.dex, in.int_, cfg);
+	return cast_combine_re(variable, in.var_reduction_pct, split.fixed, in.fixed_reduction_pct);
 }
 
 std::int32_t after_cast_delay(const AfterCastDelayInput& in, const BattleConfig& cfg) {

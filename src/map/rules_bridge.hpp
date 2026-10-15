@@ -15,12 +15,16 @@
 
 #include <cstdint>
 
+#include <common/cbasetypes.hpp>
+
 #include <rathena/map_rules/battle_config.hpp>
 #include <rathena/map_rules/rng.hpp>
 
 namespace rules = rathena::map_rules;
 
-/// The typed battle configuration the rules read.
+/// The typed battle configuration the rules read. Taken from the conf files (rules_config_snapshot)
+/// and kept current at runtime (rules_config_refresh), so a delegated call site sees what the legacy
+/// code saw.
 const rules::BattleConfig& rules_config();
 
 /// The legacy random stream as a rules::Rng.
@@ -30,8 +34,9 @@ rules::Rng& rules_rng();
 void rules_config_snapshot();
 
 /// Re-copies the knob at `knob` (a battle_config field) after a runtime change by battle_set_value
-/// (setbattleflag, @setbattleflag), so the rules keep seeing what legacy sees. Knobs that are not
-/// listed keep their snapshot value.
-void rules_config_refresh( const std::int32_t* knob );
+/// (setbattleflag, @setbattleflag). The knobs battle_adjust_conf converts into internal units
+/// (max_aspd, max_third_aspd, min_hitrate) keep their conf-time value: a runtime write stores a raw
+/// conf value that legacy itself would then misread, and no delegated site reads them yet.
+void rules_config_refresh( const int32* knob );
 
 #endif /* MAP_RULES_BRIDGE_HPP */

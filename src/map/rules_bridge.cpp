@@ -7,6 +7,69 @@
 
 #include "battle.hpp"
 
+// Every BattleConfig knob the rules read; each has a battle_config field of the same name.
+#define RULES_BRIDGE_KNOBS( X ) \
+	X( max_parameter ) \
+	X( max_third_parameter ) \
+	X( max_aspd ) \
+	X( max_third_aspd ) \
+	X( prevent_logout ) \
+	X( vip_storage_increase ) \
+	X( natural_healhp_interval ) \
+	X( natural_healsp_interval ) \
+	X( natural_heal_skill_interval ) \
+	X( bone_drop ) \
+	X( open_box_weight_rate ) \
+	X( natural_heal_weight_rate ) \
+	X( major_overweight_rate ) \
+	X( min_hitrate ) \
+	X( max_hitrate ) \
+	X( agi_penalty_type ) \
+	X( agi_penalty_count ) \
+	X( agi_penalty_num ) \
+	X( vit_penalty_type ) \
+	X( vit_penalty_count ) \
+	X( vit_penalty_num ) \
+	X( castrate_dex_scale ) \
+	X( vcast_stat_scale ) \
+	X( default_fixed_castrate ) \
+	X( delay_rate ) \
+	X( min_skill_delay_limit ) \
+	X( delay_dependon_dex ) \
+	X( delay_dependon_agi ) \
+	X( no_skill_delay ) \
+	X( vending_max_value ) \
+	X( vending_tax ) \
+	X( vending_tax_min ) \
+	X( min_shop_buy ) \
+	X( min_shop_sell ) \
+	X( item_use_interval ) \
+	X( cashfood_use_interval ) \
+	X( item_rate_common ) \
+	X( item_drop_common_min ) \
+	X( item_drop_common_max ) \
+	X( logarithmic_drops ) \
+	X( drop_rate_cap ) \
+	X( drop_rate_cap_vip ) \
+	X( drop_rate0item ) \
+	X( vip_drop_increase ) \
+	X( item_first_get_time ) \
+	X( item_second_get_time ) \
+	X( item_third_get_time ) \
+	X( mvp_item_first_get_time ) \
+	X( mvp_item_second_get_time ) \
+	X( mvp_item_third_get_time ) \
+	X( multi_level_up ) \
+	X( death_penalty_type ) \
+	X( death_penalty_base ) \
+	X( death_penalty_job ) \
+	X( mobs_level_up ) \
+	X( mobs_level_up_exp_rate ) \
+	X( show_mob_info ) \
+	X( duel_allow_teleport ) \
+	X( guild_exp_limit ) \
+	X( party_even_share_bonus )
+
 namespace {
 
 rules::BattleConfig snapshot = rules::BattleConfig::shipped(
@@ -22,6 +85,13 @@ public:
 	std::uint32_t next_u32() override { return static_cast<std::uint32_t>( rnd() ); }
 };
 
+void assign( std::int32_t& to, int32 from ){ to = static_cast<std::int32_t>( from ); }
+void assign( bool& to, int32 from ){ to = from != 0; }
+
+bool converted_by_adjust_conf( const int32* knob ){
+	return knob == &battle_config.max_aspd || knob == &battle_config.max_third_aspd || knob == &battle_config.min_hitrate;
+}
+
 } // namespace
 
 const rules::BattleConfig& rules_config(){
@@ -35,76 +105,17 @@ rules::Rng& rules_rng(){
 
 void rules_config_snapshot(){
 	rules::BattleConfig c = rules::BattleConfig::shipped( snapshot.mode );
-	c.max_parameter = static_cast<std::int32_t>( battle_config.max_parameter );
-	c.max_third_parameter = static_cast<std::int32_t>( battle_config.max_third_parameter );
-	c.max_aspd = static_cast<std::int32_t>( battle_config.max_aspd );
-	c.max_third_aspd = static_cast<std::int32_t>( battle_config.max_third_aspd );
-	c.prevent_logout = static_cast<std::int32_t>( battle_config.prevent_logout );
-	c.vip_storage_increase = static_cast<std::int32_t>( battle_config.vip_storage_increase );
-	c.natural_healhp_interval = static_cast<std::int32_t>( battle_config.natural_healhp_interval );
-	c.natural_healsp_interval = static_cast<std::int32_t>( battle_config.natural_healsp_interval );
-	c.natural_heal_skill_interval = static_cast<std::int32_t>( battle_config.natural_heal_skill_interval );
-	c.bone_drop = static_cast<std::int32_t>( battle_config.bone_drop );
-	c.open_box_weight_rate = static_cast<std::int32_t>( battle_config.open_box_weight_rate );
-	c.min_hitrate = static_cast<std::int32_t>( battle_config.min_hitrate );
-	c.max_hitrate = static_cast<std::int32_t>( battle_config.max_hitrate );
-	c.agi_penalty_type = static_cast<std::int32_t>( battle_config.agi_penalty_type );
-	c.agi_penalty_count = static_cast<std::int32_t>( battle_config.agi_penalty_count );
-	c.agi_penalty_num = static_cast<std::int32_t>( battle_config.agi_penalty_num );
-	c.vit_penalty_type = static_cast<std::int32_t>( battle_config.vit_penalty_type );
-	c.vit_penalty_count = static_cast<std::int32_t>( battle_config.vit_penalty_count );
-	c.vit_penalty_num = static_cast<std::int32_t>( battle_config.vit_penalty_num );
-	c.castrate_dex_scale = static_cast<std::int32_t>( battle_config.castrate_dex_scale );
-	c.vcast_stat_scale = static_cast<std::int32_t>( battle_config.vcast_stat_scale );
-	c.default_fixed_castrate = static_cast<std::int32_t>( battle_config.default_fixed_castrate );
-	c.delay_rate = static_cast<std::int32_t>( battle_config.delay_rate );
-	c.min_skill_delay_limit = static_cast<std::int32_t>( battle_config.min_skill_delay_limit );
-	c.delay_dependon_dex = battle_config.delay_dependon_dex != 0;
-	c.delay_dependon_agi = battle_config.delay_dependon_agi != 0;
-	c.no_skill_delay = static_cast<std::int32_t>( battle_config.no_skill_delay );
-	c.vending_max_value = static_cast<std::int32_t>( battle_config.vending_max_value );
-	c.vending_tax = static_cast<std::int32_t>( battle_config.vending_tax );
-	c.vending_tax_min = static_cast<std::int32_t>( battle_config.vending_tax_min );
-	c.min_shop_buy = static_cast<std::int32_t>( battle_config.min_shop_buy );
-	c.min_shop_sell = static_cast<std::int32_t>( battle_config.min_shop_sell );
-	c.item_use_interval = static_cast<std::int32_t>( battle_config.item_use_interval );
-	c.cashfood_use_interval = static_cast<std::int32_t>( battle_config.cashfood_use_interval );
-	c.item_rate_common = static_cast<std::int32_t>( battle_config.item_rate_common );
-	c.item_drop_common_min = static_cast<std::int32_t>( battle_config.item_drop_common_min );
-	c.item_drop_common_max = static_cast<std::int32_t>( battle_config.item_drop_common_max );
-	c.logarithmic_drops = battle_config.logarithmic_drops != 0;
-	c.drop_rate_cap = static_cast<std::int32_t>( battle_config.drop_rate_cap );
-	c.drop_rate_cap_vip = static_cast<std::int32_t>( battle_config.drop_rate_cap_vip );
-	c.drop_rate0item = battle_config.drop_rate0item != 0;
-	c.vip_drop_increase = static_cast<std::int32_t>( battle_config.vip_drop_increase );
-	c.item_first_get_time = static_cast<std::int32_t>( battle_config.item_first_get_time );
-	c.item_second_get_time = static_cast<std::int32_t>( battle_config.item_second_get_time );
-	c.item_third_get_time = static_cast<std::int32_t>( battle_config.item_third_get_time );
-	c.mvp_item_first_get_time = static_cast<std::int32_t>( battle_config.mvp_item_first_get_time );
-	c.mvp_item_second_get_time = static_cast<std::int32_t>( battle_config.mvp_item_second_get_time );
-	c.mvp_item_third_get_time = static_cast<std::int32_t>( battle_config.mvp_item_third_get_time );
-	c.multi_level_up = battle_config.multi_level_up != 0;
-	c.death_penalty_type = static_cast<std::int32_t>( battle_config.death_penalty_type );
-	c.death_penalty_base = static_cast<std::int32_t>( battle_config.death_penalty_base );
-	c.death_penalty_job = static_cast<std::int32_t>( battle_config.death_penalty_job );
-	c.mobs_level_up = battle_config.mobs_level_up != 0;
-	c.mobs_level_up_exp_rate = static_cast<std::int32_t>( battle_config.mobs_level_up_exp_rate );
-	c.show_mob_info = static_cast<std::int32_t>( battle_config.show_mob_info );
-	c.duel_allow_teleport = battle_config.duel_allow_teleport != 0;
-	c.guild_exp_limit = static_cast<std::int32_t>( battle_config.guild_exp_limit );
-	c.party_even_share_bonus = static_cast<std::int32_t>( battle_config.party_even_share_bonus );
-	// progression/economy (BR-MAP-001..003, 021..037, 045..050)
-	c.natural_heal_weight_rate = static_cast<std::int32_t>( battle_config.natural_heal_weight_rate );
-	c.major_overweight_rate = static_cast<std::int32_t>( battle_config.major_overweight_rate );
+#define RULES_BRIDGE_COPY( knob ) assign( c.knob, battle_config.knob );
+	RULES_BRIDGE_KNOBS( RULES_BRIDGE_COPY )
+#undef RULES_BRIDGE_COPY
 	snapshot = c;
 }
 
-void rules_config_refresh( const std::int32_t* knob ){
-	// combat (BR-MAP-012, 013): crowd penalties; battle_adjust_conf leaves these knobs as read
-	if( knob == &battle_config.agi_penalty_type ) snapshot.agi_penalty_type = static_cast<std::int32_t>( *knob );
-	if( knob == &battle_config.agi_penalty_count ) snapshot.agi_penalty_count = static_cast<std::int32_t>( *knob );
-	if( knob == &battle_config.agi_penalty_num ) snapshot.agi_penalty_num = static_cast<std::int32_t>( *knob );
-	if( knob == &battle_config.vit_penalty_type ) snapshot.vit_penalty_type = static_cast<std::int32_t>( *knob );
-	if( knob == &battle_config.vit_penalty_count ) snapshot.vit_penalty_count = static_cast<std::int32_t>( *knob );
-	if( knob == &battle_config.vit_penalty_num ) snapshot.vit_penalty_num = static_cast<std::int32_t>( *knob );
+void rules_config_refresh( const int32* knob ){
+	if( converted_by_adjust_conf( knob ) ){
+		return;
+	}
+#define RULES_BRIDGE_REFRESH( name ) if( knob == &battle_config.name ) assign( snapshot.name, battle_config.name );
+	RULES_BRIDGE_KNOBS( RULES_BRIDGE_REFRESH )
+#undef RULES_BRIDGE_REFRESH
 }

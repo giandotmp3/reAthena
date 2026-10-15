@@ -20,6 +20,9 @@
 #include "log.hpp"  // log_pick_pc, log_zeny
 #include "npc.hpp"
 #include "pc.hpp"  // map_session_data
+#include "rules_bridge.hpp"
+
+#include <rathena/map_rules/anticheat.hpp>
 
 //Autotrader
 static DBMap *buyingstore_autotrader_db; /// Holds autotrader info: char_id -> struct s_autotrader
@@ -69,7 +72,10 @@ static uint32 buyingstore_getuid(void)
 int8 buyingstore_setup(map_session_data* sd, unsigned char slots){
 	nullpo_retr(1, sd);
 
-	if (!battle_config.feature_buying_store || sd->state.vending || sd->state.buyingstore || sd->state.trading || slots == 0) {
+	// BR-MAP-061 (map-rules): vending, trading and buying store exclude each other.
+	if (!battle_config.feature_buying_store ||
+		!rules::anticheat::can_begin( { .vending = sd->state.vending != 0, .buying_store = sd->state.buyingstore != 0, .trading = sd->state.trading != 0 }, rules::anticheat::Activity::BuyingStore ) ||
+		slots == 0) {
 		return 1;
 	}
 

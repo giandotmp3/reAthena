@@ -24,6 +24,10 @@
 #include "path.hpp"
 #include "pc.hpp"
 #include "pc_groups.hpp"
+#include "rules_bridge.hpp"
+
+#include <rathena/map_rules/anticheat.hpp>
+#include <rathena/map_rules/economy.hpp>
 
 static uint32 vending_nextid = 0; ///Vending_id counter
 static DBMap *vending_db; ///DB holder the vender : charid -> map_session_data
@@ -105,10 +109,9 @@ void vending_vendinglistreq(map_session_data* sd, int32 id)
  */
 static double vending_calc_tax(map_session_data *sd, double zeny)
 {
-	if (battle_config.vending_tax && zeny >= battle_config.vending_tax_min)
-		zeny -= zeny * (battle_config.vending_tax / 10000.);
-
-	return zeny;
+	// BR-MAP-044 (map-rules): zeny - zeny x (vending_tax / 10000.) from vending_tax_min on, in double;
+	// the callers truncate it.
+	return rules::economy::vending_proceeds( zeny, rules_config() );
 }
 
 /**
@@ -301,28 +304,34 @@ int8 vending_openvending( map_session_data& sd, const char* message, const uint8
 	char message_sql[MESSAGE_SIZE*2];
 	StringBuf buf;
 
-	if ( pc_isdead(&sd) || !sd.state.prevend || pc_istrading(&sd)) {
+	// BR-MAP-061 (map-rules): vending, trading and buying store exclude each other (pc_istrading also
+	// refuses while talking to an NPC).
+	if ( pc_isdead(&sd) || !sd.state.prevend || sd.npc_id ||
+		!rules::anticheat::can_begin( { .vending = sd.state.vending != 0, .buying_store = sd.state.buyingstore != 0, .trading = sd.state.trading != 0 }, rules::anticheat::Activity::Vending ) ) {
 		return 1; // can't open vendings lying dead || didn't use via the skill (wpe/hack) || can't have 2 shops at once
 	}
 
 	vending_skill_lvl = pc_checkskill(&sd, MC_VENDING);
-	
-	// skill level and cart check
-	if( !vending_skill_lvl || !pc_iscarton(&sd) ) {
-		clif_skill_fail( sd, MC_VENDING );
-		sd.state.prevend = 0;
-		sd.state.workinprogress = WIP_DISABLE_NONE;
-		clif_openvending_ack( sd, OPENSTORE2_FAILED );
-		return 2;
-	}
 
-	// check number of items in shop
-	if( count < 1 || count > MAX_VENDING || count > 2 + vending_skill_lvl ) { // invalid item count
-		clif_skill_fail( sd, MC_VENDING );
-		sd.state.prevend = 0;
-		sd.state.workinprogress = WIP_DISABLE_NONE;
-		clif_openvending_ack( sd, OPENSTORE2_FAILED );
-		return 3;
+	const rules::BattleConfig rules_cfg = rules_config();
+
+	// BR-MAP-042 (map-rules): MC_VENDING and a cart, then 1 to min(MAX_VENDING, 2 + skill level) items.
+	switch( rules::economy::validate_vending_open( { .vending_skill_lv = vending_skill_lvl, .has_cart = vending_skill_lvl > 0 && pc_iscarton(&sd), .item_count = count }, rules_cfg ) ) {
+		case rules::economy::VendingOpenError::None:
+			break;
+		case rules::economy::VendingOpenError::NoSkill:
+		case rules::economy::VendingOpenError::NoCart: // skill level and cart check
+			clif_skill_fail( sd, MC_VENDING );
+			sd.state.prevend = 0;
+			sd.state.workinprogress = WIP_DISABLE_NONE;
+			clif_openvending_ack( sd, OPENSTORE2_FAILED );
+			return 2;
+		default: // invalid item count
+			clif_skill_fail( sd, MC_VENDING );
+			sd.state.prevend = 0;
+			sd.state.workinprogress = WIP_DISABLE_NONE;
+			clif_openvending_ack( sd, OPENSTORE2_FAILED );
+			return 3;
 	}
 
 	if (save_settings&CHARSAVE_VENDING) // Avoid invalid data from saving
@@ -350,7 +359,7 @@ int8 vending_openvending( map_session_data& sd, const char* message, const uint8
 
 		sd.vending[i].index = index;
 		sd.vending[i].amount = amount;
-		sd.vending[i].value = min(value, (uint32)battle_config.vending_max_value);
+		sd.vending[i].value = rules::economy::vending_listed_price( value, rules_cfg ); // BR-MAP-042 (map-rules): capped at vending_max_value
 		total += static_cast<int64>(sd.vending[i].value) * amount;
 		i++; // item successfully added
 	}

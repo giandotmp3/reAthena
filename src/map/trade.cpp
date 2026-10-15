@@ -19,9 +19,20 @@
 #include "path.hpp"
 #include "pc.hpp"
 #include "pc_groups.hpp"
+#include "rules_bridge.hpp"
 #include "storage.hpp"
 
+#include <rathena/map_rules/anticheat.hpp>
+#include <rathena/map_rules/trade.hpp>
+
 #define TRADE_DISTANCE 2 ///Max distance from traders to enable a trade to take place.
+
+static_assert( TRADE_DISTANCE == rules::economy::kTradeDistance );
+
+/// BR-MAP-061 (map-rules): the vending / buying store / trade state of a player.
+static rules::anticheat::CommerceState trade_commerce_state( const map_session_data& sd ){
+	return { .vending = sd.state.vending != 0, .buying_store = sd.state.buyingstore != 0, .trading = sd.state.trading != 0 };
+}
 
 /**
  * Player initiates a trade request.
@@ -32,26 +43,41 @@ void trade_traderequest(map_session_data *sd, map_session_data *target_sd)
 {
 	nullpo_retv(sd);
 
-	if (map_getmapflag(sd->m, MF_NOTRADE)) {
-		clif_displaymessage (sd->fd, msg_txt(sd,272));
-		return; //Can't trade in notrade mapflag maps.
-	}
+	// BR-MAP-038 (map-rules): the request preconditions, checked in legacy order. A missing target is
+	// answered like a request to oneself ("character does not exist").
+	map_session_data* partner = target_sd != nullptr ? target_sd : sd;
+	rules::economy::TradeParticipant requester{ .id = { static_cast<int32>( sd->status.char_id ) }, .pos = { sd->m, sd->x, sd->y }, .can_give_items = pc_can_give_items(sd) };
+	rules::economy::TradeParticipant target{ .id = { static_cast<int32>( partner->status.char_id ) }, .pos = { partner->m, partner->x, partner->y }, .can_give_items = pc_can_give_items(partner) };
 
-	if (target_sd == nullptr || sd == target_sd) {
-		clif_traderesponse(*sd, TRADE_ACK_CHARNOTEXIST);
-		return;
-	}
+	// Trade fails if the target is using an NPC or has a pending invite.
+	target.busy = partner->npc_id || ( !battle_config.invite_request_check && ( partner->guild_invite > 0 || partner->party_invite > 0 || partner->adopt_invite ) );
+	// The requester's previous trade is cancelled before the target's trade state is checked; when that
+	// trade was with the target, the cancel frees the target.
+	target.in_trade = partner->trade_partner.id != 0 && !( sd->trade_partner.id != 0 && map_id2sd( sd->trade_partner.id ) == partner );
+	// Players can not request trade from far away, unless they are allowed to use @trade.
+	if (pc_can_use_command(sd, "trade", COMMAND_ATCOMMAND))
+		target.pos = requester.pos;
+#ifdef CIRCULAR_AREA
+	else if (sd->m == partner->m && check_distance_bl(sd, partner, TRADE_DISTANCE))
+		target.pos = requester.pos; // the rule measures the default square; keep check_distance's circle here
+	else
+		target.pos.map_id = -1;
+#endif
 
-	if (target_sd->npc_id) { // Trade fails if you are using an NPC.
-		clif_traderesponse(*sd, TRADE_ACK_FAILED);
-		return;
-	}
+	const rules::economy::TradeRequestError verdict = rules::economy::check_trade_request( requester, target, map_getmapflag(sd->m, MF_NOTRADE) );
 
-	if (!battle_config.invite_request_check) {
-		if (target_sd->guild_invite > 0 || target_sd->party_invite > 0 || target_sd->adopt_invite) {
+	switch (verdict) {
+		case rules::economy::TradeRequestError::NoTradeMap:
+			clif_displaymessage (sd->fd, msg_txt(sd,272));
+			return; //Can't trade in notrade mapflag maps.
+		case rules::economy::TradeRequestError::SelfTrade:
+			clif_traderesponse(*sd, TRADE_ACK_CHARNOTEXIST);
+			return;
+		case rules::economy::TradeRequestError::TargetBusy:
 			clif_traderesponse(*sd, TRADE_ACK_FAILED);
 			return;
-		}
+		default:
+			break;
 	}
 
 	if ( sd->trade_partner.id != 0 ) { // If a character tries to trade to another one then cancel the previous one
@@ -65,22 +91,19 @@ void trade_traderequest(map_session_data *sd, map_session_data *target_sd)
 		clif_tradecancelled( *sd );
 	}
 
-	if (target_sd->trade_partner.id != 0) {
-		clif_traderesponse(*sd, TRADE_ACK_FAILED); // person is in another trade
-		return;
-	}
-
-	if (!pc_can_give_items(sd) || !pc_can_give_items(target_sd)) { // check if both GMs are allowed to trade
-		clif_displaymessage( sd->fd, msg_txt( sd, 246 ) ); // Your GM level doesn't authorize you to perform this action.
-		clif_traderesponse(*sd, TRADE_ACK_FAILED); // GM is not allowed to trade
-		return;
-	}
-
-	// Players can not request trade from far away, unless they are allowed to use @trade.
-	if (!pc_can_use_command(sd, "trade", COMMAND_ATCOMMAND) &&
-	    (sd->m != target_sd->m || !check_distance_bl(sd, target_sd, TRADE_DISTANCE))) {
-		clif_traderesponse(*sd, TRADE_ACK_TOOFAR);
-		return ;
+	switch (verdict) {
+		case rules::economy::TradeRequestError::TargetInTrade:
+			clif_traderesponse(*sd, TRADE_ACK_FAILED); // person is in another trade
+			return;
+		case rules::economy::TradeRequestError::NotAllowed: // check if both GMs are allowed to trade
+			clif_displaymessage( sd->fd, msg_txt( sd, 246 ) ); // Your GM level doesn't authorize you to perform this action.
+			clif_traderesponse(*sd, TRADE_ACK_FAILED); // GM is not allowed to trade
+			return;
+		case rules::economy::TradeRequestError::TooFar:
+			clif_traderesponse(*sd, TRADE_ACK_TOOFAR);
+			return ;
+		default:
+			break;
 	}
 
 	target_sd->trade_partner.id = sd->status.account_id;
@@ -150,8 +173,9 @@ void trade_tradeack(map_session_data *sd, int32 type)
 	}
 
 	// Check if you can start trade.
-	if (sd->npc_id || sd->state.vending || sd->state.buyingstore || sd->state.storage_flag ||
-		tsd->npc_id || tsd->state.vending || tsd->state.buyingstore || tsd->state.storage_flag) { // Fail
+	// BR-MAP-061 (map-rules): no trade while vending or with a buying store (neither side is trading yet).
+	if (sd->npc_id || !rules::anticheat::can_begin( trade_commerce_state( *sd ), rules::anticheat::Activity::Trading ) || sd->state.storage_flag ||
+		tsd->npc_id || !rules::anticheat::can_begin( trade_commerce_state( *tsd ), rules::anticheat::Activity::Trading ) || tsd->state.storage_flag) { // Fail
 		clif_traderesponse(*sd, TRADE_ACK_FAILED);
 		clif_traderesponse(*tsd, TRADE_ACK_FAILED);
 		sd->state.deal_locked = 0;

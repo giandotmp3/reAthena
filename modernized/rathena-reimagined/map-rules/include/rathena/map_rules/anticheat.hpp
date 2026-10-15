@@ -21,11 +21,25 @@ bool can_logout(Tick now, Tick last_combat_tick, const BattleConfig& cfg);
 /// BR-MAP-056: ms until the player may log out (0 if allowed now).
 Tick logout_lock_remaining(Tick now, Tick last_combat_tick, const BattleConfig& cfg);
 
+enum class ChatSpeaker : std::uint8_t {
+	Ok,
+	Malformed, // fewer than name + " : " + 1 bytes: dropped with a warning
+	Spoofed,   // does not start with "<own name> : ": the session is kicked
+};
+struct ChatSpeakerCheck {
+	ChatSpeaker verdict = ChatSpeaker::Malformed;
+	std::size_t message_offset = 0; // where the message starts in `raw` when Ok
+};
+/// BR-MAP-057 (clif_process_message, non-whisper format): `raw` (the packet payload after the
+/// 4-byte header) must hold at least "<own name> : " plus one byte and start with exactly that.
+/// The own name counts at most NAME_LENGTH - 1 bytes.
+ChatSpeakerCheck check_chat_speaker(std::string_view own_name, std::string_view raw);
+
 struct ChatCheck {
 	bool ok = false;
-	std::string message; // text after "<name> : " when ok
+	std::string message; // text after "<name> : " up to the first NUL when ok (may be empty)
 };
-/// BR-MAP-057: a public chat line must be exactly "<own name> : <text>" with non-empty text;
+/// BR-MAP-057: a public chat line must be exactly "<own name> : <text>" (`check_chat_speaker`);
 /// any other speaker name is a spoof and is rejected.
 ChatCheck validate_chat_line(std::string_view own_name, std::string_view raw);
 
@@ -43,9 +57,12 @@ bool is_suspicious_name_request(const NameRequestTarget& t, std::int32_t request
 // --- BR-MAP-059: framing and state gating -----------------------------------------------------
 
 enum class FrameVerdict : std::uint8_t { NeedMore, Ok, Disconnect };
+/// Why a frame disconnects (legacy logs a different warning for each).
+enum class FrameError : std::uint8_t { None, UnknownOpcode, BadDeclaredLength, Truncated };
 struct FrameCheck {
 	FrameVerdict verdict = FrameVerdict::NeedMore;
-	std::int32_t length = 0;
+	std::int32_t length = 0; // the packet length (also set for BadDeclaredLength and Truncated)
+	FrameError error = FrameError::None;
 };
 /// `db_len` is the packet_db length (-1 = variable, 0 = unknown opcode). Variable lengths must be
 /// 4..32768 bytes; unknown opcodes disconnect.
@@ -54,7 +71,8 @@ FrameCheck check_frame(std::int32_t db_len, std::size_t available, std::uint16_t
 enum class SessionPhase : std::uint8_t { NoSession, Authed, OnMap };
 enum class PacketKind : std::uint8_t { WantToConnection, LoadEndAck, Other };
 /// Before a session exists only the connect packet is processed; before load-end only
-/// LoadEndAck is processed; everything else is dropped.
+/// LoadEndAck is processed; everything else is dropped. On the map every packet reaches its
+/// handler; a repeated connect packet is refused there (`validate_connect`: AlreadyLoggedIn).
 bool packet_allowed(SessionPhase phase, PacketKind kind);
 
 // --- BR-MAP-060: connect packet sanity --------------------------------------------------------

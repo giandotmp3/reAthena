@@ -63,15 +63,22 @@ bool may_pick_up(const LootRights& rights, CharId who, Tick now, const Position&
 
 // --- Vending ----------------------------------------------------------------------------------
 
+inline constexpr std::int32_t kMaxVendingItems = 12; // MAX_VENDING (map.hpp)
+
 struct VendingOpenRequest {
 	std::int32_t vending_skill_lv = 0; // MC_VENDING
 	bool has_cart = false;
-	std::vector<std::int32_t> prices;  // one per listed item
+	std::int32_t item_count = 0;       // items listed in the open request
 };
-enum class VendingOpenError : std::uint8_t { None, NoSkill, NoCart, NoItems, TooManyItems, PriceOutOfRange };
-/// BR-MAP-042: needs MC_VENDING and a cart; up to 2 + skill level items; 1 <= price <= vending_max_value.
+enum class VendingOpenError : std::uint8_t { None, NoSkill, NoCart, NoItems, TooManyItems };
+/// BR-MAP-042 (vending_openvending): needs MC_VENDING and a cart; 1 to min(MAX_VENDING, 2 + skill
+/// level) items. Prices are not refused: see `vending_listed_price`.
 VendingOpenError validate_vending_open(const VendingOpenRequest& req, const BattleConfig& cfg);
+/// BR-MAP-042: the listed price is the requested one capped at vending_max_value (legacy clamps,
+/// it does not refuse; a price of 0 is accepted).
+std::uint32_t vending_listed_price(std::uint32_t requested, const BattleConfig& cfg);
 
+/// One line of a purchase from a vendor (vending_purchasereq checks each line in this order).
 struct VendingPurchase {
 	std::int32_t unit_price = 0;
 	std::int32_t amount = 0;
@@ -89,10 +96,17 @@ struct VendingBuyResult {
 	Zeny seller_zeny;
 	std::int64_t tax = 0;
 };
-/// BR-MAP-043: stock, zeny and weight checks; BR-MAP-044: tax applied to the seller's proceeds.
+/// BR-MAP-043: amount, then the buyer's zeny, then the seller's zeny before tax (legacy answers
+/// "out of stock" when the seller would pass MAX_ZENY), then weight, then stock.
+/// BR-MAP-044: the seller receives `vending_proceeds` of the total, truncated.
 VendingBuyResult vending_buy(const VendingPurchase& p, const BattleConfig& cfg);
 
-/// BR-MAP-044: tax = total x vending_tax/10000 when total >= vending_tax_min (5% on >= 100M).
+/// BR-MAP-044 (vending_calc_tax): the amount after tax, in double as legacy computes it:
+/// total - total x (vending_tax / 10000.) when vending_tax is set and total >= vending_tax_min.
+/// Callers truncate it to an int32.
+double vending_proceeds(double total, const BattleConfig& cfg);
+/// BR-MAP-044: the tax kept from `total`: total - (int64)vending_proceeds(total) (5% on >= 100M as
+/// shipped; the truncation of the proceeds rounds the tax up).
 std::int64_t vending_tax(std::int64_t total, const BattleConfig& cfg);
 
 // --- Stacks, NPC prices, storage --------------------------------------------------------------

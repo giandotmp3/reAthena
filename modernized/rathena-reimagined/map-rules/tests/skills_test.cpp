@@ -13,6 +13,23 @@ TEST(Skills, BR_MAP_051_PreRenewalCastTimeScalesWithDex) {
 	EXPECT_EQ(sk::cast_time_pre_re(2000, 150, cfg), 0); // instant cast at castrate_dex_scale
 }
 
+TEST(Skills, BR_MAP_051_DexStepKeepsTheFractionForLaterBonuses) {
+	// skill_castfix keeps the DEX-scaled time in double: 1000 x 149 / 150 = 993.33..., and only the
+	// final result is truncated, after the item and status bonuses.
+	const mr::BattleConfig cfg;
+	const auto r = sk::cast_time_pre_re_dex(1000, 1, cfg);
+	EXPECT_FALSE(r.instant);
+	EXPECT_DOUBLE_EQ(r.time, 1000.0 * 149 / 150);
+	// Instant cast skips every later bonus (legacy returns 0 at once), even a bVariableCast.
+	EXPECT_TRUE(sk::cast_time_pre_re_dex(1000, 150, cfg).instant);
+	EXPECT_TRUE(sk::cast_time_pre_re_dex(1000, 200, cfg).instant);
+	// A zero cast time still goes through the bonuses.
+	const auto zero = sk::cast_time_pre_re_dex(0, 50, cfg);
+	EXPECT_FALSE(zero.instant);
+	EXPECT_EQ(zero.time, 0.0);
+	EXPECT_EQ(sk::cast_time_pre_re(-100, 50, cfg), 0);
+}
+
 TEST(Skills, BR_MAP_052_RenewalCastTwentyPercentFixedPlusReducedVariable) {
 	const mr::BattleConfig cfg;
 	EXPECT_EQ(sk::cast_time_re({.base_ms = 5000}, cfg), 5000);
@@ -22,6 +39,36 @@ TEST(Skills, BR_MAP_052_RenewalCastTwentyPercentFixedPlusReducedVariable) {
 	EXPECT_EQ(sk::cast_time_re({.base_ms = 5000, .dex = 100, .int_ = 130}, cfg), 1843);
 	// Explicit fixed cast is kept separate from the variable part.
 	EXPECT_EQ(sk::cast_time_re({.base_ms = 3000, .fixed_ms = 500}, cfg), 3500);
+}
+
+TEST(Skills, BR_MAP_052_LegacyStepsAndRounding) {
+	const mr::BattleConfig cfg;
+	// Step 1: the default fixed part is taken from the truncated time in integers.
+	auto split = sk::cast_split_re(1234.9, -1, cfg);
+	EXPECT_EQ(split.fixed, 246);                      // (int)1234.9 x 20 / 100
+	EXPECT_DOUBLE_EQ(split.variable, 1234.9 * 80 / 100); // the variable part stays in double
+	split = sk::cast_split_re(1000, 300, cfg);
+	EXPECT_EQ(split.fixed, 300);
+	EXPECT_EQ(split.variable, 1000.0);
+	auto nofix = cfg;
+	nofix.default_fixed_castrate = 0;
+	split = sk::cast_split_re(1000, -1, nofix);
+	EXPECT_EQ(split.fixed, 0);
+	EXPECT_EQ(split.variable, 1000.0);
+	// Step 2 is not clamped: stats above the scale make the variable part negative...
+	EXPECT_LT(sk::cast_variable_by_stats_re(1000, 300, 0, cfg), 0.0);
+	// ...and step 3 caps it at 0, keeping the fixed part.
+	EXPECT_EQ(sk::cast_combine_re(-130.5, 0, 800, 0), 800);
+	// Negative reductions lengthen the cast; reductions above 100 count as 100.
+	EXPECT_EQ(sk::cast_combine_re(1000, -20, 1000, 0), 2200);
+	EXPECT_EQ(sk::cast_combine_re(1000, 0, 1000, -50), 2500);
+	EXPECT_EQ(sk::cast_combine_re(1000, 150, 1000, 150), 0);
+	// The float factor: 1000 x (1 - 0.3f) = 699.99998 -> 699.
+	EXPECT_EQ(sk::cast_combine_re(1000, 30, 0, 0), 699);
+	EXPECT_EQ(sk::cast_combine_re(0, 0, 1000, 30), 700); // the sum is a float: 0.7f x 1000 = 700
+	// A negative fixed time counts as 0.
+	EXPECT_EQ(sk::cast_combine_re(500, 0, -1000, 0), 500);
+	EXPECT_EQ(sk::cast_time_re({.base_ms = -1}, cfg), 0);
 }
 
 // --- BR-MAP-053: skill.cpp skill_delayfix ---------------------------------------------------------

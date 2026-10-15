@@ -42,9 +42,12 @@
 #include "pc.hpp"
 #include "pc_groups.hpp"
 #include "pet.hpp"
+#include "rules_bridge.hpp"
 #include "script.hpp"
 #include "status.hpp"
 #include "unit.hpp"
+
+#include <rathena/map_rules/skills.hpp>
 
 // Skill factory is compiled as separate translation units per job category
 // to reduce peak memory usage during compilation
@@ -10133,12 +10136,13 @@ int32 skill_castfix(block_list *bl, uint16 skill_id, uint16 skill_lv) {
 
 		// Calculate base cast time (reduced by dex)
 		if (!(flag&1)) {
-			int32 scale = battle_config.castrate_dex_scale - status_get_dex(bl);
+			// BR-MAP-051 (map-rules): time x (float)(castrate_dex_scale - DEX) / castrate_dex_scale, kept
+			// in double for the bonuses below; DEX at or above the scale casts instantly.
+			const rules::skills::PreReDexCast dex_cast = rules::skills::cast_time_pre_re_dex( time, status_get_dex( bl ), rules_config() );
 
-			if (scale > 0)	// not instant cast
-				time = time * (float)scale / battle_config.castrate_dex_scale;
-			else
+			if (dex_cast.instant)
 				return 0; // instant cast
+			time = dex_cast.time;
 		}
 
 		// Calculate cast time reduced by item/card bonuses
@@ -10265,12 +10269,15 @@ int32 skill_vfcastfix(block_list *bl, double time, uint16 skill_id, uint16 skill
 	int32 fixed = skill_get_fixed_cast(skill_id, skill_lv), fixcast_r = 0, varcast_r = 0, reduce_cast_rate = 0;
 	uint8 flag = skill_get_castnodex(skill_id);
 
-	if (fixed < 0) {
-		if (battle_config.default_fixed_castrate > 0) {
-			fixed = (int32)time * battle_config.default_fixed_castrate / 100; // fixed time
-			time = time * (100 - battle_config.default_fixed_castrate) / 100; // variable time
-		} else
-			fixed = 0;
+	const rules::BattleConfig rules_cfg = rules_config();
+
+	// BR-MAP-052 (map-rules): without a skill fixed time, default_fixed_castrate% of the cast time is
+	// fixed ((int32)time x rate / 100) and the rest stays variable.
+	{
+		const rules::skills::CastSplit split = rules::skills::cast_split_re( time, fixed, rules_cfg );
+
+		time = split.variable;
+		fixed = split.fixed;
 	}
 
 	// Additive Variable Cast bonus adjustments by items
@@ -10369,13 +10376,12 @@ int32 skill_vfcastfix(block_list *bl, double time, uint16 skill_id, uint16 skill
 		time = time * (1 - (float)min(varcast_r, 100) / 100);
 
 	// Apply Variable CastTime calculation by INT & DEX
+	// BR-MAP-052 (map-rules): variable x (1 - sqrt((float)(2 DEX + INT) / vcast_stat_scale)).
 	if (!(flag&1))
-		time = time * (1 - sqrt(((float)(status_get_dex(bl) * 2 + status_get_int(bl)) / battle_config.vcast_stat_scale)));
+		time = rules::skills::cast_variable_by_stats_re( time, status_get_dex( bl ), status_get_int( bl ), rules_cfg );
 
-	time = time * (1 - (float)min(reduce_cast_rate, 100) / 100);
-	time = max((int32)time, 0) + (1 - (float)min(fixcast_r, 100) / 100) * max(fixed, 0); //Underflow checking/capping
-
-	return (int32)time;
+	// BR-MAP-052 (map-rules): the variable and fixed reductions (in float) and the sum, capped at 0.
+	return rules::skills::cast_combine_re( time, reduce_cast_rate, fixed, fixcast_r );
 }
 #endif
 
@@ -10386,22 +10392,15 @@ int32 skill_delayfix(block_list *bl, uint16 skill_id, uint16 skill_lv)
 {
 	nullpo_ret(bl);
 
-	if (skill_id == SA_ABRACADABRA)
-		return 0; //Will use picked skill's delay.
+	// BR-MAP-053 (map-rules): the after-cast delay. The skill-specific facts are gathered here and the
+	// rule applies them in legacy's order, with legacy's double time and float percentage factor.
+	rules::skills::AfterCastDelayInput in;
 
-	if (bl->type&battle_config.no_skill_delay)
-		return battle_config.min_skill_delay_limit;
-
-	int32 delaynodex = skill_get_delaynodex(skill_id);
-	double time = skill_get_delay(skill_id, skill_lv);
-
-	if (time < 0)
-		time = -time + status_get_amotion(bl);	// If set to <0, add to attack motion.
-
-	status_change* sc = status_get_sc(bl);
-
-	// Delay reductions
-	switch (skill_id) {	//Monk combo skills have their delay reduced by agi/dex.
+	switch (skill_id) {
+		case SA_ABRACADABRA:
+			in.kind = rules::skills::DelaySkillKind::Abracadabra; //Will use picked skill's delay.
+			break;
+		//Monk combo skills have their delay reduced by agi/dex.
 		case MO_TRIPLEATTACK:
 		case MO_CHAINCOMBO:
 		case MO_COMBOFINISH:
@@ -10410,87 +10409,65 @@ int32 skill_delayfix(block_list *bl, uint16 skill_id, uint16 skill_lv)
 		case SR_DRAGONCOMBO:
 		case SR_FALLENEMPIRE:
 		case SJ_PROMINENCEKICK:
-			//If delay not specified, it will be 1000 - 4*agi - 2*dex
-			if (time == 0)
-				time = 1000;
-			time -= (4 * status_get_agi(bl) + 2 * status_get_dex(bl));
+			in.kind = rules::skills::DelaySkillKind::MonkCombo;
 			break;
-#ifndef RENEWAL
 		case HP_BASILICA:
-			if (sc && !sc->getSCE(SC_BASILICA))
-				time = 0; // There is no Delay on Basilica creation, only on cancel
+			in.kind = rules::skills::DelaySkillKind::Basilica; // pre-renewal: no delay on creation, only on cancel
 			break;
-#endif
-		default:
-			if (battle_config.delay_dependon_dex && !(delaynodex&1)) { // if skill delay is allowed to be reduced by dex
-				int32 scale = battle_config.castrate_dex_scale - status_get_dex(bl);
-
-				if (scale > 0)
-					time = time * scale / battle_config.castrate_dex_scale;
-				else //To be capped later to minimum.
-					time = 0;
-			}
-			if (battle_config.delay_dependon_agi && !(delaynodex&1)) { // if skill delay is allowed to be reduced by agi
-				int32 scale = battle_config.castrate_dex_scale - status_get_agi(bl);
-
-				if (scale > 0)
-					time = time * scale / battle_config.castrate_dex_scale;
-				else //To be capped later to minimum.
-					time = 0;
-			}
 	}
+
+	in.unit_type = bl->type;
+	if (in.kind == rules::skills::DelaySkillKind::Abracadabra || (bl->type&battle_config.no_skill_delay))
+		return rules::skills::after_cast_delay( in, rules_config() ); // 0, or min_skill_delay_limit
+
+	status_change* sc = status_get_sc(bl);
+
+	in.base_delay_ms = skill_get_delay(skill_id, skill_lv);
+	if (in.base_delay_ms < 0)
+		in.amotion = status_get_amotion(bl);	// If set to <0, add to attack motion.
+	in.delaynodex = static_cast<uint8>(skill_get_delaynodex(skill_id));
+	in.agi = status_get_agi(bl);
+	in.dex = status_get_dex(bl);
+	// A unit without status data keeps its delay on Basilica creation.
+	in.basilica_active = sc == nullptr || sc->getSCE(SC_BASILICA) != nullptr;
 
 	if (sc != nullptr && !sc->empty()) {
 		if (sc->getSCE(SC_SPIRIT)) {
 			switch (skill_id) {
 				case CR_SHIELDBOOMERANG:
 					if (sc->getSCE(SC_SPIRIT)->val2 == SL_CRUSADER)
-						time /= 2;
+						in.soul_link_halves = true;
 					break;
 				case AS_SONICBLOW:
 					if (!map_flag_gvg2(bl->m) && !map_getmapflag(bl->m, MF_BATTLEGROUND) && sc->getSCE(SC_SPIRIT)->val2 == SL_ASSASIN)
-						time /= 2;
+						in.soul_link_halves = true;
 					break;
 			}
 		}
+
+		// Ignored by the rule for DelayNoStatus skills
+		if (sc->getSCE(SC_POEMBRAGI))
+			in.status_reduction_pct += sc->getSCE(SC_POEMBRAGI)->val3;
+		if (sc->getSCE(SC_WIND_INSIGNIA) && sc->getSCE(SC_WIND_INSIGNIA)->val1 == 3 && skill_get_type(skill_id) == BF_MAGIC && skill_get_ele(skill_id, skill_lv) == ELE_WIND)
+			in.status_reduction_pct += 50; // After Delay of Wind element spells reduced by 50%.
+		if (sc->getSCE(SC_MAGICMUSHROOM) && sc->getSCE(SC_MAGICMUSHROOM)->val3 == 0)
+			in.status_reduction_pct += sc->getSCE(SC_MAGICMUSHROOM)->val2;
 	}
 
-	int32 delay = 0;
-
-	if (!(delaynodex&2)) {
-		if (sc != nullptr && !sc->empty()) {
-			if (sc->getSCE(SC_POEMBRAGI))
-				delay += sc->getSCE(SC_POEMBRAGI)->val3;
-			if (sc->getSCE(SC_WIND_INSIGNIA) && sc->getSCE(SC_WIND_INSIGNIA)->val1 == 3 && skill_get_type(skill_id) == BF_MAGIC && skill_get_ele(skill_id, skill_lv) == ELE_WIND)
-				delay += 50; // After Delay of Wind element spells reduced by 50%.
-			if (sc->getSCE(SC_MAGICMUSHROOM) && sc->getSCE(SC_MAGICMUSHROOM)->val3 == 0)
-				delay += sc->getSCE(SC_MAGICMUSHROOM)->val2;
-		}
-	}
-
-	if (!(delaynodex&4) && bl->type == BL_PC) {
+	if (bl->type == BL_PC) { // Ignored by the rule for DelayNoItem skills
 		map_session_data* sd = (map_session_data*)bl;
 
-		if (sd->bonus.delayrate != 0) // bonus bDelayRate
-			delay += sd->bonus.delayrate;
+		in.bonus_delay_rate = sd->bonus.delayrate; // bonus bDelayRate
 
 		for (auto &it : sd->skilldelay) { // bonus2 bSkillDelay
 			if (it.id == skill_id) {
-				time += it.val;
+				in.bonus_skill_delay_ms = it.val;
 				break;
 			}
 		}
 	}
 
-	if (delay != 0)
-		time = time * (1 - (float)min(delay, 100) / 100);
-
-	if (battle_config.delay_rate != 100)
-		time = time * battle_config.delay_rate / 100;
-
-	//ShowInfo("Delay delayfix = %f\n",time);
-
-	return max((int32)time,0);
+	return rules::skills::after_cast_delay( in, rules_config() );
 }
 
 

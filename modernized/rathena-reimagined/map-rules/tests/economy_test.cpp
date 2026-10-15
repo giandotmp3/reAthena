@@ -121,12 +121,25 @@ TEST(Economy, BR_MAP_037_MvpFirstWindowIsTenSeconds) {
 
 TEST(Economy, BR_MAP_042_VendingNeedsSkillCartItemLimitAndPriceCap) {
 	const auto cfg = re();
-	EXPECT_EQ(ec::validate_vending_open({0, true, {100}}, cfg), ec::VendingOpenError::NoSkill);
-	EXPECT_EQ(ec::validate_vending_open({3, false, {100}}, cfg), ec::VendingOpenError::NoCart);
-	EXPECT_EQ(ec::validate_vending_open({3, true, {1, 1, 1, 1, 1}}, cfg), ec::VendingOpenError::None);
-	EXPECT_EQ(ec::validate_vending_open({3, true, {1, 1, 1, 1, 1, 1}}, cfg), ec::VendingOpenError::TooManyItems);
-	EXPECT_EQ(ec::validate_vending_open({3, true, {1000000001}}, cfg), ec::VendingOpenError::PriceOutOfRange);
-	EXPECT_EQ(ec::validate_vending_open({3, true, {0}}, cfg), ec::VendingOpenError::PriceOutOfRange);
+	EXPECT_EQ(ec::validate_vending_open({0, true, 1}, cfg), ec::VendingOpenError::NoSkill);
+	EXPECT_EQ(ec::validate_vending_open({3, false, 1}, cfg), ec::VendingOpenError::NoCart);
+	EXPECT_EQ(ec::validate_vending_open({3, true, 0}, cfg), ec::VendingOpenError::NoItems);
+	EXPECT_EQ(ec::validate_vending_open({3, true, 5}, cfg), ec::VendingOpenError::None);
+	EXPECT_EQ(ec::validate_vending_open({3, true, 6}, cfg), ec::VendingOpenError::TooManyItems);
+	// 2 + skill level, but never more than MAX_VENDING (12) items.
+	EXPECT_EQ(ec::validate_vending_open({10, true, 12}, cfg), ec::VendingOpenError::None);
+	EXPECT_EQ(ec::validate_vending_open({11, true, 13}, cfg), ec::VendingOpenError::TooManyItems);
+}
+
+TEST(Economy, BR_MAP_042_VendingPriceIsCappedNotRefused) {
+	// Legacy vending_openvending: value = min(value, vending_max_value); a price of 0 is accepted.
+	auto cfg = re();
+	EXPECT_EQ(ec::vending_listed_price(1000000001u, cfg), 1000000000u);
+	EXPECT_EQ(ec::vending_listed_price(4294967295u, cfg), 1000000000u);
+	EXPECT_EQ(ec::vending_listed_price(0u, cfg), 0u);
+	EXPECT_EQ(ec::vending_listed_price(1234u, cfg), 1234u);
+	cfg.vending_max_value = 10000000; // the battle.cpp code default
+	EXPECT_EQ(ec::vending_listed_price(10000001u, cfg), 10000000u);
 }
 
 TEST(Economy, BR_MAP_043_VendingPurchaseChecksStockZenyWeight) {
@@ -141,6 +154,7 @@ TEST(Economy, BR_MAP_043_VendingPurchaseChecksStockZenyWeight) {
 
 	auto out = p;
 	out.amount = 6;
+	out.buyer_zeny = *mr::Zeny::checked(6000);
 	EXPECT_EQ(ec::vending_buy(out, cfg).error, ec::VendingBuyError::OutOfStock);
 	auto poor = p;
 	poor.buyer_zeny = *mr::Zeny::checked(1999);
@@ -148,6 +162,34 @@ TEST(Economy, BR_MAP_043_VendingPurchaseChecksStockZenyWeight) {
 	auto heavy = p;
 	heavy.buyer_weight = 990;
 	EXPECT_EQ(ec::vending_buy(heavy, cfg).error, ec::VendingBuyError::Overweight);
+}
+
+TEST(Economy, BR_MAP_043_VendingPurchaseChecksInLegacyOrder) {
+	// vending_purchasereq checks a line's zeny, then the seller's zeny, then weight, then stock.
+	const auto cfg = re();
+	const ec::VendingPurchase p{.unit_price = 1000, .amount = 6, .stock = 5, .item_weight = 200,
+	                            .buyer_zeny = *mr::Zeny::checked(5000), .buyer_weight = 0, .buyer_max_weight = 1000,
+	                            .seller_zeny = *mr::Zeny::checked(mr::kMaxZeny - 5999)};
+	EXPECT_EQ(ec::vending_buy(p, cfg).error, ec::VendingBuyError::NotEnoughZeny);
+	auto q = p;
+	q.buyer_zeny = *mr::Zeny::checked(6000);
+	EXPECT_EQ(ec::vending_buy(q, cfg).error, ec::VendingBuyError::SellerZenyOverflow);
+	q.seller_zeny = *mr::Zeny::checked(mr::kMaxZeny - 6000);
+	EXPECT_EQ(ec::vending_buy(q, cfg).error, ec::VendingBuyError::Overweight);
+	q.item_weight = 10;
+	EXPECT_EQ(ec::vending_buy(q, cfg).error, ec::VendingBuyError::OutOfStock);
+	q.stock = 6;
+	EXPECT_EQ(ec::vending_buy(q, cfg).error, ec::VendingBuyError::None);
+}
+
+TEST(Economy, BR_MAP_043_SellerOverflowIsCheckedBeforeTax) {
+	// Legacy compares the pre-tax total with MAX_ZENY - seller zeny, even when the tax would make
+	// the proceeds fit.
+	const auto cfg = re();
+	const ec::VendingPurchase p{.unit_price = 200000000, .amount = 1, .stock = 1, .item_weight = 0,
+	                            .buyer_zeny = *mr::Zeny::checked(200000000), .buyer_max_weight = 10,
+	                            .seller_zeny = *mr::Zeny::checked(mr::kMaxZeny - 195000000)};
+	EXPECT_EQ(ec::vending_buy(p, cfg).error, ec::VendingBuyError::SellerZenyOverflow);
 }
 
 TEST(Economy, BR_MAP_044_VendingTaxFivePercentFromHundredMillion) {
@@ -160,6 +202,25 @@ TEST(Economy, BR_MAP_044_VendingTaxFivePercentFromHundredMillion) {
 	const auto r = ec::vending_buy(p, cfg);
 	EXPECT_EQ(r.seller_zeny.value(), 95000000);
 	EXPECT_EQ(r.tax, 5000000);
+}
+
+TEST(Economy, BR_MAP_044_VendingTaxIsComputedInDoubleAndTheProceedsTruncated) {
+	// vending_calc_tax: z -= z * (vending_tax / 10000.), then (int32)z. 100000001 x 0.05 = 5000000.05,
+	// the seller gets (int32)95000000.95 = 95000000, so the tax kept is 5000001 (rounded up).
+	const auto cfg = re();
+	EXPECT_DOUBLE_EQ(ec::vending_proceeds(100000001.0, cfg), 100000001.0 - 100000001.0 * 0.05);
+	EXPECT_EQ(static_cast<std::int32_t>(ec::vending_proceeds(100000001.0, cfg)), 95000000);
+	EXPECT_EQ(ec::vending_tax(100000001, cfg), 5000001);
+	EXPECT_EQ(ec::vending_proceeds(99999999.0, cfg), 99999999.0);
+	auto off = cfg;
+	off.vending_tax = 0;
+	EXPECT_EQ(ec::vending_proceeds(2000000000.0, off), 2000000000.0);
+	EXPECT_EQ(ec::vending_tax(2000000000, off), 0);
+	// vending_tax_min 0 taxes every sale: 1 zeny x 5% -> (int32)0.95 = 0 for the seller.
+	auto all = cfg;
+	all.vending_tax_min = 0;
+	EXPECT_EQ(ec::vending_tax(1, all), 1);
+	EXPECT_EQ(ec::vending_tax(0, all), 0);
 }
 
 TEST(Economy, BR_MAP_045_ZenyNeverNegativeAndCreditsClamp) {
