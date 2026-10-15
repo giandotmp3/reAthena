@@ -56,6 +56,10 @@ OnInit:
 	// ("invalid %N$ use detected"), so the corpus does not exercise them
 	callfunc "corpus_eq", "sprintf percent", sprintf("%d%%", 100), "100%";
 	callfunc "corpus_eq", "sprintf no arguments", sprintf("100%%"), "100%%";  // legacy: returned verbatim
+	// Positional arguments and '*' widths used to reach the C library unchecked (glibc aborted the
+	// whole map-server on %2$s); they are now refused with an error and an empty result.
+	callfunc "corpus_eq", "sprintf positional refused", sprintf("%2$s %1$s", "a", "b"), "";
+	callfunc "corpus_eq", "sprintf star width refused", sprintf("[%*d]", 5, 3), "";
 
 	.@n = sscanf("This is a test: 42 foobar", "This is a test: %d %s", .@num, .@str$);
 	callfunc "corpus_eq", "sscanf count", .@n, 2;

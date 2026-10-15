@@ -17480,6 +17480,19 @@ BUILDIN_FUNC(sprintf)
 			continue;
 		}
 
+		// Each conversion is passed to the C library with exactly one argument: positional
+		// arguments (%2$s) abort glibc and '*' widths read an argument that was never passed.
+		for( const char* f = p; *f != '\0' && strchr( "diouxXeEfFgGaAcsp", *f ) == nullptr; f++ ){
+			if( *f == '$' || *f == '*' ){
+				ShowError( "buildin_sprintf: Format '%c' in a conversion is not supported.\n", *f );
+				script_reportsrc( st );
+				if(buf) aFree(buf);
+				if(buf2) aFree(buf2);
+				script_pushconststr(st,"");
+				return SCRIPT_CMD_FAILURE;
+			}
+		}
+
 		if(arg >= argc) {
 			ShowError("buildin_sprintf: Not enough arguments passed!\n");
 			if(buf) aFree(buf);
