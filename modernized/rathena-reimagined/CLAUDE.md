@@ -24,14 +24,14 @@ This is a hybrid. **login-server** and **web-server** are full C++20 rebuilds: d
 | `netproto/` | LE framing, length validation (S4), unknown-packet disconnect, inter-server length tables, handshakes 0x2710/0x2af8 + version, 0x2717 with widened `group_id`, stall and flood policies | BR-INTER-001, 002, 003, 007, 010–013 | 87 (6) |
 | `persistence/` | Single `Item` mapping (×6 tables), checked `Zeny`, repositories (MySQL + in-memory fake), `rathena-migrate` with gated steps M0…M3b | BR-LOGIN-008, 037; BR-CHAR-013 (cascade order); BR-MAP-045 | 91 (5) |
 | `login-server/` | Auth order, refusal codes, tickets (30 s), online state, IP ban + failure counter independent of the log, web token (retry ≤ 20), Argon2id behind a bounded pool (stub), char-server registry, client handler stubs | BR-LOGIN-001…039 (004 → "Removed"), BR-INTER-004, 005, 006, 014, 017 | 80 (7) |
-| `web-server/` | 16 POST routes, WebToken required on **all** routes including `*/load`, nlohmann/json only, emblem validation including the transparency limit, config merge semantics, party booking, CORS | BR-WEB-001…017 | 106 (4) |
+| `web-server/` | 16 POST routes, WebToken required on **all** routes including `*/load`, nlohmann/json only, emblem validation including the transparency limit, config merge semantics, party booking, CORS | BR-WEB-001…017 | 104 (2) |
 | `char-rules/` | charlife, PIN, party, guild, mail (RODEX only), registry, clan, GM (authority re-check), session rules, **save→auth barrier per char_id** | BR-CHAR-001…055, BR-INTER-008, 009, 015, 018, 019 | 121 (9) |
 | `map-rules/` | combat, progression, economy, trade, skills, anticheat; renewal + pre-renewal; property tests; `manifest/map_modules.tsv` (each `src/map/*.cpp` → one module) | BR-MAP-001…061 | 94 (9) |
 
-**Totals: 658 tests. 617 pass, 41 skipped as pending, 0 fail.** All 191 rule IDs appear in at least one test.
+**Totals: 656 tests. 617 pass, 39 skipped as pending, 0 fail.** All 191 rule IDs appear in at least one test.
 
 Pending tests are `GTEST_SKIP() << "PENDING <BR-ID>"`. They are mostly waiting on golden vectors from an instrumented legacy build, a live MySQL, libsodium, or verbatim packet headers. Pending rule IDs:
-BR-CHAR-013, 022, 028, 031, 032, 034, 042, 047 · BR-INTER-001, 003, 006, 007, 010, 013, 017, 018 · BR-LOGIN-001, 036, 037, 039 · BR-MAP-015, 017, 019, 032, 033, 034, 049, 053, 055.
+BR-CHAR-013, 022, 028, 031, 032, 034, 042, 047 · BR-INTER-001, 003, 006, 007, 010, 013, 017, 018 · BR-LOGIN-001, 036, 037, 039 · BR-MAP-015, 017, 019, 032, 033, 034, 049, 053, 055 · BR-WEB-010 (client-capture gate), 016 (httplib end-to-end).
 Most of these also have passing tests for their pure logic; only the integration part is pending.
 
 ## How to build and test
@@ -88,6 +88,8 @@ The full file → module map for the map server is `map-rules/manifest/map_modul
 
 ## Decisions baked in (do not silently revert)
 
+- **SME questions resolved 2026-10-15** (spec §6): web treated as internet-facing; registration limit stays server-wide; a leader leaving dissolves the party; booking search uses exact level match; GeoIP is optional; character-config saves verify GID ownership; mapreg last-writer-wins accepted (single writer is P2); `date.cpp` → ops, and the dual-listed files' owners are confirmed.
+
 - **Dropped (HITL #1):**
   - legacy auction and pre-RODEX mail (auction opcodes removed from the length tables);
   - unauthenticated web `*/load` (now 400 without a token);
@@ -103,6 +105,4 @@ The full file → module map for the map server is `map-rules/manifest/map_modul
 3. Wire `persistence` to the MySQL client (`3rdparty/mysql`), generate the M0 baseline fingerprints from `sql-files/upgrades/`, and vendor libsodium for Argon2id.
 4. Replace `login-server/include/.../protocol/client_packets.hpp` with the verbatim legacy packet headers (K1).
 5. Before phase 2 ships, capture what real clients send on web `*/load` (BR-WEB-010 gate).
-6. Architect to confirm: owner of `src/map/date.cpp` (proposed `ops`), and primary owner for files listed under two modules (`pc.cpp`, `mob.cpp`, `map.cpp`, `clif.cpp`).
-7. SME questions: spec §6 (web exposure, per-IP registration limit, leaderless parties, booking level overlap, GeoIP, pre-renewal support, orphan rows), plus BR-WEB-011 GID-ownership default.
-8. CI: add a workflow that builds and tests all 7 units on gcc, clang, MSVC and macOS.
+6. CI: add a workflow that builds and tests all 7 units on gcc, clang, MSVC and macOS.

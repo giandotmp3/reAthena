@@ -123,17 +123,12 @@ TEST_F(BR_WEB_011_Handler, SaveMergesWithNullPreservingAndLoadAddsType) {
 }
 
 TEST_F(BR_WEB_011_Handler, SecureDefaultRejectsForeignGid) {
-    // Secure default while the SME question is open: GID must belong to AID.
+    // Decided 2026-10-15: GID must belong to AID (WEB_VERIFY_CHAR_OWNERSHIP defaults to yes).
     auto r = call(as_master("/charconfig/save", {{"GID", std::to_string(kGidMember)}, {"data", "{}"}}));
     EXPECT_EQ(r.status, kHttpBadRequest);
     EXPECT_EQ(store.char_config_count(), 0u);
 }
 
-TEST(BR_WEB_011_CharConfigOwnership_Pending, SmeDecisionOnGidOwnership) {
-    GTEST_SKIP() << "BR-WEB-011 pending SME decision: legacy does not verify GID ownership. "
-                    "The rebuild verifies by default (WEB_VERIFY_CHAR_OWNERSHIP=yes); finalize "
-                    "once the SME confirms the client never saves for a character of another account.";
-}
 
 // ------------------------------------------------------------------ BR-WEB-012
 

@@ -599,11 +599,19 @@ The rebuild uses **one source of defaults**: shipped config values become the co
 
 ---
 
-## 6. Open SME questions
-1. Is the web server meant to be internet-facing? Are the unauthenticated `*/load` routes intentional (the client may not send a token on load)?
-2. Should the registration flood limit be per IP instead of server-wide?
-3. Should a party survive its leader leaving (the code TODO says official servers allow leaderless parties)?
-4. Should party-booking level search use range overlap?
-5. Are auction, the legacy pre-RODEX mail and `GeoIP.dat` still in use?
-6. Is the pre-renewal mode still a supported target, or renewal only?
-7. Are there orphan rows from MyISAM deletes in production data, which would affect migration?
+## 6. SME questions — resolved 2026-10-15
+
+The user delegated these decisions ("answer questions autonomously based on your own recommendations"). Each one follows the recommendation below. Reopen any of them by editing this section.
+
+| # | Question | Decision | Rationale | Effect |
+|---|---|---|---|---|
+| 1 | Is the web server internet-facing? Are unauthenticated `*/load` routes intentional? | **Treat it as internet-facing.** WebToken is required on every route (already HITL #1). | Secure default. Operators may still bind to LAN. | No change. The BR-WEB-010 client-capture gate before phase 2 still applies. |
+| 2 | Registration flood limit per IP or server-wide? | **Keep it server-wide** (legacy parity). | Per-IP abuse is already covered by the connection-flood guard (BR-INTER-011) and the IP auto-ban (BR-LOGIN-023). Self-registration is off in the shipped config. | BR-LOGIN-007 unchanged. |
+| 3 | Should a party survive its leader leaving? | **No. The party is dissolved, as in legacy.** | Behaviour players already know. A leaderless party needs new client flows. | BR-CHAR-035 unchanged. |
+| 4 | Party-booking level search: exact match or range overlap? | **Exact min/max match, as in legacy.** | The client sends the level brackets it offers, so overlap would change search results players already see. | BR-WEB-014 pending test removed. |
+| 5 | Are auction, pre-RODEX mail and `GeoIP.dat` still used? | Auction and pre-RODEX mail are **dropped** (HITL #1). **GeoIP is optional**: used only for logging, and skipped with a warning if the file is missing. | GeoIP is stale data and not P0. | Not P0; no rule change. |
+| 6 | Pre-renewal still supported? | **Yes** (HITL #1). | Large part of the community. | Both formula pipelines stay in scope. |
+| 7 | Orphan rows in production? | **Decided per deployment by the M1 orphan report** (delete or quarantine). | Unknowable from code. | M1 runs on a schedule until M3b. |
+| 8 | BR-WEB-011: should character-config saves verify that the GID belongs to the AID? | **Yes. Verify by default** (`WEB_VERIFY_CHAR_OWNERSHIP=yes`, can be switched off). | Closes cross-account writes. A legitimate client only saves its own characters. | BR-WEB-011 pending test removed; the secure-default test stays. |
+| 9 | Cross-shard `mapreg` (`$` variables) last-writer-wins? | **Accept for now** (legacy behaviour, documented). Single writer via char is P2. | Multi-map-server setups are uncommon, and scripts that need atomic global state already route through char. | Architecture §3 unchanged. |
+| 10 | Owner of `src/map/date.cpp`; primary owner of the four files listed under two modules | **`date.cpp` → `ops`.** Primary owners: `clif.cpp` → proto, `map.cpp` → world, `mob.cpp` → mobai, `pc.cpp` → progression (secondary owners as in the manifest). | Follows where most of each file's code goes. | `map_modules.tsv` confirmed. |

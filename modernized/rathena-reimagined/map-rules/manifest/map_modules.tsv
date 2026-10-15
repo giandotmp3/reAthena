@@ -3,6 +3,7 @@
 #          <TAB> secondary modules that also extract rules from it (comma list or "-") <TAB> note
 # Valid modules: script proto world mobai combat progression skills items trade social companions anticheat gm ops
 # Files listed under two modules in §3.1 get ONE owner here (the first listing); the others are secondary.
+# Owners for clif.cpp, map.cpp, mob.cpp and pc.cpp were confirmed on 2026-10-15 (architecture §3.1).
 # path	owner	secondary	note
 script.cpp	script	-	wrapped first behind ScriptHost (§3.2)
 npc.cpp	script	-
@@ -46,4 +47,4 @@ pc_groups.cpp	gm	-
 log.cpp	ops	-
 chrif.cpp	ops	-
 intif.cpp	ops	-
-date.cpp	ops	-	PROPOSED: not listed in architecture §3.1; owner needs architect confirmation
+date.cpp	ops	-	Confirmed 2026-10-15: date/time helpers for events and mapflags; owned by ops

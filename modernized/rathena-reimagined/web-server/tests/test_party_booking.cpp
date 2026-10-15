@@ -107,6 +107,7 @@ TEST_F(BR_WEB_013_Handler, OneBookingPerWorldAidGid) {
 
 // ------------------------------------------------------------------ BR-WEB-014
 
+// Decided 2026-10-15 (spec §6 Q4): exact min/max match, as in legacy; no range overlap.
 TEST(BR_WEB_014_PartyBookingSearch, ExactLevelMatch) {
     BookingSearch s;
     s.minimum_level = 1;
@@ -178,10 +179,6 @@ TEST_F(BR_WEB_014_Handler, SearchRequiresLevels) {
     EXPECT_EQ(call(as_master("/party/search", {{"MinLV", "1"}})).status, kHttpBadRequest);
 }
 
-TEST(BR_WEB_014_PartyBookingSearch_Pending, SmeDecisionOnLevelRangeOverlap) {
-    GTEST_SKIP() << "BR-WEB-014 pending SME decision (spec §6 Q4): should level search use range "
-                    "overlap instead of exact min/max match? Exact match is implemented per the contract.";
-}
 
 // ------------------------------------------------------------------ BR-WEB-015
 

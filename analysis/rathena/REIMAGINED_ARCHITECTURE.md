@@ -91,7 +91,7 @@ tests/           GoogleTest acceptance tests, one file per rule group, BR-ID in 
 
 | Shared state | Writer | Policy |
 |---|---|---|
-| `mapreg` (`$` vars) | each map server, autosaved every 300 s | Legacy last-writer-wins is **accepted and documented**. A single-writer move through char is a P2 follow-up. |
+| `mapreg` (`$` vars) | each map server, autosaved every 300 s | Legacy last-writer-wins is **accepted and documented**. A single-writer move through char is a P2 follow-up (confirmed 2026-10-15, spec §6 Q9). |
 | market/barter/sales stock | the map server hosting the NPC | Single writer by construction (one NPC is on one shard). |
 | party_bookings | map + web | Row-per-(world, AID, GID) upsert; last-writer-wins is accepted. |
 
@@ -114,7 +114,7 @@ tests/           GoogleTest acceptance tests, one file per rule group, BR-ID in 
 | `gm` | CAP-21 | atcommand.cpp, pc_groups.cpp |
 | `ops` | CAP-25/26 | log.cpp, chrif.cpp, intif.cpp, map.cpp (boot/config) |
 
-The full file → module manifest is generated in Phase E and checked in CI. Any new upstream file fails CI until it is assigned.
+The full file → module manifest is `modernized/rathena-reimagined/map-rules/manifest/map_modules.tsv`; it was generated in Phase E and is checked in CI. Ownership was confirmed on 2026-10-15: `date.cpp` → ops; primary owners `clif.cpp` → proto, `map.cpp` → world, `mob.cpp` → mobai, `pc.cpp` → progression. Any new upstream file fails CI until it is assigned.
 
 ### 3.2 In-place extraction loop (per rule group)
 
