@@ -4,11 +4,11 @@
 //= Sells all cards dropped by mobs, grouped alphabetically.
 //= MVP cards are excluded from the list.
 //=
-//= NOTE: Requires SQL item and mob databases.
 //===== Changelogs: ==========================================
 //= 1.0 First version [AnnieRuru]
 //= 1.1 Minor edits [Euphy]
 //= 1.2 Update for monster mode and enchants [Lemongrass]
+//= 1.3 Built from the item and mob databases instead of SQL tables
 //============================================================
 
 prontera,155,177,5	script	Card Seller	100,{
@@ -33,39 +33,49 @@ prontera,155,177,5	script	Card Seller	100,{
 -	script	card_seller_creation	-1,{
 	end;
 OnInit:
-	if (checkre(0)) {
-		.@mob_db$  = "mob_db_re";
-		.@item_db$ = "item_db_re";
-	} else {
-		.@mob_db$  = "mob_db";
-		.@item_db$ = "item_db";
-	}
+	// Cards dropped (normal drops, not MVP rewards) by any non-MVP monster, grouped by the first
+	// letter of their name and sorted by name.
+	.@letters$ = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 	freeloop 1;
-	
-	.@string$ = "( `name_aegis` IN ( SELECT DISTINCT `drop1_item` FROM `" + .@mob_db$ + "` WHERE COALESCE(`mode_mvp`,0) = 0 ) " +
-		"OR `name_aegis` IN ( SELECT DISTINCT `drop2_item` FROM `" + .@mob_db$ + "` WHERE COALESCE(`mode_mvp`,0) = 0 ) " +
-		"OR `name_aegis` IN ( SELECT DISTINCT `drop3_item` FROM `" + .@mob_db$ + "` WHERE COALESCE(`mode_mvp`,0) = 0 ) " +
-		"OR `name_aegis` IN ( SELECT DISTINCT `drop4_item` FROM `" + .@mob_db$ + "` WHERE COALESCE(`mode_mvp`,0) = 0 ) " +
-		"OR `name_aegis` IN ( SELECT DISTINCT `drop5_item` FROM `" + .@mob_db$ + "` WHERE COALESCE(`mode_mvp`,0) = 0 ) " +
-		"OR `name_aegis` IN ( SELECT DISTINCT `drop6_item` FROM `" + .@mob_db$ + "` WHERE COALESCE(`mode_mvp`,0) = 0 ) " +
-		"OR `name_aegis` IN ( SELECT DISTINCT `drop7_item` FROM `" + .@mob_db$ + "` WHERE COALESCE(`mode_mvp`,0) = 0 ) " +
-		"OR `name_aegis` IN ( SELECT DISTINCT `drop8_item` FROM `" + .@mob_db$ + "` WHERE COALESCE(`mode_mvp`,0) = 0 ) " +
-		"OR `name_aegis` IN ( SELECT DISTINCT `drop9_item` FROM `" + .@mob_db$ + "` WHERE COALESCE(`mode_mvp`,0) = 0 ) " +
-		"OR `name_aegis` IN ( SELECT DISTINCT `drop10_item` FROM `" + .@mob_db$ + "` WHERE COALESCE(`mode_mvp`,0) = 0 ) )";
-
-	.@total = query_sql( "SELECT DISTINCT LEFT( `name_english`, 1 ) AS alphabets FROM `"+ .@item_db$ +"` WHERE `type` = 'Card' AND " + .@string$ + " ORDER BY alphabets;", .@alphabet$ );
-	for ( .@i = 0; .@i < .@total; .@i++ ) {
-		.@nb = query_sql( "SELECT `"+ .@item_db$ +"`.`id` FROM `"+ .@item_db$ +"` WHERE `type` = 'Card' AND LEFT( `name_english`, 1 ) = '"+ .@alphabet$[.@i] +"' AND " + .@string$ + " ORDER BY `name_english` LIMIT 128;", .@id );
-		if (.@nb > 0) {
-			.alphabet$[.@size_alphabet++] = .@alphabet$[.@i];
-			.alphabet_menu$ = .alphabet_menu$ + .@alphabet$[.@i] +" Cards:";
-			npcshopdelitem "card_mob#"+ .@alphabet$[.@i], 501;
-			for ( .@j = 0; .@j < .@nb; .@j++ ) {
-				if (getiteminfo(.@id[.@j], ITEMINFO_SUBTYPE) == CARD_ENCHANT)// Skip enchants in case someone added them as card drop
-					continue;
-				npcshopadditem "card_mob#"+ .@alphabet$[.@i], .@id[.@j], 1000000;
+	for ( .@mob = 1001; .@mob < 65535; .@mob++ ) {
+		if (!getmobdrops(.@mob) || (getmonsterinfo(.@mob, MOB_MODE) & MD_MVP))
+			continue;
+		.@count = $@MobDrop_count;
+		copyarray .@drops[0], $@MobDrop_item[0], .@count;
+		for ( .@d = 0; .@d < .@count; .@d++ ) {
+			.@item = .@drops[.@d];
+			if (.@seen[.@item])
+				continue;
+			.@seen[.@item] = 1;
+			if (getiteminfo(.@item, ITEMINFO_TYPE) != IT_CARD || getiteminfo(.@item, ITEMINFO_SUBTYPE) == CARD_ENCHANT)
+				continue;
+			.@name$ = getitemname(.@item);
+			.@l = strpos(.@letters$, strtoupper(charat(.@name$, 0)));
+			if (.@l < 0)
+				continue;
+			// insertion sort by name into the letter's list (shops hold up to 128 items)
+			.@n = getd(".@size_" + .@l);
+			if (.@n >= 128)
+				continue;
+			for ( .@p = .@n; .@p > 0 && getd(".@names_" + .@l + "$[" + (.@p - 1) + "]") > .@name$; .@p-- ) {
+				setd ".@names_" + .@l + "$[" + .@p + "]", getd(".@names_" + .@l + "$[" + (.@p - 1) + "]");
+				setd ".@ids_" + .@l + "[" + .@p + "]", getd(".@ids_" + .@l + "[" + (.@p - 1) + "]");
 			}
+			setd ".@names_" + .@l + "$[" + .@p + "]", .@name$;
+			setd ".@ids_" + .@l + "[" + .@p + "]", .@item;
+			setd ".@size_" + .@l, .@n + 1;
 		}
+	}
+	for ( .@l = 0; .@l < 26; .@l++ ) {
+		.@n = getd(".@size_" + .@l);
+		if (.@n == 0)
+			continue;
+		.@letter$ = charat(.@letters$, .@l);
+		.alphabet$[.@size_alphabet++] = .@letter$;
+		.alphabet_menu$ = .alphabet_menu$ + .@letter$ +" Cards:";
+		npcshopdelitem "card_mob#"+ .@letter$, 501;
+		for ( .@j = 0; .@j < .@n; .@j++ )
+			npcshopadditem "card_mob#"+ .@letter$, getd(".@ids_" + .@l + "[" + .@j + "]"), 1000000;
 	}
 	freeloop 0;
 	end;

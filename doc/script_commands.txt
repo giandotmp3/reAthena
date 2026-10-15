@@ -3873,6 +3873,7 @@ Valid types are:
 	MOB_MODE          - monster's mode
 	MOB_MVPEXP        - monster's mvp experience
 	MOB_ID            - monster's ID
+	MOB_CLASS         - monster's class (CLASS_NORMAL, CLASS_BOSS, CLASS_GUARDIAN, CLASS_BATTLEFIELD, CLASS_EVENT)
 
 For more details, see the sample in 'doc/sample/getmonsterinfo.txt'.
 

@@ -3,14 +3,13 @@
 //===== By: ==================================================
 //= Euphy
 //===== Current Version: =====================================
-//= 1.4
+//= 1.5
 //===== Compatible With: ===================================== 
 //= rAthena Project
 //===== Description: =========================================
 //= Random hunting missions.
 //= Rewards are based on quest difficulty.
 //= 
-//= NOTE: Requires SQL mob database.
 //===== Additional Comments: =================================
 //= 1.0 Initial script.
 //= 1.1 Small improvements and fixes.
@@ -21,6 +20,7 @@
 //= 1.3b Function updates.
 //= 1.4 Check for deleted characters, thanks to AnnieRuru.
 //=     Syntax updates and style cleaning.
+//= 1.5 Picks monsters from the mob database instead of SQL tables; portable SQL.
 //============================================================
 
 prontera,152,187,6	script	Hunting Missions	4_F_EDEN_MASTER,{
@@ -74,8 +74,14 @@ function Chk;
 			close;
 		}
 		mes "You must hunt:";
-		query_sql("SELECT ID FROM `" + .mob_db$ + "` WHERE left(name_aegis, 4) != 'meta' AND left(name_aegis, 2) != 'E_' AND base_exp > 0 AND job_exp > 0 AND (class != 'boss' OR class is null) AND (drop3_item like '%_card' OR drop4_item like '%_card' OR drop5_item like '%_card' OR drop6_item like '%_card' OR drop7_item like '%_card' OR drop8_item like '%_card' OR drop9_item like '%_card' OR drop10_item like '%_card') AND ID < 2000 AND instr('"+.Blacklist$+"',ID) = 0 ORDER BY rand() LIMIT " + .Quests, .@mob);
-		
+		// .Quests different monsters, picked at random from the candidates found OnInit
+		copyarray .@pool[0], .Candidates[0], getarraysize(.Candidates);
+		.@left = getarraysize(.@pool);
+		for (.@i = 0; .@i < .Quests && .@left > 0; .@i++) {
+			.@r = rand(.@left);
+			.@mob[.@i] = .@pool[.@r];
+			.@pool[.@r] = .@pool[--.@left];
+		}
 		for (.@i = 0; .@i < .Quests; .@i++) {
 			setd "Mission" + .@i, .@mob[.@i];
 			setd "Mission" + .@i +"_", 0;
@@ -147,7 +153,7 @@ function Chk;
 	case 6:
 		mes "[Hunting Missions]";
 		mes "The top hunters are:";
-		query_sql("SELECT char_id AS id, (SELECT `name` FROM `char` WHERE char_id = id),`value` FROM `char_reg_num` WHERE `key` = 'Mission_Total' ORDER BY CAST(`value` AS SIGNED) DESC LIMIT 5", .@id, .@name$, .@val);
+		query_sql("SELECT r.`char_id`, c.`name`, r.`value` FROM `char_reg_num` r JOIN `char` c ON c.`char_id` = r.`char_id` WHERE r.`key` = 'Mission_Total' ORDER BY r.`value` DESC LIMIT 5", .@id, .@name$, .@val);
 		for (.@i = 0; .@i < 5; .@i++)
 			mes "  [Rank " + (.@i+1) + "]  " + ((.@name$[.@i] == "") ? "^777777none" : "^0055FF" + .@name$[.@i]+"^000000 : ^FF0000" + .@val[.@i] + " pt.") + "^000000";
 		close;
@@ -207,10 +213,8 @@ Mission_Status:
 	if (.Delay)
 		#Mission_Delay = gettimetick(2) + (.Delay * 3600);
 	Mission_Total++;
-	if (Mission_Total == 1)
-		query_sql("INSERT INTO `char_reg_num` (`char_id`,`key`,`index`,`value`) VALUES (" + getcharid(0) + ",'Mission_Total','0',1)");
-	else
-		query_sql("UPDATE `char_reg_num` SET `value` = " + Mission_Total + " WHERE `char_id` = " + getcharid(0) + " AND `key` = 'Mission_Total'");
+	// written now so the ranking is current before the character is saved
+	query_sql("REPLACE INTO `char_reg_num` (`char_id`,`key`,`index`,`value`) VALUES (" + getcharid(0) + ",'Mission_Total',0," + Mission_Total + ")");
 	close;
 
 Mission_Info:
@@ -317,8 +321,6 @@ OnInit:
 		40,70;
 	setarray .Modifier[0],  // Multipliers for Base Exp, Job Exp, and Zeny rewards.
 		getbattleflag("base_exp_rate")/100,getbattleflag("job_exp_rate")/100,60;
-	.mob_db$ =              // Table name of SQL mob database
-		(checkre(0))?"mob_db_re":"mob_db";
 	setarray .Shop[0],      // Reward items: <ID>,<point cost> (about 10~20 points per hunt).
 		512,1,513,1,514,1,538,5,539,5,558,10,561,10;
 	.Blacklist$ =           // Blacklisted mob IDs.
@@ -326,7 +328,29 @@ OnInit:
 		"1244,1245,1250,1268,1290,1293,1294,1296,1298,1299,"+
 		"1300,1301,1303,1304,1305,1306,1308,1309,1311,1313,"+
 		"1515,1588,1618,1676,1677,1678,1679,1796,1797,1974,"+
-		"1975,1976,1977,1978,1979";
+		"1975,1976,1977,1978,1979,"+
+		"1058,1229,1230,1231,1232,1236,1237,1238,1239,1240,"+  // META_ and E_ (event) monsters
+		"1241,1613,1854,1855,1856,1857,1858,1859,1860,1861,"+
+		"1862,1863,1876,1878,1901,1902,1903,1968,1969,1970,"+
+		"1971,1972,1973";
+
+	// Candidates: monsters below ID 2000 that give base and job exp, are not bosses, drop a
+	// card and are not blacklisted.
+	.@blacklist$ = "," + .Blacklist$ + ",";
+	freeloop 1;
+	for (.@mob = 1001; .@mob < 2000; .@mob++) {
+		if (!getmobdrops(.@mob) || compare(.@blacklist$, "," + .@mob + ","))
+			continue;
+		if (getmonsterinfo(.@mob, MOB_BASEEXP) <= 0 || getmonsterinfo(.@mob, MOB_JOBEXP) <= 0 || getmonsterinfo(.@mob, MOB_CLASS) == CLASS_BOSS)
+			continue;
+		for (.@d = 0; .@d < $@MobDrop_count; .@d++) {
+			if (getiteminfo($@MobDrop_item[.@d], ITEMINFO_TYPE) == IT_CARD) {
+				.Candidates[getarraysize(.Candidates)] = .@mob;
+				break;
+			}
+		}
+	}
+	freeloop 0;
 
 	npcshopdelitem "mission_shop",512;
 	for (.@i = 0; .@i < getarraysize(.Shop); .@i += 2)
