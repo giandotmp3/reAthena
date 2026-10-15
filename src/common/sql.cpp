@@ -17,6 +17,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <filesystem>
 #include <fstream>
 #include <map>
 #include <optional>
@@ -168,6 +169,11 @@ public:
 		}
 		if( path != ":memory:" && path.find( '/' ) == std::string::npos && path.find( '\\' ) == std::string::npos && path.find( '.' ) == std::string::npos ){
 			path = sqlite_directory + "/" + path + ".db";
+		}
+		if( path != ":memory:" ){
+			std::error_code ec; // first run: create save/ (or the configured directory)
+			const auto dir = std::filesystem::path( path ).parent_path();
+			if( !dir.empty() ) std::filesystem::create_directories( dir, ec );
 		}
 		if( sqlite3_open_v2( path.c_str(), &this->db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_NOMUTEX, nullptr ) != SQLITE_OK ){
 			this->error = std::string( "cannot open SQLite database '" ) + path + "': " + ( this->db ? sqlite3_errmsg( this->db ) : "out of memory" );
