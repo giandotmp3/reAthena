@@ -32,6 +32,9 @@
 #include "party.hpp"
 #include "path.hpp"
 #include "pc.hpp"
+#include "rules_bridge.hpp"
+
+#include <rathena/map_rules/combat.hpp>
 #include "pc_groups.hpp"
 #include "pet.hpp"
 #include "./skills/skill_impl.hpp"
@@ -4812,15 +4815,16 @@ static void battle_calc_defense_reduction( Damage* wd, block_list* src, block_li
 		int32 skill;
 #ifndef RENEWAL
 		//Damage reduction: [VIT*0.3] + RND(0, [VIT^2/150] - [VIT*0.3] - 1) + [VIT*0.5]
-		vit_def = ((3 * def2) / 10);
+		// BR-MAP-015 (map-rules): [3*def2/10] + rnd(0, spread) + [def2/2]. The draw stays rnd_value
+		// so the random stream is unchanged; the rule supplies the bounds.
 		{
-			const int32 spread = rnd_value(0, max(0, (def2 * def2) / 150 - ((3 * def2) / 10) - 1));
+			const rules::combat::Range range = rules::combat::vit_def_pre_re_player_range( def2 );
+			const int32 spread = rnd_value( 0, range.max - range.min );
 #ifdef RATHENA_GOLDEN_TRACE
 			golden_rnd = spread;
 #endif
-			vit_def += spread;
+			vit_def = static_cast<int16>( range.min + spread );
 		}
-		vit_def += (def2 / 2);
 #else
 		vit_def = def2;
 #endif
@@ -4836,16 +4840,23 @@ static void battle_calc_defense_reduction( Damage* wd, block_list* src, block_li
 	} else { //Mob-Pet vit-eq
 #ifndef RENEWAL
 		//VIT + rnd(0,[VIT/20]^2-1)
-		if (tsc && tsc->getSCE(SC_SKA))
-			vit_def = 90; //Eska sets the random part of the formula to 90
-		else
-			vit_def = (def2 / 20) * (def2 / 20);
-		{
-			const int32 spread = vit_def > 0 ? rnd() % vit_def : 0;
+		if (tsc && tsc->getSCE(SC_SKA)) {
+			//Eska sets the random part of the formula to 90
+			const int32 spread = rnd() % 90;
 #ifdef RATHENA_GOLDEN_TRACE
 			golden_rnd = spread;
 #endif
 			vit_def = def2 + spread;
+		} else {
+			// BR-MAP-015 (map-rules): def2 + rnd() % [def2/20]^2. The draw stays here: legacy calls
+			// rnd() even when the width is 1, and the stream must not change.
+			const rules::combat::Range range = rules::combat::vit_def_pre_re_monster_range( def2 );
+			const int32 width = ( def2 / 20 ) * ( def2 / 20 );
+			const int32 spread = width > 0 ? rnd() % width : 0;
+#ifdef RATHENA_GOLDEN_TRACE
+			golden_rnd = spread;
+#endif
+			vit_def = static_cast<int16>( range.min + spread );
 		}
 #else
 		//SoftDEF of monsters is floor((BaseLevel+Vit)/2)
@@ -9227,8 +9238,10 @@ int32 battle_config_read(const char* cfgName)
 
 	count--;
 
-	if (count == 0)
+	if (count == 0) {
+		rules_config_snapshot(); // the rules read conf values, not the adjusted internal units
 		battle_adjust_conf();
+	}
 
 	return 0;
 }

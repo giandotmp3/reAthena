@@ -12326,7 +12326,7 @@ static int32 skill_unit_timer_sub(DBKey key, DBData *data, va_list ap)
 				block_list *src = map_id2bl(group->src_id);
 
 				if (src)
-					map_foreachinrange(skill_area_sub, unit, unit->range, BL_CHAR|BL_SKILL, src, group->skill_id, group->skill_lv, tick, BCT_ENEMY|SD_ANIMATION|5, skill_castend_damage_id);
+					map_foreachinrange(skill_area_sub, unit, unit->range, BL_CHAR|BL_SKILL, src, group->skill_id, group->skill_lv, tick, BCT_ENEMY|static_cast<int32>(SD_ANIMATION)|5, skill_castend_damage_id);
 				skill_delunit(unit);
 			}
 				break;

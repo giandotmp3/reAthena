@@ -16,6 +16,14 @@ RAPIDYAML_H = $(shell find ../../3rdparty/rapidyaml/ -type f -name "*.h*")
 RAPIDYAML_INCLUDE = -I../../3rdparty/rapidyaml/src -I../../3rdparty/rapidyaml/ext/c4core/src
 
 NLOHMANN_H = $(shell find ../../3rdparty/json/include/nlohmann/ -type f -name "*.hpp")
+
+# Pure rule library the legacy call sites delegate to (REIMAGINED_ARCHITECTURE.md §3.2)
+MAP_RULES_DIR = ../../modernized/rathena-reimagined/map-rules
+MAP_RULES_SRC = $(wildcard $(MAP_RULES_DIR)/src/*.cpp)
+MAP_RULES_OBJ = $(MAP_RULES_SRC:$(MAP_RULES_DIR)/src/%.cpp=obj-rules/%.o)
+MAP_RULES_AR = obj-rules/map_rules.a
+MAP_RULES_H = $(wildcard $(MAP_RULES_DIR)/include/rathena/map_rules/*.hpp)
+MAP_RULES_INCLUDE = -I$(MAP_RULES_DIR)/include
 NLOHMANN_INCLUDE = -I../../3rdparty/json/include
 
 # Create object directories for subdirectories
@@ -64,7 +72,7 @@ tools: $(TOOLS_DEPENDS)
 
 clean:
 	@echo "	CLEAN	map"
-	@rm -rf *.o obj ../../@OMAP@@EXEEXT@
+	@rm -rf *.o obj obj-gen obj-rules ../../@OMAP@@EXEEXT@
 
 help:
 	@echo "possible targets are 'server' 'all' 'clean' 'help'"
@@ -96,46 +104,56 @@ $(MAP_GEN_OBJ_DIRS):
 
 # executables
 
-map-server: obj $(MAP_DIR_OBJ) $(COMMON_AR) $(LIBCONFIG_AR) $(RAPIDYAML_AR)
+map-server: obj $(MAP_DIR_OBJ) $(MAP_RULES_AR) $(COMMON_AR) $(LIBCONFIG_AR) $(RAPIDYAML_AR)
 	@echo "	LD	@OMAP@@EXEEXT@"
-	@@CXX@ @LDFLAGS@ -o ../../@OMAP@@EXEEXT@ $(MAP_DIR_OBJ) $(COMMON_AR) $(LIBCONFIG_AR) $(RAPIDYAML_AR) @LIBS@ @PCRE_LIBS@ @DB_LIBS@
+	@@CXX@ @LDFLAGS@ -o ../../@OMAP@@EXEEXT@ $(MAP_DIR_OBJ) $(MAP_RULES_AR) $(COMMON_AR) $(LIBCONFIG_AR) $(RAPIDYAML_AR) @LIBS@ @PCRE_LIBS@ @DB_LIBS@
 
 
-map-server-generator: obj-gen $(MAP_GEN_DIR_OBJ) $(COMMON_AR) $(LIBCONFIG_AR) $(RAPIDYAML_AR)
+map-server-generator: obj-gen $(MAP_GEN_DIR_OBJ) $(MAP_RULES_AR) $(COMMON_AR) $(LIBCONFIG_AR) $(RAPIDYAML_AR)
 	@echo "	LD	map-server-generator@EXEEXT@"
-	@@CXX@ @LDFLAGS@ -o ../../map-server-generator@EXEEXT@ $(MAP_GEN_DIR_OBJ) $(COMMON_AR) $(LIBCONFIG_AR) $(RAPIDYAML_AR) @LIBS@ @PCRE_LIBS@ @DB_LIBS@
+	@@CXX@ @LDFLAGS@ -o ../../map-server-generator@EXEEXT@ $(MAP_GEN_DIR_OBJ) $(MAP_RULES_AR) $(COMMON_AR) $(LIBCONFIG_AR) $(RAPIDYAML_AR) @LIBS@ @PCRE_LIBS@ @DB_LIBS@
 
 
 # map object files
 #cause this one failling otherwise
-obj/npc.o: npc.cpp $(MAP_H) $(COMMON_H) $(LIBCONFIG_H) $(RAPIDYAML_H)
+obj/npc.o: npc.cpp $(MAP_H) $(MAP_RULES_H) $(COMMON_H) $(LIBCONFIG_H) $(RAPIDYAML_H)
 	@echo "	CXX	$< (custom rule)"
-	@@CXX@ @CXXFLAG_CLEARS@ $(COMMON_INCLUDE) $(RA_INCLUDE) $(LIBCONFIG_INCLUDE) $(PCRE_CFLAGS) $(RAPIDYAML_INCLUDE) @DB_CFLAGS@ @CPPFLAGS@ -c $(OUTPUT_OPTION) $<
+	@@CXX@ @CXXFLAG_CLEARS@ $(COMMON_INCLUDE) $(RA_INCLUDE) $(LIBCONFIG_INCLUDE) $(PCRE_CFLAGS) $(RAPIDYAML_INCLUDE) $(MAP_RULES_INCLUDE) @DB_CFLAGS@ @CPPFLAGS@ -c $(OUTPUT_OPTION) $<
 
 # these have extra dependencies
-obj/atcommand.o: atcommand.cpp $(MAP_H) $(COMMON_H) $(LIBCONFIG_H) $(RAPIDYAML_H) ../custom/atcommand_def.inc ../custom/atcommand.inc
+obj/atcommand.o: atcommand.cpp $(MAP_H) $(MAP_RULES_H) $(COMMON_H) $(LIBCONFIG_H) $(RAPIDYAML_H) ../custom/atcommand_def.inc ../custom/atcommand.inc
 	@echo "	CXX	$<"
-	@@CXX@ @CXXFLAGS@ $(COMMON_INCLUDE) $(RA_INCLUDE) $(LIBCONFIG_INCLUDE) $(PCRE_CFLAGS) $(RAPIDYAML_INCLUDE) @DB_CFLAGS@ @CPPFLAGS@ -c $(OUTPUT_OPTION) $<
+	@@CXX@ @CXXFLAGS@ $(COMMON_INCLUDE) $(RA_INCLUDE) $(LIBCONFIG_INCLUDE) $(PCRE_CFLAGS) $(RAPIDYAML_INCLUDE) $(MAP_RULES_INCLUDE) @DB_CFLAGS@ @CPPFLAGS@ -c $(OUTPUT_OPTION) $<
 
-obj/script.o: script.cpp $(MAP_H) $(COMMON_H) $(LIBCONFIG_H) $(RAPIDYAML_H) ../custom/script_def.inc ../custom/script.inc
+obj/script.o: script.cpp $(MAP_H) $(MAP_RULES_H) $(COMMON_H) $(LIBCONFIG_H) $(RAPIDYAML_H) ../custom/script_def.inc ../custom/script.inc
 	@echo "	CXX	$<"
-	@@CXX@ @CXXFLAGS@ $(COMMON_INCLUDE) $(RA_INCLUDE) $(LIBCONFIG_INCLUDE) $(PCRE_CFLAGS) $(RAPIDYAML_INCLUDE) @DB_CFLAGS@ @CPPFLAGS@ -c $(OUTPUT_OPTION) $<
+	@@CXX@ @CXXFLAGS@ $(COMMON_INCLUDE) $(RA_INCLUDE) $(LIBCONFIG_INCLUDE) $(PCRE_CFLAGS) $(RAPIDYAML_INCLUDE) $(MAP_RULES_INCLUDE) @DB_CFLAGS@ @CPPFLAGS@ -c $(OUTPUT_OPTION) $<
 
-obj/battle.o: battle.cpp $(MAP_H) $(COMMON_H) $(LIBCONFIG_H) $(RAPIDYAML_H) ../custom/battle_config_init.inc
+obj/battle.o: battle.cpp $(MAP_H) $(MAP_RULES_H) $(COMMON_H) $(LIBCONFIG_H) $(RAPIDYAML_H) ../custom/battle_config_init.inc
 	@echo "	CXX	$<"
-	@@CXX@ @CXXFLAGS@ $(COMMON_INCLUDE) $(RA_INCLUDE) $(LIBCONFIG_INCLUDE) $(PCRE_CFLAGS) $(RAPIDYAML_INCLUDE) @DB_CFLAGS@ @CPPFLAGS@ -c $(OUTPUT_OPTION) $<
+	@@CXX@ @CXXFLAGS@ $(COMMON_INCLUDE) $(RA_INCLUDE) $(LIBCONFIG_INCLUDE) $(PCRE_CFLAGS) $(RAPIDYAML_INCLUDE) $(MAP_RULES_INCLUDE) @DB_CFLAGS@ @CPPFLAGS@ -c $(OUTPUT_OPTION) $<
 
-obj/%.o: %.cpp $(MAP_H) $(COMMON_H) $(LIBCONFIG_H) $(RAPIDYAML_H)
+obj/%.o: %.cpp $(MAP_H) $(MAP_RULES_H) $(COMMON_H) $(LIBCONFIG_H) $(RAPIDYAML_H)
 	@echo "	CXX	$<"
-	@@CXX@ @CXXFLAGS@ $(COMMON_INCLUDE) $(RA_INCLUDE) $(LIBCONFIG_INCLUDE) $(PCRE_CFLAGS) $(RAPIDYAML_INCLUDE) @DB_CFLAGS@ @CPPFLAGS@ -c $(OUTPUT_OPTION) $<
+	@@CXX@ @CXXFLAGS@ $(COMMON_INCLUDE) $(RA_INCLUDE) $(LIBCONFIG_INCLUDE) $(PCRE_CFLAGS) $(RAPIDYAML_INCLUDE) $(MAP_RULES_INCLUDE) @DB_CFLAGS@ @CPPFLAGS@ -c $(OUTPUT_OPTION) $<
 
-obj-gen/npc.o: npc.cpp $(MAP_H) $(COMMON_H) $(LIBCONFIG_H) $(RAPIDYAML_H)
+obj-gen/npc.o: npc.cpp $(MAP_H) $(MAP_RULES_H) $(COMMON_H) $(LIBCONFIG_H) $(RAPIDYAML_H)
 	@echo "	CXX	$< (custom rule)"
-	@@CXX@ @CXXFLAG_CLEARS@ $(TOOLS_FLAGS) $(COMMON_INCLUDE) $(RA_INCLUDE) $(LIBCONFIG_INCLUDE) $(PCRE_CFLAGS) $(RAPIDYAML_INCLUDE) @DB_CFLAGS@ @CPPFLAGS@ -c $(OUTPUT_OPTION) $<
+	@@CXX@ @CXXFLAG_CLEARS@ $(TOOLS_FLAGS) $(COMMON_INCLUDE) $(RA_INCLUDE) $(LIBCONFIG_INCLUDE) $(PCRE_CFLAGS) $(RAPIDYAML_INCLUDE) $(MAP_RULES_INCLUDE) @DB_CFLAGS@ @CPPFLAGS@ -c $(OUTPUT_OPTION) $<
 	
-obj-gen/%.o: %.cpp $(MAP_H) $(COMMON_H) $(LIBCONFIG_H) $(RAPIDYAML_H) $(NLOHMANN_H)
+obj-gen/%.o: %.cpp $(MAP_H) $(MAP_RULES_H) $(COMMON_H) $(LIBCONFIG_H) $(RAPIDYAML_H) $(NLOHMANN_H)
 	@echo "	CXX	$<"
-	@@CXX@ @CXXFLAGS@ $(TOOLS_FLAGS) $(COMMON_INCLUDE) $(RA_INCLUDE) $(LIBCONFIG_INCLUDE) $(PCRE_CFLAGS) $(RAPIDYAML_INCLUDE) $(NLOHMANN_INCLUDE) @DB_CFLAGS@ @CPPFLAGS@ -c $(OUTPUT_OPTION) $<
+	@@CXX@ @CXXFLAGS@ $(TOOLS_FLAGS) $(COMMON_INCLUDE) $(RA_INCLUDE) $(LIBCONFIG_INCLUDE) $(PCRE_CFLAGS) $(RAPIDYAML_INCLUDE) $(NLOHMANN_INCLUDE) $(MAP_RULES_INCLUDE) @DB_CFLAGS@ @CPPFLAGS@ -c $(OUTPUT_OPTION) $<
+
+# rule library objects
+obj-rules/%.o: $(MAP_RULES_DIR)/src/%.cpp $(MAP_RULES_H)
+	@echo "	CXX	$<"
+	@-mkdir -p obj-rules
+	@@CXX@ @CXXFLAGS@ $(MAP_RULES_INCLUDE) @CPPFLAGS@ -c $(OUTPUT_OPTION) $<
+
+$(MAP_RULES_AR): $(MAP_RULES_OBJ)
+	@echo "	AR	$@"
+	@@AR@ rcs $(MAP_RULES_AR) $(MAP_RULES_OBJ)
 
 # missing object files
 $(COMMON_AR):

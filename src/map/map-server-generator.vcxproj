@@ -111,9 +111,9 @@
       <DisableSpecificWarnings>4018;4200</DisableSpecificWarnings>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
-      <AdditionalIncludeDirectories>$(SolutionDir)src;$(SolutionDir)\3rdparty\rapidyaml\src;$(SolutionDir)\3rdparty\rapidyaml\ext\c4core\src;$(SolutionDir)\3rdparty\json\include;$(SolutionDir)\3rdparty\pcre\include;$(SolutionDir)3rdparty\libconfig\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)src;$(SolutionDir)modernized\rathena-reimagined\map-rules\include;$(SolutionDir)\3rdparty\rapidyaml\src;$(SolutionDir)\3rdparty\rapidyaml\ext\c4core\src;$(SolutionDir)\3rdparty\json\include;$(SolutionDir)\3rdparty\pcre\include;$(SolutionDir)3rdparty\libconfig\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
@@ -132,8 +132,8 @@
       <DisableSpecificWarnings>4018</DisableSpecificWarnings>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>$(SolutionDir)src;$(SolutionDir)\3rdparty\rapidyaml\src;$(SolutionDir)\3rdparty\rapidyaml\ext\c4core\src;$(SolutionDir)\3rdparty\json\include;$(SolutionDir)\3rdparty\pcre\include;$(SolutionDir)3rdparty\libconfig\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(SolutionDir)src;$(SolutionDir)modernized\rathena-reimagined\map-rules\include;$(SolutionDir)\3rdparty\rapidyaml\src;$(SolutionDir)\3rdparty\rapidyaml\ext\c4core\src;$(SolutionDir)\3rdparty\json\include;$(SolutionDir)\3rdparty\pcre\include;$(SolutionDir)3rdparty\libconfig\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
@@ -155,8 +155,8 @@
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <DisableSpecificWarnings>4018</DisableSpecificWarnings>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>$(SolutionDir)src;$(SolutionDir)\3rdparty\rapidyaml\src;$(SolutionDir)\3rdparty\rapidyaml\ext\c4core\src;$(SolutionDir)\3rdparty\json\include;$(SolutionDir)\3rdparty\pcre\include;$(SolutionDir)3rdparty\libconfig\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(SolutionDir)src;$(SolutionDir)modernized\rathena-reimagined\map-rules\include;$(SolutionDir)\3rdparty\rapidyaml\src;$(SolutionDir)\3rdparty\rapidyaml\ext\c4core\src;$(SolutionDir)\3rdparty\json\include;$(SolutionDir)\3rdparty\pcre\include;$(SolutionDir)3rdparty\libconfig\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
@@ -181,8 +181,8 @@
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <DisableSpecificWarnings>4018</DisableSpecificWarnings>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>$(SolutionDir)src;$(SolutionDir)\3rdparty\rapidyaml\src;$(SolutionDir)\3rdparty\rapidyaml\ext\c4core\src;$(SolutionDir)\3rdparty\json\include;$(SolutionDir)\3rdparty\pcre\include;$(SolutionDir)3rdparty\libconfig\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(SolutionDir)src;$(SolutionDir)modernized\rathena-reimagined\map-rules\include;$(SolutionDir)\3rdparty\rapidyaml\src;$(SolutionDir)\3rdparty\rapidyaml\ext\c4core\src;$(SolutionDir)\3rdparty\json\include;$(SolutionDir)\3rdparty\pcre\include;$(SolutionDir)3rdparty\libconfig\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
@@ -196,6 +196,17 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\modernized\rathena-reimagined\map-rules\include\rathena\map_rules\anticheat.hpp" />
+    <ClInclude Include="..\..\modernized\rathena-reimagined\map-rules\include\rathena\map_rules\attr_fix_loader.hpp" />
+    <ClInclude Include="..\..\modernized\rathena-reimagined\map-rules\include\rathena\map_rules\battle_config.hpp" />
+    <ClInclude Include="..\..\modernized\rathena-reimagined\map-rules\include\rathena\map_rules\combat.hpp" />
+    <ClInclude Include="..\..\modernized\rathena-reimagined\map-rules\include\rathena\map_rules\domain.hpp" />
+    <ClInclude Include="..\..\modernized\rathena-reimagined\map-rules\include\rathena\map_rules\economy.hpp" />
+    <ClInclude Include="..\..\modernized\rathena-reimagined\map-rules\include\rathena\map_rules\progression.hpp" />
+    <ClInclude Include="..\..\modernized\rathena-reimagined\map-rules\include\rathena\map_rules\rng.hpp" />
+    <ClInclude Include="..\..\modernized\rathena-reimagined\map-rules\include\rathena\map_rules\skills.hpp" />
+    <ClInclude Include="..\..\modernized\rathena-reimagined\map-rules\include\rathena\map_rules\trade.hpp" />
+    <ClInclude Include="rules_bridge.hpp" />
     <ClInclude Include="achievement.hpp" />
     <ClInclude Include="atcommand.hpp" />
     <ClInclude Include="battle.hpp" />
@@ -250,6 +261,31 @@
     <ClCompile Include="achievement.cpp" />
     <ClCompile Include="atcommand.cpp" />
     <ClCompile Include="battle.cpp" />
+    <ClCompile Include="..\..\modernized\rathena-reimagined\map-rules\src\anticheat.cpp">
+      <ObjectFileName>$(IntDir)map_rules\</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\modernized\rathena-reimagined\map-rules\src\attr_fix_loader.cpp">
+      <ObjectFileName>$(IntDir)map_rules\</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\modernized\rathena-reimagined\map-rules\src\combat.cpp">
+      <ObjectFileName>$(IntDir)map_rules\</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\modernized\rathena-reimagined\map-rules\src\domain.cpp">
+      <ObjectFileName>$(IntDir)map_rules\</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\modernized\rathena-reimagined\map-rules\src\economy.cpp">
+      <ObjectFileName>$(IntDir)map_rules\</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\modernized\rathena-reimagined\map-rules\src\progression.cpp">
+      <ObjectFileName>$(IntDir)map_rules\</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\modernized\rathena-reimagined\map-rules\src\skills.cpp">
+      <ObjectFileName>$(IntDir)map_rules\</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\modernized\rathena-reimagined\map-rules\src\trade.cpp">
+      <ObjectFileName>$(IntDir)map_rules\</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="rules_bridge.cpp" />
     <ClCompile Include="battleground.cpp" />
     <ClCompile Include="buyingstore.cpp" />
     <ClCompile Include="cashshop.cpp" />
