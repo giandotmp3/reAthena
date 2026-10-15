@@ -160,19 +160,25 @@ endif()
 #
 # common
 #
-if( HAVE_common_base AND WITH_MYSQL )
+if( HAVE_common_base )
 message( STATUS "Creating target common" )
 set( COMMON_HEADERS
 	${COMMON_ALL_HEADERS}
 	"${CMAKE_CURRENT_SOURCE_DIR}/sql.hpp"
+	"${CMAKE_CURRENT_SOURCE_DIR}/sql_dialect.hpp"
 	CACHE INTERNAL "common headers" )
 set( COMMON_SOURCES
 	"${CMAKE_CURRENT_SOURCE_DIR}/sql.cpp"
+	"${CMAKE_CURRENT_SOURCE_DIR}/sql_dialect.cpp"
 	CACHE INTERNAL "common sources" )
-set( DEPENDENCIES common_base yaml-cpp ryml )
-set( LIBRARIES ${GLOBAL_LIBRARIES} ${MYSQL_LIBRARIES} )
-set( INCLUDE_DIRS ${GLOBAL_INCLUDE_DIRS} ${MYSQL_INCLUDE_DIRS} )
+set( DEPENDENCIES common_base yaml-cpp ryml ${SQLITE_LIBRARIES} )
+# Databases: embedded SQLite always; PostgreSQL when libpq was found (3rdparty/postgresql).
+set( LIBRARIES ${GLOBAL_LIBRARIES} ${POSTGRESQL_LIBRARIES} )
+set( INCLUDE_DIRS ${GLOBAL_INCLUDE_DIRS} ${SQLITE_INCLUDE_DIRS} ${POSTGRESQL_INCLUDE_DIRS} )
 set( DEFINITIONS "${GLOBAL_DEFINITIONS}" )
+if( HAVE_POSTGRESQL )
+	set( DEFINITIONS "${DEFINITIONS} -DHAVE_POSTGRESQL" )
+endif()
 set( SOURCE_FILES ${COMMON_HEADERS} ${COMMON_SOURCES} )
 source_group( common FILES ${COMMON_HEADERS} ${COMMON_SOURCES} )
 
@@ -187,5 +193,5 @@ set( HAVE_common ON  CACHE INTERNAL "" )
 set( TARGET_LIST ${TARGET_LIST} common  CACHE INTERNAL "" )
 message( STATUS "Creating target common - done" )
 else()
-message( FATAL_ERROR "Stopping target common (requires common_base and MYSQL)" )
+message( FATAL_ERROR "Stopping target common (requires common_base)" )
 endif()

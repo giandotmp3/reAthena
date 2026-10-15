@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS "feedinglog" (
   "char_id" integer NOT NULL,
   "target_id" integer NOT NULL,
   "target_class" smallint NOT NULL,
-  "type" varchar(32) NOT NULL CHECK ("type" IN ('P','H','O')),
+  "type" varchar(32) NOT NULL DEFAULT 'P' CHECK ("type" IN ('P','H','O')),
   "intimacy" bigint NOT NULL,
   "item_id" bigint NOT NULL,
   "map" varchar(11) NOT NULL,

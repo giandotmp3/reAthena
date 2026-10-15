@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS "feedinglog" (
   "char_id" INTEGER NOT NULL,
   "target_id" INTEGER NOT NULL,
   "target_class" INTEGER NOT NULL,
-  "type" TEXT NOT NULL CHECK ("type" IN ('P','H','O')),
+  "type" TEXT NOT NULL DEFAULT 'P' CHECK ("type" IN ('P','H','O')),
   "intimacy" INTEGER NOT NULL,
   "item_id" INTEGER NOT NULL,
   "map" TEXT NOT NULL,

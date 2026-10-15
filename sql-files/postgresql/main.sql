@@ -247,7 +247,7 @@ CREATE TABLE IF NOT EXISTS "char" (
   "unban_time" bigint NOT NULL DEFAULT 0,
   "font" smallint NOT NULL DEFAULT 0,
   "uniqueitem_counter" bigint NOT NULL DEFAULT 0,
-  "sex" varchar(32) NOT NULL CHECK ("sex" IN ('M','F')),
+  "sex" varchar(32) NOT NULL DEFAULT 'M' CHECK ("sex" IN ('M','F')),
   "hotkey_rowshift" smallint NOT NULL DEFAULT 0,
   "hotkey_rowshift2" smallint NOT NULL DEFAULT 0,
   "clan_id" bigint NOT NULL DEFAULT 0,

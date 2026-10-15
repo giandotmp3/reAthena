@@ -38,6 +38,7 @@ Thumbs.db
 /enc_temp_folder
 /ipch
 /login-server
+/sql-test
 /Makefile
 /Makefile.cache
 /map-server
@@ -152,3 +153,4 @@ Thumbs.db
 
 # generated files
 generated
+/save/*.db*

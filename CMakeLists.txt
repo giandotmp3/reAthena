@@ -527,7 +527,6 @@ if (WIN32)
 	set (RUNTIME_FILES 
 		${RUNTIME_FILES}
 		"${CMAKE_CURRENT_SOURCE_DIR}/dbghelp.dll"
-		"${CMAKE_CURRENT_SOURCE_DIR}/libmysql.dll"
 		"${CMAKE_CURRENT_SOURCE_DIR}/pcre3.dll"
 		"${CMAKE_CURRENT_SOURCE_DIR}/zlib1.dll"
 		"${CMAKE_CURRENT_SOURCE_DIR}/tools/charserv.bat"
@@ -624,6 +623,10 @@ endif( INSTALL_COMPONENT_RUNTIME )
 # sources
 #
 set( TARGET_LIST  CACHE INTERNAL "" )
+option( BUILD_TESTING "Build the database layer tests (ctest)" OFF )
+if( BUILD_TESTING )
+	enable_testing()
+endif()
 add_subdirectory( 3rdparty )
 add_subdirectory( src )
 

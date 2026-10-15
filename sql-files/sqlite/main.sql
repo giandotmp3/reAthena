@@ -233,7 +233,7 @@ CREATE TABLE IF NOT EXISTS "char" (
   "unban_time" INTEGER NOT NULL DEFAULT 0,
   "font" INTEGER NOT NULL DEFAULT 0,
   "uniqueitem_counter" INTEGER NOT NULL DEFAULT 0,
-  "sex" TEXT NOT NULL CHECK ("sex" IN ('M','F')),
+  "sex" TEXT NOT NULL DEFAULT 'M' CHECK ("sex" IN ('M','F')),
   "hotkey_rowshift" INTEGER NOT NULL DEFAULT 0,
   "hotkey_rowshift2" INTEGER NOT NULL DEFAULT 0,
   "clan_id" INTEGER NOT NULL DEFAULT 0,

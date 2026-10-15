@@ -234,6 +234,9 @@ def sqlite_type(t: Table, c: Column) -> str:
 def default_sql(c: Column, dialect: str) -> str | None:
     d = c.default
     if d is None:
+        # MySQL gives a NOT NULL enum without a DEFAULT its first value implicitly.
+        if c.base == "enum" and c.not_null:
+            return c.args.strip("()").split(",")[0].strip()
         return None
     if d.upper() == "NULL":
         return "NULL"

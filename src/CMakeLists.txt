@@ -26,4 +26,7 @@ add_subdirectory( char )
 add_subdirectory( map )
 add_subdirectory( web )
 add_subdirectory( tool )
+if( BUILD_TESTING )
+	add_subdirectory( test )
+endif()
 

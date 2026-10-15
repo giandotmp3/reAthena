@@ -5,26 +5,29 @@
 #define SQL_HPP
 
 #include <cstdarg>// va_list
+#include <memory>
 #include <stdexcept>
 
 #ifdef WIN32
 #include "winapi.hpp"
 #endif
 
-#include <mysql.h>
-
 #include "cbasetypes.hpp"
 #include "strlib.hpp"
+
+// Database engines: SQLite (built in; local development and single-host servers) and PostgreSQL
+// (servers; needs libpq at build time, HAVE_POSTGRESQL). MySQL/MariaDB is no longer supported --
+// see analysis/rathena/DATABASE_DECISION.md. The engine is chosen with `db_backend` in
+// conf/inter_athena.conf; queries keep their MySQL spelling and are translated by sql_dialect.
 
 // Return codes
 #define SQL_ERROR -1
 #define SQL_SUCCESS 0
 #define SQL_NO_DATA 100
 
-// macro definition to determine whether the mySQL engine is running on InnoDB (rather than MyISAM)
-// uncomment this line if the your mySQL tables have been changed to run on InnoDB
-// this macro will adjust how logs are recorded in the database to accommodate the change
-//#define SQL_INNODB
+// Error number reported by Sql_GetError for a unique/primary key violation on every engine
+// (kept at MySQL's value, ER_DUP_ENTRY, for existing callers).
+#define SQL_ERRNO_DUPLICATE 1062
 
 /// Data type identifier.
 /// String, enum and blob data types need the buffer length specified.
@@ -240,17 +243,13 @@ typedef struct s_column_length s_column_length;
 // example queries with parameters:
 // 1) SELECT col FROM table WHERE id=?
 // 2) INSERT INTO table(col1,col2) VALUES(?,?)
+struct SqlStmtState;// prepared statement state (private access)
+
 class SqlStmt{
 private:
 	StringBuf buf;
-	MYSQL_STMT* stmt;
-	MYSQL_BIND* params;
-	MYSQL_BIND* columns;
-	s_column_length* column_lengths;
-	size_t max_params;
-	size_t max_columns;
-	bool bind_params;
-	bool bind_columns;
+	Sql& sql;
+	std::unique_ptr<SqlStmtState> state;
 
 	void ShowDebugTruncatedColumn( size_t i );
 
