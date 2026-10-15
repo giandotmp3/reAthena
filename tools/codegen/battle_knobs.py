@@ -551,7 +551,7 @@ def build_model() -> tuple[list[Knob], list[Entry], list[str]]:
                 first = seen[e.key.lower()]
                 if (first.key, first.field, first.exprs) != (e.key, e.field, e.exprs):
                     raise GenError(f"{e.where}: duplicate battle_data[] key '{e.key}' differs from {first.where}")
-                note = f"{e.key}: listed twice in battle_data[] ({first.where}, {e.where}), identical; the first is used"
+                note = f"{e.key}: listed twice in battle_data[], identical; the first is used"
                 if note not in notes:
                     notes.append(note)
                 continue

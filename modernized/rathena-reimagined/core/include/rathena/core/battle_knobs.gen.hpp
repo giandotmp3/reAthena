@@ -37,7 +37,7 @@
 //   alchemist_summon_setting: [12, 0, 15] renewal, [15, 0, 15] pre-renewal (#ifdef RENEWAL in battle_data[])
 // Knobs whose legacy entry differs with VIP_ENABLE (off in the shipped src/config/core.hpp):
 //   vip_storage_increase: [300, 0, MAX_STORAGE-MIN_STORAGE] = [300, 0, 300] with VIP_ENABLE, [300, 0, MAX_STORAGE] = [300, 0, 600] without
-// Note: fame_refine_lv1: listed twice in battle_data[] (src/map/battle.cpp:8732, src/map/battle.cpp:8733), identical; the first is used
+// Note: fame_refine_lv1: listed twice in battle_data[], identical; the first is used
 #pragma once
 
 // NOLINTBEGIN
