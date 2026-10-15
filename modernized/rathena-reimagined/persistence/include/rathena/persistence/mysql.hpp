@@ -64,7 +64,7 @@ public:
 	bool remove(CharId id) override;
 
 private:
-	MysqlConnection& conn_;
+	[[maybe_unused]] MysqlConnection& conn_; // used once the MySQL client is wired in
 	TableNames names_;
 };
 
@@ -77,7 +77,7 @@ public:
 	bool remove(PartyId id) override;
 
 private:
-	MysqlConnection& conn_;
+	[[maybe_unused]] MysqlConnection& conn_; // used once the MySQL client is wired in
 	TableNames names_;
 };
 
@@ -90,7 +90,7 @@ public:
 	bool remove(GuildId id) override;
 
 private:
-	MysqlConnection& conn_;
+	[[maybe_unused]] MysqlConnection& conn_; // used once the MySQL client is wired in
 	TableNames names_;
 };
 
@@ -104,7 +104,7 @@ public:
 	bool remove(MailId id) override;
 
 private:
-	MysqlConnection& conn_;
+	[[maybe_unused]] MysqlConnection& conn_; // used once the MySQL client is wired in
 	TableNames names_;
 };
 

@@ -1,0 +1,66 @@
+name: Build reimagined units
+# build_reimagined_units.yml
+# Builds and tests the C++20 units under modernized/rathena-reimagined/ (superbuild)
+# on every toolchain the legacy servers support.
+
+concurrency:
+  group: ${{ github.repository }}-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'modernized/**'
+      - '.github/workflows/build_reimagined_units.yml'
+  pull_request:
+    paths:
+      - 'modernized/**'
+      - '.github/workflows/build_reimagined_units.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-gcc
+            os: ubuntu-24.04
+            cc: gcc
+            cxx: g++
+            werror: 'ON'
+          - name: linux-clang
+            os: ubuntu-24.04
+            cc: clang
+            cxx: clang++
+            werror: 'ON'
+          - name: windows-msvc
+            os: windows-2022
+            werror: 'OFF'
+          - name: macos-clang
+            os: macos-14
+            werror: 'OFF'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        shell: bash
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: >
+          cmake -S modernized/rathena-reimagined -B build
+          -DCMAKE_BUILD_TYPE=Debug
+          -DRATHENA_REIMAGINED_WERROR=${{ matrix.werror }}
+
+      - name: Build
+        run: cmake --build build --config Debug --parallel 4
+
+      - name: Test
+        run: ctest --test-dir build --build-config Debug --output-on-failure --parallel 4
