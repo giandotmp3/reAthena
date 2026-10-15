@@ -13,7 +13,7 @@ Legacy scale (C++ lines): map 296k · common 20k · char 16k · tool 8k · login
 
 ## 1. Capabilities
 
-Capabilities are derived from 167 business rules and the interface catalog. Each capability has an ID (`CAP-NN`) that HITL #1 and the architecture refer to.
+Capabilities are derived from 191 business rules (186 extracted; BR-CHAR-050 later split into six) and the interface catalog. Each capability has an ID (`CAP-NN`) that HITL #1 and the architecture refer to.
 
 | ID | Capability | Legacy owner | Rules | Proposed priority |
 |---|---|---|---|---|
@@ -23,10 +23,10 @@ Capabilities are derived from 167 business rules and the interface catalog. Each
 | CAP-04 | **Session handoff.** One-time auth ticket (30 s TTL) passed login → char → map, duplicate-login kick, online-state tracking. | login, char, map | BR-LOGIN-018,019,033; BR-CHAR-025…027,031; BR-INTER-004,008 | P0 |
 | CAP-05 | **Character lifecycle.** Create (name, slot, starting stats/job), list, select, timed delete with full data cleanup, rename, slot move, character ban. | char | BR-CHAR-001…018 | P0 |
 | CAP-06 | **PIN code (second password).** Complexity rules, lockout after failed attempts, packet gate until the PIN is verified. | char | BR-CHAR-019…022 | P1 |
-| CAP-07 | **Persistence of player aggregates.** Character, inventory/cart/storage, skills, quests, achievements, registries, status changes, cooldowns. | char (system of record) | BR-CHAR-032, 050; BR-LOGIN-036; BR-INTER-015 | P0 |
+| CAP-07 | **Persistence of player aggregates.** Character, inventory/cart/storage, skills, quests, achievements, registries, status changes, cooldowns. | char (system of record) | BR-CHAR-032, 050, 054; BR-LOGIN-036; BR-INTER-015 | P0 |
 | CAP-08 | **Parties.** Create/join/leave, even-share eligibility, leader rules. | char, map | BR-CHAR-033…036; BR-MAP-028 | P0 |
 | CAP-09 | **Guilds.** Create, positions, levels and skills, alliances, expulsion, guild storage, emblem, castles (War of Emperium). | char, map, web | BR-CHAR-037…045; BR-MAP-027; BR-WEB-002,004…008 | P1 |
-| CAP-10 | **Clans.** Seeded clans, membership, inactivity cleanup. | char | BR-CHAR-050b | P2 |
+| CAP-10 | **Clans.** Seeded clans, membership, inactivity cleanup. | char | BR-CHAR-051 | P2 |
 | CAP-11 | **Mail (RODEX) and auction.** Inbox, attachments, return/expiry, recipient rules. Auction is a legacy feature. | char | BR-CHAR-046…049; BR-INTER-018 | P1 (auction P2) |
 | CAP-12 | **Companions.** Pet, homunculus, mercenary, elemental. | char, map | (entity model §2.A4) | P1 |
 | CAP-13 | **World simulation.** Maps, spatial grid, movement, area broadcast, NPC/script engine, mob spawn and AI, instances, battlegrounds. | map | BR-MAP-059,060 (+ subsystem) | P0 |
@@ -37,7 +37,7 @@ Capabilities are derived from 167 business rules and the interface catalog. Each
 | CAP-18 | **Player-to-player trade, vending and buying stores.** Two-phase commit, tax, exclusive player states, autotrade persistence. | map | BR-MAP-038…044, 061 | P0 |
 | CAP-19 | **Chat and social.** Whisper, party/guild/clan/BG chat, channels, chat rooms, friends, broadcast. | map, char | BR-MAP-057 | P1 |
 | CAP-20 | **Anti-cheat and packet integrity.** Framing, state gating, obfuscation, logout lock while in combat, captcha and macro detection. | map, common | BR-MAP-056…060; BR-INTER-012,013 | P0 |
-| CAP-21 | **GM and admin tooling.** @commands, GM packets, server-side authority checks. | map, char | BR-CHAR-050f | P1 |
+| CAP-21 | **GM and admin tooling.** @commands, GM packets, server-side authority checks. | map, char | BR-CHAR-055 | P1 |
 | CAP-22 | **Web companion API.** User, character and merchant config, emblem upload/download, party booking. | web | BR-WEB-001…017 | P1 |
 | CAP-23 | **Static game data.** About 49 YAML databases (item, mob, skill, job…) with renewal/pre-renewal variants and import overrides. | map | (interfaces §5) | P0 |
 | CAP-24 | **Client-version compatibility.** `PACKETVER` selection, opcode shuffle, obfuscation keys. | map, common | (interfaces §1.1) | P0 |
@@ -371,7 +371,7 @@ The game client calls these routes, so the request/response shapes stay compatib
 
 ## 5. Behavior Contract (acceptance tests)
 
-These 167 rules are the acceptance tests for the rebuild. Each row is a Given/When/Then (or a rule with a worked example). `src` paths are relative to `src/` unless noted. Rules marked **[DEFECT]** record legacy behavior that the rebuild should *correct*; the test asserts the corrected behavior, and HITL #1 confirms the correction.
+These 191 rules are the acceptance tests for the rebuild. Each row is a Given/When/Then (or a rule with a worked example). `src` paths are relative to `src/` unless noted. Rules marked **[DEFECT]** record legacy behavior that the rebuild should *correct*; the test asserts the corrected behavior, and HITL #1 confirms the correction.
 
 ### 5.1 Login (39)
 | ID | Rule (Given → When → Then) | Source | P |
@@ -416,7 +416,7 @@ These 167 rules are the acceptance tests for the rebuild. Each row is a Given/Wh
 | BR-LOGIN-038 | userid lookup is BINARY if `case_sensitive`; more than one match → deny. | account.cpp:396-418 | P1 |
 | BR-LOGIN-039 | Every attempt is logged with its result code; IP-banned attempts are logged as −3. | loginclif.cpp:208-221,525 | P2 |
 
-### 5.2 Char (50)
+### 5.2 Char (55; BR-CHAR-050 split into 050–055 per critique)
 | ID | Rule | Source | P |
 |---|---|---|---|
 | BR-CHAR-001 | Name: trimmed; rejected if shorter than 4, contains control chars, starts with `#`, equals "Server" (−1), breaks the letter policy (−2), or already exists (−1). "Bob!" with an allow-list policy → −2. | char/char.cpp:1334-1414 | P0 |
@@ -468,7 +468,12 @@ These 167 rules are the acceptance tests for the rebuild. Each row is a Given/Wh
 | BR-CHAR-047 | Mail older than `mail_return_days` is returned as "RE:"; returned mail is deleted after `mail_delete_days`. | int_mail.cpp:247-578 | P1 |
 | BR-CHAR-048 | Attachment retrieval zeroes zeny and items **before** release (no duplication). | int_mail.cpp:371-433 | P0 |
 | BR-CHAR-049 | Recipient rules (pre-RODEX vs RODEX); an unknown recipient means the mail is not saved. | int_mail.cpp:599-658 | P1 |
-| BR-CHAR-050 | (a) registry scopes; (b) clan membership dropped after 14 days offline; (c) sex change swaps gendered classes; (d) fame top 10; (e) at most 20 cooldowns persisted; (f) GM ops. **[DEFECT f]** The char server does not re-check the requester's authority; the rebuild does. | inter.cpp:601-650 et al. | P1 |
+| BR-CHAR-050 | Registry scopes: `##` → login, `#` → account (char), plain → character; a 0 or empty value deletes the entry. | char/inter.cpp:601-650 | P1 |
+| BR-CHAR-051 | Clan membership is cleared after 14 days offline. | char.cpp:2231-2240 | P2 |
+| BR-CHAR-052 | Sex change swaps gendered classes, unequips everything and clears the look. | char_logif.cpp:392-552 | P1 |
+| BR-CHAR-053 | Fame lists keep the top N (≤ 10). | char.cpp:2008-2064 | P2 |
+| BR-CHAR-054 | At most 20 cooldowns persisted; restored once on load. | char_mapif.cpp:510-587 | P1 |
+| BR-CHAR-055 | GM ops (block → state 5, ban, unblock, sex, VIP). **[DEFECT]** The char server does not re-check the requester's authority; the rebuild does. | char_mapif.cpp:748-852 | P1 |
 
 ### 5.3 Web (17)
 | ID | Rule | Source | P |
