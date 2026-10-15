@@ -1,9 +1,9 @@
 #pragma once
 // BR-CHAR-013: character deletion cleans up all related data. The ordered plan below is also the
-// cascade order M3b's foreign keys are verified against (architecture §5).
+// cascade order the target schema's foreign keys (foreign_keys.hpp) are verified against.
 //
 // Target order vs legacy (char.cpp:1615-1751): the legacy code deletes the `char` row BEFORE the
-// guild break/leave. Under M3b foreign keys every dependent step has to run before the parent row
+// guild break/leave. Under the target foreign keys every dependent step has to run before the parent row
 // goes, so the target moves GuildBreakOrLeave ahead of DeleteCharacterRow. Pet eggs are still
 // removed before inventory/cart (they are found through inventory card0 = 256), and received mail
 // attachments go before the received mail rows.

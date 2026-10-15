@@ -5,13 +5,15 @@
 #   - domain values shared by every repository: Item (ONE value type, ONE persistence mapping
 #     reused by inventory / cart_inventory / storage / guild_storage / mail_attachments -- D6
 #     handled in code), Zeny (checked: 0 <= zeny <= INT32_MAX, BR-MAP-045), strong ids
-#   - repositories for Account, Character, Party, Guild, Mail. Concrete MySQL classes plus an
-#     interface only because an in-memory fake exists for tests (architecture §9 m6)
+#   - repositories for Account, Character, Party, Guild, Mail over a backend-neutral
+#     SqlConnection: SQLite (vendored, always built) and PostgreSQL 16+ (libpq, optional), plus an
+#     in-memory fake for tests (architecture §9 m6). MySQL/MariaDB is not a backend any more.
 #   - connection config from the environment ONLY: ${DATABASE_URL}, ${LOG_DB_URL} (S1)
-#   - rathena-migrate: forward-only, idempotent migration plan §5
-#       M0 -> M1 -> M6 -> M6b -> M7 -> M2 -> M4 -> M3a -> M3b (M3a/M3b gated)
+#   - rathena-migrate: --init-target-schema, and `import`, the one-time copy of a legacy MySQL
+#     database into PostgreSQL/SQLite. Its MySQL reader is compiled into the tool only.
 #
-# No live database is needed to build or run the tests.
+# No live database is needed to build or run the tests. The PostgreSQL tests run when
+# RATHENA_TEST_PG_URL names a disposable database.
 # Build:  cmake -B build && cmake --build build && ctest --test-dir build
 cmake_minimum_required(VERSION 3.20)
 project(rathena_persistence VERSION 0.1.0 LANGUAGES C CXX) # C: the vendored SQLite amalgamation
@@ -32,15 +34,15 @@ add_library(rathena_persistence
   src/table_names.cpp
   src/db_config.cpp
   src/in_memory.cpp
-  src/mysql.cpp
+  src/sql_repositories.cpp
   src/sqlite_connection.cpp
+  src/postgres_sql.cpp
   src/target_schema.cpp
   src/connection_factory.cpp
   src/character_delete.cpp
+  src/foreign_keys.cpp
   src/migrate/schema.cpp
-  src/migrate/plan.cpp
-  src/migrate/migrator.cpp
-  src/migrate/mysql_target.cpp
+  src/migrate/import.cpp
 )
 add_library(rathena::persistence ALIAS rathena_persistence)
 
@@ -72,29 +74,32 @@ if(NOT TARGET rathena_sqlite3)
 endif()
 target_link_libraries(rathena_persistence PRIVATE rathena_sqlite3)
 
-# MySQL/MariaDB client: AUTO uses one if found (MariaDB Connector/C or libmysqlclient), ON
-# requires it, OFF always builds the NotImplemented stub.
-set(RATHENA_PERSISTENCE_WITH_MYSQL "AUTO" CACHE STRING "Link a MySQL/MariaDB client (AUTO, ON, OFF)")
-set_property(CACHE RATHENA_PERSISTENCE_WITH_MYSQL PROPERTY STRINGS AUTO ON OFF)
-set(_rathena_mysql_found FALSE)
-if(NOT RATHENA_PERSISTENCE_WITH_MYSQL STREQUAL "OFF")
-  find_path(RATHENA_MYSQL_INCLUDE_DIR mysql.h PATH_SUFFIXES mariadb mysql)
-  find_library(RATHENA_MYSQL_LIBRARY NAMES mariadb mariadbclient mysqlclient libmariadb libmysql)
-  if(RATHENA_MYSQL_INCLUDE_DIR AND RATHENA_MYSQL_LIBRARY)
-    set(_rathena_mysql_found TRUE)
-  elseif(RATHENA_PERSISTENCE_WITH_MYSQL STREQUAL "ON")
-    message(FATAL_ERROR "RATHENA_PERSISTENCE_WITH_MYSQL=ON but no MySQL/MariaDB client was found")
+# PostgreSQL client (libpq): AUTO uses it if found, ON requires it, OFF builds the stub whose
+# connect() throws DbConfigError (open_connection() then refuses postgres:// URLs).
+set(RATHENA_PERSISTENCE_WITH_POSTGRESQL "AUTO" CACHE STRING "Link libpq for the PostgreSQL backend (AUTO, ON, OFF)")
+set_property(CACHE RATHENA_PERSISTENCE_WITH_POSTGRESQL PROPERTY STRINGS AUTO ON OFF)
+set(_rathena_pq_found FALSE)
+if(NOT RATHENA_PERSISTENCE_WITH_POSTGRESQL STREQUAL "OFF")
+  find_path(RATHENA_PQ_INCLUDE_DIR libpq-fe.h
+    HINTS /opt/homebrew/opt/libpq /usr/local/opt/libpq
+    PATH_SUFFIXES include include/postgresql postgresql pgsql)
+  find_library(RATHENA_PQ_LIBRARY NAMES pq libpq
+    HINTS /opt/homebrew/opt/libpq /usr/local/opt/libpq
+    PATH_SUFFIXES lib)
+  if(RATHENA_PQ_INCLUDE_DIR AND RATHENA_PQ_LIBRARY)
+    set(_rathena_pq_found TRUE)
+  elseif(RATHENA_PERSISTENCE_WITH_POSTGRESQL STREQUAL "ON")
+    message(FATAL_ERROR "RATHENA_PERSISTENCE_WITH_POSTGRESQL=ON but libpq was not found")
   endif()
 endif()
-if(_rathena_mysql_found)
-  message(STATUS "rathena-persistence: MySQL client ${RATHENA_MYSQL_LIBRARY}")
-  target_sources(rathena_persistence PRIVATE src/mysql_client.cpp)
-  target_include_directories(rathena_persistence PRIVATE ${RATHENA_MYSQL_INCLUDE_DIR})
-  target_link_libraries(rathena_persistence PRIVATE ${RATHENA_MYSQL_LIBRARY})
-  target_compile_definitions(rathena_persistence PUBLIC RATHENA_PERSISTENCE_HAS_MYSQL_CLIENT=1)
+if(_rathena_pq_found)
+  message(STATUS "rathena-persistence: PostgreSQL client ${RATHENA_PQ_LIBRARY}")
+  target_sources(rathena_persistence PRIVATE src/postgres_connection.cpp)
+  target_include_directories(rathena_persistence SYSTEM PRIVATE ${RATHENA_PQ_INCLUDE_DIR})
+  target_link_libraries(rathena_persistence PRIVATE ${RATHENA_PQ_LIBRARY})
 else()
-  message(STATUS "rathena-persistence: no MySQL client; MysqlConnection is a stub")
-  target_sources(rathena_persistence PRIVATE src/mysql_client_stub.cpp)
+  message(STATUS "rathena-persistence: no libpq; PostgresConnection is a stub")
+  target_sources(rathena_persistence PRIVATE src/postgres_connection_stub.cpp)
 endif()
 target_include_directories(rathena_persistence PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -121,6 +126,31 @@ if(RATHENA_PERSISTENCE_BUILD_TOOLS)
   set_target_properties(rathena_migrate PROPERTIES OUTPUT_NAME rathena-migrate)
   target_link_libraries(rathena_migrate PRIVATE rathena::persistence)
   rathena_persistence_warnings(rathena_migrate)
+
+  # MySQL/MariaDB client for `rathena-migrate import` -- the ONLY MySQL code left, and only in this
+  # tool. AUTO uses a client if found (MariaDB Connector/C or libmysqlclient), ON requires it, OFF
+  # builds a tool whose `import` reports that MySQL support is missing.
+  set(RATHENA_MIGRATE_WITH_MYSQL "AUTO" CACHE STRING "Link a MySQL/MariaDB client into rathena-migrate (AUTO, ON, OFF)")
+  set_property(CACHE RATHENA_MIGRATE_WITH_MYSQL PROPERTY STRINGS AUTO ON OFF)
+  set(_rathena_mysql_found FALSE)
+  if(NOT RATHENA_MIGRATE_WITH_MYSQL STREQUAL "OFF")
+    find_path(RATHENA_MYSQL_INCLUDE_DIR mysql.h PATH_SUFFIXES mariadb mysql)
+    find_library(RATHENA_MYSQL_LIBRARY NAMES mariadb mariadbclient mysqlclient libmariadb libmysql)
+    if(RATHENA_MYSQL_INCLUDE_DIR AND RATHENA_MYSQL_LIBRARY)
+      set(_rathena_mysql_found TRUE)
+    elseif(RATHENA_MIGRATE_WITH_MYSQL STREQUAL "ON")
+      message(FATAL_ERROR "RATHENA_MIGRATE_WITH_MYSQL=ON but no MySQL/MariaDB client was found")
+    endif()
+  endif()
+  if(_rathena_mysql_found)
+    message(STATUS "rathena-migrate: MySQL client ${RATHENA_MYSQL_LIBRARY} (import enabled)")
+    target_sources(rathena_migrate PRIVATE tools/mysql_source.cpp)
+    target_include_directories(rathena_migrate SYSTEM PRIVATE ${RATHENA_MYSQL_INCLUDE_DIR})
+    target_link_libraries(rathena_migrate PRIVATE ${RATHENA_MYSQL_LIBRARY})
+    target_compile_definitions(rathena_migrate PRIVATE RATHENA_MIGRATE_HAS_MYSQL=1)
+  else()
+    message(STATUS "rathena-migrate: no MySQL client; `import` is unavailable in this build")
+  endif()
 endif()
 
 if(RATHENA_PERSISTENCE_BUILD_TESTS)

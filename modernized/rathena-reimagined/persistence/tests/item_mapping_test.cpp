@@ -106,7 +106,7 @@ TEST(D6_ItemMapping, D6_AmountIsUnsigned32AfterM4) {
 TEST(D6_ItemMapping, D6_InsertStatementIsParameterized) {
 	const TableNames names;
 	const auto st = insert_statement(names, ItemTable::GuildStorage, 42, sample(false));
-	EXPECT_EQ(st.sql.rfind("INSERT INTO `guild_storage` (`guild_id`, `nameid`, `amount`", 0), 0u);
+	EXPECT_EQ(st.sql.rfind("INSERT INTO \"guild_storage\" (\"guild_id\", \"nameid\", \"amount\"", 0), 0u);
 	EXPECT_EQ(static_cast<std::size_t>(std::count(st.sql.begin(), st.sql.end(), '?')), st.params.size());
 	EXPECT_EQ(st.params.size(), 1u + item_columns(ItemTable::GuildStorage).size());
 	EXPECT_EQ(std::get<std::uint64_t>(st.params[0]), 42u);
@@ -116,7 +116,7 @@ TEST(D6_ItemMapping, D6_MailAttachmentsNeedAnIndex) {
 	const TableNames names;
 	EXPECT_THROW((void)insert_statement(names, ItemTable::MailAttachments, 7, sample(false)), MappingError);
 	const auto st = insert_statement(names, ItemTable::MailAttachments, 7, sample(false), 2u);
-	EXPECT_NE(st.sql.find("(`id`, `index`, `nameid`"), std::string::npos);
+	EXPECT_NE(st.sql.find("(\"id\", \"index\", \"nameid\""), std::string::npos);
 	EXPECT_THROW((void)insert_statement(names, ItemTable::Inventory, 7, sample(false), 2u), MappingError);
 }
 
@@ -124,5 +124,5 @@ TEST(D6_ItemMapping, D6_SelectUsesConfiguredTableName) {
 	TableNames names;
 	ASSERT_TRUE(names.set("inventory_db", "inventory_custom"));
 	const auto st = select_statement(names, ItemTable::Inventory, 150'000);
-	EXPECT_NE(st.sql.find("FROM `inventory_custom` WHERE `char_id` = ?"), std::string::npos);
+	EXPECT_NE(st.sql.find("FROM \"inventory_custom\" WHERE \"char_id\" = ?"), std::string::npos);
 }

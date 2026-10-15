@@ -5,7 +5,7 @@
 
 #include "rathena/persistence/errors.hpp"
 #include "rathena/persistence/in_memory.hpp"
-#include "rathena/persistence/mysql.hpp"
+#include "rathena/persistence/sql_repositories.hpp"
 
 using namespace rathena::persistence;
 
@@ -97,9 +97,9 @@ TEST(BR_LOGIN_008_AccountIdAllocation, BR_LOGIN_008_RepositoryRefusesWhenRangeEx
 	EXPECT_EQ(db.accounts.size(), 1u);
 }
 
-TEST(BR_LOGIN_008_AccountIdAllocation, BR_LOGIN_008_MysqlMaxQueryIsParameterFree) {
-	const auto st = sql::select_max_account_id(TableNames{});
-	EXPECT_EQ(st.sql, "SELECT MAX(`account_id`) FROM `login`");
+TEST(BR_LOGIN_008_AccountIdAllocation, BR_LOGIN_008_MaxQueryIsParameterFree) {
+	const auto st = sql::select_max_account_id(TableNames{}, SqlDialect::Postgres);
+	EXPECT_EQ(st.sql, "SELECT MAX(\"account_id\") FROM \"login\"");
 	EXPECT_TRUE(st.params.empty());
 }
 
@@ -161,20 +161,19 @@ TEST_F(BR_LOGIN_037_AtomicAccountDelete, BR_LOGIN_037_UnknownAccountIsNotRemoved
 	EXPECT_FALSE(repo.remove(AccountId{99'999'999}));
 }
 
-TEST(BR_LOGIN_037_AtomicAccountDeleteSql, BR_LOGIN_037_MysqlStatementsCoverRowAndBothRegTables) {
-	const auto st = sql::remove_account(TableNames{}, AccountId{2'000'123});
+TEST(BR_LOGIN_037_AtomicAccountDeleteSql, BR_LOGIN_037_StatementsCoverRowAndBothRegTables) {
+	const auto st = sql::remove_account(TableNames{}, AccountId{2'000'123}, SqlDialect::Sqlite);
 	ASSERT_EQ(st.size(), 3u);
-	// Children before the parent, so the delete also works once foreign keys exist.
-	EXPECT_EQ(st[0].sql, "DELETE FROM `global_acc_reg_num` WHERE `account_id` = ?");
-	EXPECT_EQ(st[1].sql, "DELETE FROM `global_acc_reg_str` WHERE `account_id` = ?");
-	EXPECT_EQ(st[2].sql, "DELETE FROM `login` WHERE `account_id` = ?");
-	const auto pg = sql::remove_account(TableNames{}, AccountId{2'000'123}, SqlDialect::Postgres);
-	EXPECT_EQ(pg[2].sql, "DELETE FROM \"login\" WHERE \"account_id\" = ?");
+	// Children before the parent, so the delete also works with foreign keys.
+	EXPECT_EQ(st[0].sql, "DELETE FROM \"global_acc_reg_num\" WHERE \"account_id\" = ?");
+	EXPECT_EQ(st[1].sql, "DELETE FROM \"global_acc_reg_str\" WHERE \"account_id\" = ?");
+	EXPECT_EQ(st[2].sql, "DELETE FROM \"login\" WHERE \"account_id\" = ?");
+	EXPECT_EQ(sql::remove_account(TableNames{}, AccountId{2'000'123}, SqlDialect::Postgres), st);
 	for (const auto& s : st) EXPECT_EQ(std::get<std::uint64_t>(s.params.at(0)), 2'000'123u);
 }
 
-// The live ROLLBACK proof is MysqlAccountIT.BR_LOGIN_037_MysqlRemoveRollsBackOnFailure
-// (mysql_integration_test.cpp), run against RATHENA_TEST_DATABASE_URL.
+// The live ROLLBACK proof is BR_LOGIN_037_RemoveRollsBackOnFailure in
+// repository_contract_test.cpp, on SQLite and (with RATHENA_TEST_PG_URL) on PostgreSQL.
 
 // ---------------------------------------------------------------- BR-LOGIN-038 (repository half)
 

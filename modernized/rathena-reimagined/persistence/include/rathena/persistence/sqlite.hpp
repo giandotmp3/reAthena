@@ -4,7 +4,8 @@
 //
 // Connection settings: foreign_keys=ON, busy_timeout 5 s, WAL journal for file databases,
 // double-quoted string literals disabled at build time (SQLITE_DQS=0). One statement per call;
-// a trailing second statement is rejected.
+// a trailing second statement is rejected (execute_script() is the multi-statement exception, for
+// the schema files). Text is stored byte for byte, without UTF-8 validation.
 #include <string>
 
 #include "rathena/persistence/sql_connection.hpp"
@@ -27,6 +28,7 @@ public:
 	std::vector<Row> query(const Statement& st) override;
 	[[nodiscard]] std::uint64_t affected_rows() const noexcept override { return affected_rows_; }
 	bool execute_in_transaction(const std::vector<Statement>& statements) override;
+	void execute_script(std::string_view sql) override;
 
 	[[nodiscard]] const std::string& path() const noexcept { return path_; }
 

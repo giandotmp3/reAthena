@@ -5,6 +5,7 @@
 #include <string>
 
 #include "rathena/persistence/errors.hpp"
+#include "rathena/persistence/sql_connection.hpp"
 #include "rathena/persistence/table_names.hpp"
 
 namespace rathena::persistence {
@@ -162,6 +163,7 @@ Item from_row(const Row& row, ItemTable t) {
 	return it;
 }
 
+// Identifiers use the portable double quotes (identical for SQLite and PostgreSQL).
 Statement insert_statement(const TableNames& names, ItemTable t, std::uint64_t owner_id, const Item& item,
                            std::optional<std::uint32_t> index) {
 	const auto& p = profile(t);
@@ -169,30 +171,30 @@ Statement insert_statement(const TableNames& names, ItemTable t, std::uint64_t o
 		throw MappingError("index column is required for mail_attachments and only there");
 	const Row row = to_row(item, t);
 	Statement st;
-	std::string cols = quote_identifier(p.owner_column);
+	std::string cols = quote_identifier(p.owner_column, SqlDialect::Sqlite);
 	std::string marks = "?";
 	st.params.emplace_back(owner_id);
 	if (index) {
-		cols += ", " + quote_identifier("index");
+		cols += ", " + quote_identifier("index", SqlDialect::Sqlite);
 		marks += ", ?";
 		st.params.emplace_back(std::uint64_t{*index});
 	}
 	for (const auto& c : item_columns(t)) {
-		cols += ", " + quote_identifier(c);
+		cols += ", " + quote_identifier(c, SqlDialect::Sqlite);
 		marks += ", ?";
 		st.params.push_back(row.at(c));
 	}
-	st.sql = "INSERT INTO " + quote_identifier(table_name(names, t)) + " (" + cols + ") VALUES (" + marks + ")";
+	st.sql = "INSERT INTO " + quote_identifier(table_name(names, t), SqlDialect::Sqlite) + " (" + cols + ") VALUES (" + marks + ")";
 	return st;
 }
 
 Statement select_statement(const TableNames& names, ItemTable t, std::uint64_t owner_id) {
 	const auto& p = profile(t);
-	std::string cols = quote_identifier(p.has_index_column ? "index" : "id");
-	for (const auto& c : item_columns(t)) cols += ", " + quote_identifier(c);
+	std::string cols = quote_identifier(p.has_index_column ? "index" : "id", SqlDialect::Sqlite);
+	for (const auto& c : item_columns(t)) cols += ", " + quote_identifier(c, SqlDialect::Sqlite);
 	Statement st;
-	st.sql = "SELECT " + cols + " FROM " + quote_identifier(table_name(names, t)) + " WHERE " +
-	         quote_identifier(p.owner_column) + " = ?";
+	st.sql = "SELECT " + cols + " FROM " + quote_identifier(table_name(names, t), SqlDialect::Sqlite) + " WHERE " +
+	         quote_identifier(p.owner_column, SqlDialect::Sqlite) + " = ?";
 	st.params.emplace_back(owner_id);
 	return st;
 }

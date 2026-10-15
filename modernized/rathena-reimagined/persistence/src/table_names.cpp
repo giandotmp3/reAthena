@@ -73,12 +73,17 @@ bool is_safe_identifier(std::string_view name) noexcept {
 	return true;
 }
 
-std::string quote_identifier(std::string_view name) { return quote_identifier(name, SqlDialect::MySql); }
+std::string_view to_string(SqlDialect dialect) noexcept {
+	switch (dialect) {
+	case SqlDialect::Sqlite: return "sqlite";
+	case SqlDialect::Postgres: return "postgresql";
+	}
+	return "?";
+}
 
-std::string quote_identifier(std::string_view name, SqlDialect dialect) {
+std::string quote_identifier(std::string_view name, SqlDialect) {
 	if (!is_safe_identifier(name)) throw std::invalid_argument("unsafe SQL identifier");
-	const char q = dialect == SqlDialect::MySql ? '`' : '"';
-	return q + std::string(name) + q;
+	return '"' + std::string(name) + '"';
 }
 
 } // namespace rathena::persistence

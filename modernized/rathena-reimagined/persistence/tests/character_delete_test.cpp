@@ -1,6 +1,7 @@
 // Acceptance tests: BR-CHAR-013 -- character deletion cleans up all related data (divorce,
 // de-adopt, party, companions, friends both directions, items, regs, skills, mail, SC, quests,
-// achievements, guild break or leave), and the M3b cascade order is verified against it.
+// achievements, guild break or leave), and the target schema's foreign-key actions are verified
+// against it.
 //
 // PENDING: the deletion is executed by the char-server refactor (phase 3) and the order must first
 // be pinned with golden vectors from an instrumented legacy build (architecture §3.2). The test
@@ -13,10 +14,9 @@
 #include "rathena/persistence/character_delete.hpp"
 #include "rathena/persistence/errors.hpp"
 #include "rathena/persistence/in_memory.hpp"
-#include "rathena/persistence/migrate/migrator.hpp"
+#include "rathena/persistence/foreign_keys.hpp"
 
 using namespace rathena::persistence;
-namespace mig = rathena::persistence::migrate;
 
 namespace {
 
@@ -56,13 +56,13 @@ TEST(BR_CHAR_013_CharacterDelete, BR_CHAR_013_CascadeOrderDependentsBeforeParent
 	EXPECT_LT(position(CleanupStep::GuildBreakOrLeave), position(CleanupStep::DeleteCharacterRow));
 }
 
-TEST(BR_CHAR_013_CharacterDelete, BR_CHAR_013_M3bForeignKeysAgreeWithCleanupPlan) {
-	GTEST_SKIP() << "PENDING BR-CHAR-013: M3b FK actions verified only after the cleanup order is pinned";
+TEST(BR_CHAR_013_CharacterDelete, BR_CHAR_013_TargetForeignKeysAgreeWithCleanupPlan) {
+	GTEST_SKIP() << "PENDING BR-CHAR-013: target FK actions verified only after the cleanup order is pinned";
 	// Every table the plan deletes from that references `char` must CASCADE or be handled before
 	// DeleteCharacterRow; a RESTRICT FK on `char` must be cleared by an earlier plan step.
-	for (const auto& fk : mig::m3b_foreign_keys()) {
+	for (const auto& fk : target_foreign_keys()) {
 		if (fk.parent_table != "character" || fk.child_table == "character") continue;
-		if (fk.on_delete != mig::OnDelete::Restrict) continue;
+		if (fk.on_delete != OnDelete::Restrict) continue;
 		const auto plan = character_delete_plan();
 		const bool cleared = std::any_of(plan.begin(), plan.end() - 1, [&](const CleanupStepInfo& s) {
 			return s.logical_table == fk.child_table;

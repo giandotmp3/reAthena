@@ -18,8 +18,6 @@ namespace rathena::persistence {
 inline constexpr std::string_view kTargetSchemaVersion = "target_0001_login_tables";
 
 /// CREATE statements (idempotent: IF NOT EXISTS) for SqlDialect::Sqlite or ::Postgres.
-/// Throws std::invalid_argument for SqlDialect::MySql, which keeps the legacy schema plus the
-/// rathena-migrate steps during the transition.
 std::vector<Statement> target_schema_statements(SqlDialect dialect, const TableNames& names = {});
 
 /// Creates the target schema on `conn` in one transaction and records kTargetSchemaVersion.

@@ -1,12 +1,10 @@
 #pragma once
-// SQL repositories (backend-neutral, portable SQL subset; DATABASE_DECISION.md) and the
-// MySQL/MariaDB connection, which is kept for the transition period only. The MySQL connection
-// uses the C client API with server-side prepared statements when the build finds a client
-// library (RATHENA_PERSISTENCE_HAS_MYSQL_CLIENT); otherwise it throws NotImplemented.
+// SQL repositories over any SqlConnection (SQLite or PostgreSQL), written in the portable SQL
+// subset of DATABASE_DECISION.md: double-quoted identifiers, ON CONFLICT upserts, '?'
+// placeholders (the PostgreSQL backend rewrites them to $n), integer UNIX times.
 #include <memory>
 #include <vector>
 
-#include "rathena/persistence/db_config.hpp"
 #include "rathena/persistence/repositories.hpp"
 #include "rathena/persistence/row.hpp"
 #include "rathena/persistence/sql_connection.hpp"
@@ -14,52 +12,21 @@
 
 namespace rathena::persistence {
 
-/// True when this build links a MySQL/MariaDB client library.
-bool mysql_client_available() noexcept;
-
-/// One connection to ${DATABASE_URL} (or ${LOG_DB_URL}).
-/// Result values: integer columns come back as int64/uint64 (by the column's UNSIGNED flag),
-/// NULL as monostate, everything else as string.
-class MysqlConnection final : public SqlConnection {
-public:
-	explicit MysqlConnection(DbEndpoint endpoint);
-	~MysqlConnection() override;
-	MysqlConnection(const MysqlConnection&) = delete;
-	MysqlConnection& operator=(const MysqlConnection&) = delete;
-
-	[[nodiscard]] SqlDialect dialect() const noexcept override { return SqlDialect::MySql; }
-	void connect() override;                               ///< throws RepositoryError (or NotImplemented without a client)
-	void execute(const Statement& st) override;            ///< throws RepositoryError on failure
-	std::vector<Row> query(const Statement& st) override;  ///< throws RepositoryError on failure
-	[[nodiscard]] std::uint64_t affected_rows() const noexcept override { return affected_rows_; }
-	/// Runs all statements in one START TRANSACTION ... COMMIT; ROLLBACK on any failure.
-	/// Atomic only on transactional engines: the legacy MyISAM tables need migration M2 first.
-	bool execute_in_transaction(const std::vector<Statement>& statements) override;
-	[[nodiscard]] const DbEndpoint& endpoint() const noexcept { return endpoint_; }
-
-private:
-	struct Impl;
-	DbEndpoint endpoint_;
-	std::unique_ptr<Impl> impl_;
-	std::uint64_t affected_rows_ = 0;
-};
-
 namespace sql {
 /// BR-LOGIN-008: `SELECT MAX(account_id) FROM login` (+1 and range checks happen in C++).
-Statement select_max_account_id(const TableNames& t, SqlDialect d = SqlDialect::MySql);
+Statement select_max_account_id(const TableNames& t, SqlDialect d);
 /// Columns read into persistence::Account (login + pass_hash/pass_scheme).
-Statement select_account_by_id(const TableNames& t, AccountId id, SqlDialect d = SqlDialect::MySql);
+Statement select_account_by_id(const TableNames& t, AccountId id, SqlDialect d);
 /// BR-LOGIN-038: LIMIT 2 so a duplicate is detected without scanning further.
 Statement select_account_by_userid(const TableNames& t, std::string_view userid, bool case_sensitive,
-                                   SqlDialect d = SqlDialect::MySql);
-Statement insert_account(const TableNames& t, const Account& a, SqlDialect d = SqlDialect::MySql);
-Statement update_account(const TableNames& t, const Account& a, SqlDialect d = SqlDialect::MySql);
+                                   SqlDialect d);
+Statement insert_account(const TableNames& t, const Account& a, SqlDialect d);
+Statement update_account(const TableNames& t, const Account& a, SqlDialect d);
 /// BR-LOGIN-037: the statements run inside ONE transaction, in this order.
-std::vector<Statement> remove_account(const TableNames& t, AccountId id, SqlDialect d = SqlDialect::MySql);
+std::vector<Statement> remove_account(const TableNames& t, AccountId id, SqlDialect d);
 } // namespace sql
 
-/// AccountRepository over any SqlConnection. On MySQL it also keeps the legacy `user_pass`
-/// column in step, because legacy servers read it during the transition.
+/// AccountRepository over any SqlConnection, on the clean target schema (target_schema.hpp).
 class SqlAccountRepository final : public AccountRepository {
 public:
 	SqlAccountRepository(SqlConnection& conn, TableNames names) : conn_(conn), names_(std::move(names)) {}
@@ -78,7 +45,6 @@ private:
 	SqlConnection& conn_;
 	TableNames names_;
 };
-using MysqlAccountRepository = SqlAccountRepository;
 
 /// Not yet ported to SQL (DATABASE_DECISION.md increment 3): every call throws NotImplemented.
 class SqlCharacterRepository final : public CharacterRepository {
@@ -95,7 +61,6 @@ private:
 	[[maybe_unused]] SqlConnection& conn_;
 	TableNames names_;
 };
-using MysqlCharacterRepository = SqlCharacterRepository;
 
 class SqlPartyRepository final : public PartyRepository {
 public:
@@ -109,7 +74,6 @@ private:
 	[[maybe_unused]] SqlConnection& conn_;
 	TableNames names_;
 };
-using MysqlPartyRepository = SqlPartyRepository;
 
 class SqlGuildRepository final : public GuildRepository {
 public:
@@ -123,7 +87,6 @@ private:
 	[[maybe_unused]] SqlConnection& conn_;
 	TableNames names_;
 };
-using MysqlGuildRepository = SqlGuildRepository;
 
 class SqlMailRepository final : public MailRepository {
 public:
@@ -138,6 +101,5 @@ private:
 	[[maybe_unused]] SqlConnection& conn_;
 	TableNames names_;
 };
-using MysqlMailRepository = SqlMailRepository;
 
 } // namespace rathena::persistence

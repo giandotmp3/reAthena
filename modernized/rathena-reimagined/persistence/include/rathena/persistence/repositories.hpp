@@ -1,6 +1,6 @@
 #pragma once
 // Repository contracts. Per architecture §9 m6 these are interfaces only because a test fake
-// exists (in_memory.hpp); production uses the concrete MySQL classes (mysql.hpp).
+// exists (in_memory.hpp); production uses the SQL classes (sql_repositories.hpp).
 #include <cstddef>
 #include <optional>
 #include <string_view>

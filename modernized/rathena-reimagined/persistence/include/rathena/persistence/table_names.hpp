@@ -48,10 +48,8 @@ struct TableNames {
 	[[nodiscard]] std::optional<std::string_view> get(std::string_view key) const;
 };
 
-/// True for a plain SQL identifier ([A-Za-z0-9_]+, 1..64 chars); used before quoting with `.
+/// True for a plain SQL identifier ([A-Za-z0-9_]+, 1..64 chars); checked before quoting
+/// (quote_identifier() in sql_connection.hpp).
 bool is_safe_identifier(std::string_view name) noexcept;
-
-/// Backtick-quotes an identifier; throws std::invalid_argument if !is_safe_identifier(name).
-std::string quote_identifier(std::string_view name);
 
 } // namespace rathena::persistence

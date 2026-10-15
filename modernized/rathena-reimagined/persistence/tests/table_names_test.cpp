@@ -3,6 +3,7 @@
 // Plus identifier safety for operator-supplied table-name overrides.
 #include <gtest/gtest.h>
 
+#include "rathena/persistence/sql_connection.hpp"
 #include "rathena/persistence/table_names.hpp"
 
 using namespace rathena::persistence;
@@ -30,6 +31,7 @@ TEST(M5_TableNames, M5_RejectsUnsafeOrUnknownOverrides) {
 	EXPECT_FALSE(t.set("char_db", ""));
 	EXPECT_FALSE(t.set("no_such_key", "x"));
 	EXPECT_EQ(t.character, "char");
-	EXPECT_THROW((void)quote_identifier("a b"), std::invalid_argument);
-	EXPECT_EQ(quote_identifier("char"), "`char`");
+	EXPECT_THROW((void)quote_identifier("a b", SqlDialect::Sqlite), std::invalid_argument);
+	EXPECT_EQ(quote_identifier("char", SqlDialect::Sqlite), "\"char\"");
+	EXPECT_EQ(quote_identifier("char", SqlDialect::Postgres), "\"char\"");
 }

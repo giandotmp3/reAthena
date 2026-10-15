@@ -12,10 +12,14 @@ on:
   push:
     paths:
       - 'modernized/**'
+      - 'sql-files/**'
+      - 'tools/sql/**'
       - '.github/workflows/build_reimagined_units.yml'
   pull_request:
     paths:
       - 'modernized/**'
+      - 'sql-files/**'
+      - 'tools/sql/**'
       - '.github/workflows/build_reimagined_units.yml'
 
 permissions:
@@ -65,56 +69,142 @@ jobs:
       - name: Test
         run: ctest --test-dir build --build-config Debug --output-on-failure --parallel 4
 
-  # Live-database tests (persistence unit) against throwaway database service containers.
-  # Both servers matter: M0 fingerprints must match on MariaDB and on MySQL 8.
-  database-integration:
-    name: linux-gcc-${{ matrix.name }}
+  # Persistence tests against a throwaway PostgreSQL 16 service container, created like a real
+  # rAthena database (SQL_ASCII, C locale: text is stored byte for byte). Each test works in its
+  # own schema, so they run in parallel.
+  postgresql:
+    name: linux-gcc-postgresql
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: mariadb
-            image: mariadb:11.4
-            health: healthcheck.sh --connect --innodb_initialized
-          - name: mysql8
-            image: mysql:8.4
-            health: mysqladmin ping -h 127.0.0.1 --silent
     env:
       # Per-run throwaway credential for the service container below; not a real secret.
       TEST_DB_PASSWORD: ci-${{ github.run_id }}-${{ github.run_attempt }}
     services:
-      db:
-        image: ${{ matrix.image }}
+      postgres:
+        image: postgres:16
         env:
-          # The mariadb image accepts the MYSQL_* names too.
-          MYSQL_RANDOM_ROOT_PASSWORD: 'yes'
-          MYSQL_DATABASE: rathena_it
-          MYSQL_USER: rathena_it
-          MYSQL_PASSWORD: ci-${{ github.run_id }}-${{ github.run_attempt }}
+          POSTGRES_USER: rathena_it
+          POSTGRES_PASSWORD: ci-${{ github.run_id }}-${{ github.run_attempt }}
+          POSTGRES_DB: rathena_it
+          POSTGRES_INITDB_ARGS: --encoding=SQL_ASCII --locale=C
         ports:
-          - 3306:3306
+          - 5432:5432
         options: >-
-          --health-cmd="${{ matrix.health }}"
+          --health-cmd="pg_isready -U rathena_it -d rathena_it"
           --health-interval=5s --health-timeout=5s --health-retries=30
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install MariaDB client library
-        run: sudo apt-get update -q && sudo apt-get install -y -q libmariadb-dev
+      - name: Install libpq
+        run: sudo apt-get update -q && sudo apt-get install -y -q libpq-dev
 
       - name: Configure
         run: >
           cmake -S modernized/rathena-reimagined -B build
           -DCMAKE_BUILD_TYPE=Debug
           -DRATHENA_REIMAGINED_WERROR=ON
-          -DRATHENA_PERSISTENCE_WITH_MYSQL=ON
+          -DRATHENA_PERSISTENCE_WITH_POSTGRESQL=ON
 
       - name: Build
         run: cmake --build build --parallel 4 --target rathena_persistence_tests
 
-      - name: Test (live database, serial)
+      - name: Test (persistence on PostgreSQL)
         env:
-          RATHENA_TEST_DATABASE_URL: mysql://rathena_it:${{ env.TEST_DB_PASSWORD }}@127.0.0.1:3306/rathena_it
-        run: ctest --test-dir build --output-on-failure -R 'Mysql'
+          RATHENA_TEST_PG_URL: postgresql://rathena_it:${{ env.TEST_DB_PASSWORD }}@127.0.0.1:5432/rathena_it
+        run: |
+          ctest --test-dir build/persistence --output-on-failure --parallel 4 | tee ctest.log
+          # Every PostgreSQL-parameterized test must have run, not skipped.
+          if grep -E '(postgresql|PostgresLive).*\(Skipped\)' ctest.log; then
+            echo "PostgreSQL tests were skipped"; exit 1
+          fi
+
+  # One-time importer: a legacy MariaDB database (upstream sql-files/main.sql + logs.sql + seeded
+  # rows with raw latin1 bytes, a zero date and an invalid enum) copied by `rathena-migrate import`
+  # into PostgreSQL and into SQLite, then checked byte for byte.
+  importer:
+    name: linux-gcc-import-mariadb
+    runs-on: ubuntu-24.04
+    env:
+      # Per-run throwaway credentials for the service containers below; not real secrets.
+      TEST_DB_PASSWORD: ci-${{ github.run_id }}-${{ github.run_attempt }}
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_RANDOM_ROOT_PASSWORD: 'yes'
+          MARIADB_DATABASE: rathena_src
+          MARIADB_USER: rathena_src
+          MARIADB_PASSWORD: ci-${{ github.run_id }}-${{ github.run_attempt }}
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=30
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: rathena
+          POSTGRES_PASSWORD: ci-${{ github.run_id }}-${{ github.run_attempt }}
+          POSTGRES_DB: ragnarok
+          POSTGRES_INITDB_ARGS: --encoding=SQL_ASCII --locale=C
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U rathena -d ragnarok"
+          --health-interval=5s --health-timeout=5s --health-retries=30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install client libraries and tools
+        run: >
+          sudo apt-get update -q &&
+          sudo apt-get install -y -q libmariadb-dev libpq-dev mariadb-client postgresql-client sqlite3
+
+      - name: Configure
+        run: >
+          cmake -S modernized/rathena-reimagined -B build
+          -DCMAKE_BUILD_TYPE=Debug
+          -DRATHENA_REIMAGINED_WERROR=ON
+          -DRATHENA_PERSISTENCE_WITH_POSTGRESQL=ON
+          -DRATHENA_MIGRATE_WITH_MYSQL=ON
+
+      - name: Build rathena-migrate
+        run: cmake --build build --parallel 4 --target rathena_migrate
+
+      - name: Load the legacy MariaDB database
+        env:
+          MYSQL_PWD: ${{ env.TEST_DB_PASSWORD }}
+        run: |
+          db() { mariadb --host=127.0.0.1 --user=rathena_src --default-character-set=latin1 rathena_src "$@"; }
+          # Legacy servers wrote raw client bytes into latin1 tables.
+          db -e "ALTER DATABASE rathena_src CHARACTER SET latin1"
+          db < sql-files/main.sql
+          db < sql-files/logs.sql
+          db < modernized/rathena-reimagined/persistence/tests/fixtures/import_seed.sql
+
+      - name: Import into PostgreSQL
+        env:
+          SRC_URL: mysql://rathena_src:${{ env.TEST_DB_PASSWORD }}@127.0.0.1:3306/rathena_src
+          DST_URL: postgresql://rathena:${{ env.TEST_DB_PASSWORD }}@127.0.0.1:5432/ragnarok
+        run: |
+          build/persistence/rathena-migrate import --from env:SRC_URL --to env:DST_URL
+          # A second import into the now filled database must be refused.
+          if build/persistence/rathena-migrate import --from env:SRC_URL --to env:DST_URL; then
+            echo "second import was not refused"; exit 1
+          fi
+
+      - name: Check the PostgreSQL copy
+        env:
+          PGHOST: 127.0.0.1
+          PGUSER: rathena
+          PGDATABASE: ragnarok
+          PGPASSWORD: ${{ env.TEST_DB_PASSWORD }}
+        run: bash modernized/rathena-reimagined/persistence/tests/fixtures/check_import.sh postgresql
+
+      - name: Import into SQLite and check
+        env:
+          SRC_URL: mysql://rathena_src:${{ env.TEST_DB_PASSWORD }}@127.0.0.1:3306/rathena_src
+        run: |
+          build/persistence/rathena-migrate import --from env:SRC_URL --to "sqlite:$RUNNER_TEMP/ragnarok.db"
+          bash modernized/rathena-reimagined/persistence/tests/fixtures/check_import.sh sqlite "$RUNNER_TEMP/ragnarok.db"

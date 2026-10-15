@@ -1,5 +1,5 @@
 #include "rathena/persistence/db_config.hpp"
-#include "rathena/persistence/mysql.hpp"
+#include "rathena/persistence/postgres.hpp"
 #include "rathena/persistence/sql_connection.hpp"
 #include "rathena/persistence/sqlite.hpp"
 
@@ -17,10 +17,16 @@ std::unique_ptr<SqlConnection> open_connection(std::string_view url) {
 		if (path.empty()) throw DbConfigError("sqlite: URL is missing a file path");
 		return std::make_unique<SqliteConnection>(std::string(path));
 	}
-	if (url.starts_with("mysql://")) return std::make_unique<MysqlConnection>(parse_db_url(url));
-	if (url.starts_with("postgres://") || url.starts_with("postgresql://"))
-		throw DbConfigError("the PostgreSQL backend is not built yet (DATABASE_DECISION.md increment 2)");
-	throw DbConfigError("unknown database URL scheme (expected sqlite:, mysql:// or postgres://)");
+	if (is_postgres_url(url)) {
+		auto endpoint = parse_db_url(url); // validate before reporting a missing client
+		if (!postgres_client_available()) {
+			PostgresConnection stub(endpoint);
+			stub.connect(); // throws DbConfigError naming the build option
+		}
+		return std::make_unique<PostgresConnection>(std::move(endpoint));
+	}
+	if (is_mysql_url(url)) throw DbConfigError(std::string(kMysqlNotSupported));
+	throw DbConfigError("unknown database URL scheme (expected sqlite: or postgresql://)");
 }
 
 } // namespace rathena::persistence

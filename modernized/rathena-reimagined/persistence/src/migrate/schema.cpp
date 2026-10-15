@@ -1,6 +1,7 @@
 #include "rathena/persistence/migrate/schema.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstdio>
 
@@ -28,7 +29,30 @@ std::string normalize_type(std::string_view type) {
 	return t;
 }
 
+constexpr std::array<std::string_view, 10> kLogTables = {
+    "atcommandlog", "branchlog", "cashlog", "chatlog", "feedinglog",
+    "loginlog", "mvplog", "npclog", "picklog", "zenylog",
+};
+
 } // namespace
+
+std::span<const std::string_view> log_tables() noexcept { return kLogTables; }
+
+bool excluded_from_fingerprint(std::string_view table) {
+	const std::string name = lower(table);
+	if (name == "schema_migrations") return true;
+	if (name.starts_with("_archive_") || name.starts_with("_orphans_")) return true;
+	if (name.starts_with("item_db") || name.starts_with("mob_db") || name.starts_with("mob_skill_db")) return true;
+	return std::find(kLogTables.begin(), kLogTables.end(), name) != kLogTables.end();
+}
+
+const std::set<std::string>& known_legacy_baselines() {
+	static const std::set<std::string> kBaselines = {
+	    "fnv1a64:b344e34d7ab9ce65", // sql-files/main.sql @ d4b8e7b
+	    "fnv1a64:d6c43cf034523592", // sql-files/main.sql + web.sql @ d4b8e7b
+	};
+	return kBaselines;
+}
 
 const TableSchema* SchemaSnapshot::find(std::string_view table) const noexcept {
 	const auto it = std::find_if(tables.begin(), tables.end(), [&](const TableSchema& t) {

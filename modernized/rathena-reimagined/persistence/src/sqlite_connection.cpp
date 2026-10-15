@@ -72,8 +72,10 @@ std::vector<Row> SqliteConnection::run(const Statement& st, bool want_rows) {
 				    if (v > static_cast<std::uint64_t>(std::numeric_limits<sqlite3_int64>::max()))
 					    throw RepositoryError("unsigned value out of SQLite integer range");
 				    rc = sqlite3_bind_int64(g.stmt, idx, static_cast<sqlite3_int64>(v));
+			    } else if constexpr (std::is_same_v<T, Blob>) {
+				    rc = sqlite3_bind_blob64(g.stmt, idx, v.bytes.data(), v.bytes.size(), SQLITE_TRANSIENT);
 			    } else {
-				    rc = sqlite3_bind_text(g.stmt, idx, v.data(), static_cast<int>(v.size()), SQLITE_TRANSIENT);
+				    rc = sqlite3_bind_text64(g.stmt, idx, v.data(), v.size(), SQLITE_TRANSIENT, SQLITE_UTF8);
 			    }
 		    },
 		    st.params[i]);
@@ -93,6 +95,11 @@ std::vector<Row> SqliteConnection::run(const Statement& st, bool want_rows) {
 			switch (sqlite3_column_type(g.stmt, c)) {
 			case SQLITE_INTEGER: v = static_cast<std::int64_t>(sqlite3_column_int64(g.stmt, c)); break;
 			case SQLITE_NULL: break;
+			case SQLITE_BLOB: {
+				const auto* bytes = static_cast<const char*>(sqlite3_column_blob(g.stmt, c));
+				v = Blob{std::string(bytes == nullptr ? "" : bytes, static_cast<std::size_t>(sqlite3_column_bytes(g.stmt, c)))};
+				break;
+			}
 			default: {
 				const auto* text = reinterpret_cast<const char*>(sqlite3_column_text(g.stmt, c));
 				v = std::string(text == nullptr ? "" : text, static_cast<std::size_t>(sqlite3_column_bytes(g.stmt, c)));
@@ -109,6 +116,20 @@ std::vector<Row> SqliteConnection::run(const Statement& st, bool want_rows) {
 void SqliteConnection::execute(const Statement& st) { (void)run(st, false); }
 
 std::vector<Row> SqliteConnection::query(const Statement& st) { return run(st, true); }
+
+void SqliteConnection::execute_script(std::string_view sql) {
+	connect();
+	const std::string script(sql);
+	execute({"BEGIN IMMEDIATE", {}});
+	char* err = nullptr;
+	if (sqlite3_exec(db_, script.c_str(), nullptr, nullptr, &err) != SQLITE_OK) {
+		const std::string msg = err != nullptr ? err : sqlite3_errmsg(db_);
+		sqlite3_free(err);
+		sqlite3_exec(db_, "ROLLBACK", nullptr, nullptr, nullptr);
+		throw RepositoryError("script failed: " + msg);
+	}
+	execute({"COMMIT", {}});
+}
 
 bool SqliteConnection::execute_in_transaction(const std::vector<Statement>& statements) {
 	connect();

@@ -5,7 +5,7 @@
 
 namespace rathena::persistence {
 
-/// A stub that has not been implemented yet (e.g. the MySQL backend in this scaffold).
+/// A stub that has not been implemented yet (e.g. repositories not yet ported to SQL).
 class NotImplemented : public std::logic_error {
 public:
 	explicit NotImplemented(const std::string& what) : std::logic_error("not implemented: " + what) {}

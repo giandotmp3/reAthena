@@ -1,4 +1,4 @@
-#include "rathena/persistence/mysql.hpp"
+#include "rathena/persistence/sql_repositories.hpp"
 
 #include "rathena/persistence/errors.hpp"
 
@@ -11,15 +11,9 @@ constexpr std::string_view kAccountColumnNames[] = {
     "expiration_time", "logincount", "character_slots", "vip_time", "old_group"};
 
 /// Columns written on insert/update, in account_values() order (without the id).
-std::vector<std::string_view> written_columns(SqlDialect d) {
-	std::vector<std::string_view> cols = {"userid"};
-	// Legacy servers still read `user_pass` during the MySQL transition; new schemas drop it.
-	if (d == SqlDialect::MySql) cols.push_back("user_pass");
-	for (const auto c : {"pass_hash", "pass_scheme", "sex", "email", "group_id", "state", "unban_time",
-	                     "expiration_time", "logincount", "character_slots", "vip_time", "old_group"})
-		cols.push_back(c);
-	return cols;
-}
+constexpr std::string_view kWrittenColumns[] = {
+    "userid", "pass_hash", "pass_scheme", "sex", "email", "group_id", "state", "unban_time",
+    "expiration_time", "logincount", "character_slots", "vip_time", "old_group"};
 
 std::string column_list(SqlDialect d) {
 	std::string out;
@@ -43,15 +37,8 @@ PassScheme pass_scheme_from(std::string_view s) {
 	throw RepositoryError("unknown pass_scheme '" + std::string(s) + "'");
 }
 
-/// `user_pass` is kept in step for plain/md5 accounts and blanked once the account holds an
-/// Argon2id hash (architecture §5 M6).
-std::string legacy_user_pass(const Account& a) {
-	return a.pass_scheme == PassScheme::Argon2id ? std::string{} : a.pass_hash;
-}
-
-std::vector<SqlValue> account_values(const Account& a, SqlDialect d) {
+std::vector<SqlValue> account_values(const Account& a) {
 	std::vector<SqlValue> v = {a.userid};
-	if (d == SqlDialect::MySql) v.emplace_back(legacy_user_pass(a));
 	v.insert(v.end(), {
 	                      a.pass_hash,
 	                      std::string(pass_scheme_name(a.pass_scheme)),
@@ -107,13 +94,10 @@ Account account_from_row(const Row& r) {
 	return a;
 }
 
-/// `##` registry upsert: MySQL keeps REPLACE INTO (transition backend); SQLite and PostgreSQL use
-/// the portable INSERT ... ON CONFLICT DO UPDATE.
+/// `##` registry upsert: the portable INSERT ... ON CONFLICT DO UPDATE.
 Statement upsert_reg(const std::string& table, SqlDialect d, std::vector<SqlValue> params) {
 	auto q = [d](std::string_view n) { return quote_identifier(n, d); };
 	const std::string cols = "(" + q("account_id") + ", " + q("key") + ", " + q("index") + ", " + q("value") + ")";
-	if (d == SqlDialect::MySql)
-		return {"REPLACE INTO " + q(table) + " " + cols + " VALUES (?, ?, ?, ?)", std::move(params)};
 	return {"INSERT INTO " + q(table) + " " + cols + " VALUES (?, ?, ?, ?) ON CONFLICT (" + q("account_id") + ", " +
 	            q("key") + ", " + q("index") + ") DO UPDATE SET " + q("value") + " = excluded." + q("value"),
 	        std::move(params)};
@@ -145,19 +129,17 @@ Statement select_account_by_id(const TableNames& t, AccountId id, SqlDialect d) 
 
 Statement select_account_by_userid(const TableNames& t, std::string_view userid, bool case_sensitive, SqlDialect d) {
 	const auto col = quote_identifier("userid", d);
-	std::string where;
-	if (d == SqlDialect::MySql) where = case_sensitive ? "BINARY " + col + " = ?" : col + " = ?"; // ci collation
-	else where = case_sensitive ? col + " = ?" : "lower(" + col + ") = lower(?)";
+	const std::string where = case_sensitive ? col + " = ?" : "lower(" + col + ") = lower(?)";
 	return {"SELECT " + column_list(d) + " FROM " + quote_identifier(t.login, d) + " WHERE " + where + " LIMIT 2",
 	        {std::string(userid)}};
 }
 
 Statement insert_account(const TableNames& t, const Account& a, SqlDialect d) {
-	auto params = account_values(a, d);
+	auto params = account_values(a);
 	params.insert(params.begin(), std::uint64_t{a.id.value});
 	std::string cols = quote_identifier("account_id", d);
 	std::string marks = "?";
-	for (const auto c : written_columns(d)) {
+	for (const auto c : kWrittenColumns) {
 		cols += ", " + quote_identifier(c, d);
 		marks += ", ?";
 	}
@@ -165,10 +147,10 @@ Statement insert_account(const TableNames& t, const Account& a, SqlDialect d) {
 }
 
 Statement update_account(const TableNames& t, const Account& a, SqlDialect d) {
-	auto params = account_values(a, d);
+	auto params = account_values(a);
 	params.emplace_back(std::uint64_t{a.id.value});
 	std::string sets;
-	for (const auto c : written_columns(d)) sets += (sets.empty() ? "" : ", ") + quote_identifier(c, d) + " = ?";
+	for (const auto c : kWrittenColumns) sets += (sets.empty() ? "" : ", ") + quote_identifier(c, d) + " = ?";
 	return {"UPDATE " + quote_identifier(t.login, d) + " SET " + sets + " WHERE " + quote_identifier("account_id", d) + " = ?",
 	        std::move(params)};
 }
@@ -209,7 +191,8 @@ AccountIdAllocation SqlAccountRepository::create(Account& account, std::optional
 
 void SqlAccountRepository::save(const Account& account) {
 	conn_.execute(sql::update_account(names_, account, conn_.dialect()));
-	// MySQL reports changed (not matched) rows, so 0 can also mean "identical values".
+	// SQLite and PostgreSQL report matched rows; the find() keeps this safe for engines that
+	// report only changed rows.
 	if (conn_.affected_rows() == 0 && !find(account.id)) throw RepositoryError("save of unknown account");
 }
 
@@ -253,34 +236,34 @@ std::vector<GlobalRegStr> SqlAccountRepository::global_regs_str(AccountId id) co
 }
 
 // ------------------------------------------------------------------ characters
-std::optional<Character> MysqlCharacterRepository::find(CharId) const { throw NotImplemented("MysqlCharacterRepository::find"); }
-std::vector<Character> MysqlCharacterRepository::list_by_account(AccountId) const {
-	throw NotImplemented("MysqlCharacterRepository::list_by_account");
+std::optional<Character> SqlCharacterRepository::find(CharId) const { throw NotImplemented("SqlCharacterRepository::find"); }
+std::vector<Character> SqlCharacterRepository::list_by_account(AccountId) const {
+	throw NotImplemented("SqlCharacterRepository::list_by_account");
 }
-std::optional<Character> MysqlCharacterRepository::find_by_name(std::string_view) const {
-	throw NotImplemented("MysqlCharacterRepository::find_by_name");
+std::optional<Character> SqlCharacterRepository::find_by_name(std::string_view) const {
+	throw NotImplemented("SqlCharacterRepository::find_by_name");
 }
-CharId MysqlCharacterRepository::create(Character) { throw NotImplemented("MysqlCharacterRepository::create"); }
-void MysqlCharacterRepository::save(const Character&) { throw NotImplemented("MysqlCharacterRepository::save"); }
-bool MysqlCharacterRepository::remove(CharId) { throw NotImplemented("MysqlCharacterRepository::remove (BR-CHAR-013)"); }
+CharId SqlCharacterRepository::create(Character) { throw NotImplemented("SqlCharacterRepository::create"); }
+void SqlCharacterRepository::save(const Character&) { throw NotImplemented("SqlCharacterRepository::save"); }
+bool SqlCharacterRepository::remove(CharId) { throw NotImplemented("SqlCharacterRepository::remove (BR-CHAR-013)"); }
 
 // ------------------------------------------------------------------ parties
-std::optional<Party> MysqlPartyRepository::find(PartyId) const { throw NotImplemented("MysqlPartyRepository::find"); }
-PartyId MysqlPartyRepository::create(Party) { throw NotImplemented("MysqlPartyRepository::create"); }
-void MysqlPartyRepository::save(const Party&) { throw NotImplemented("MysqlPartyRepository::save"); }
-bool MysqlPartyRepository::remove(PartyId) { throw NotImplemented("MysqlPartyRepository::remove"); }
+std::optional<Party> SqlPartyRepository::find(PartyId) const { throw NotImplemented("SqlPartyRepository::find"); }
+PartyId SqlPartyRepository::create(Party) { throw NotImplemented("SqlPartyRepository::create"); }
+void SqlPartyRepository::save(const Party&) { throw NotImplemented("SqlPartyRepository::save"); }
+bool SqlPartyRepository::remove(PartyId) { throw NotImplemented("SqlPartyRepository::remove"); }
 
 // ------------------------------------------------------------------ guilds
-std::optional<Guild> MysqlGuildRepository::find(GuildId) const { throw NotImplemented("MysqlGuildRepository::find"); }
-GuildId MysqlGuildRepository::create(Guild) { throw NotImplemented("MysqlGuildRepository::create"); }
-void MysqlGuildRepository::save(const Guild&) { throw NotImplemented("MysqlGuildRepository::save"); }
-bool MysqlGuildRepository::remove(GuildId) { throw NotImplemented("MysqlGuildRepository::remove"); }
+std::optional<Guild> SqlGuildRepository::find(GuildId) const { throw NotImplemented("SqlGuildRepository::find"); }
+GuildId SqlGuildRepository::create(Guild) { throw NotImplemented("SqlGuildRepository::create"); }
+void SqlGuildRepository::save(const Guild&) { throw NotImplemented("SqlGuildRepository::save"); }
+bool SqlGuildRepository::remove(GuildId) { throw NotImplemented("SqlGuildRepository::remove"); }
 
 // ------------------------------------------------------------------ mail
-std::optional<Mail> MysqlMailRepository::find(MailId) const { throw NotImplemented("MysqlMailRepository::find"); }
-std::vector<Mail> MysqlMailRepository::inbox(CharId, std::size_t) const { throw NotImplemented("MysqlMailRepository::inbox"); }
-MailId MysqlMailRepository::create(Mail) { throw NotImplemented("MysqlMailRepository::create"); }
-void MysqlMailRepository::save(const Mail&) { throw NotImplemented("MysqlMailRepository::save"); }
-bool MysqlMailRepository::remove(MailId) { throw NotImplemented("MysqlMailRepository::remove"); }
+std::optional<Mail> SqlMailRepository::find(MailId) const { throw NotImplemented("SqlMailRepository::find"); }
+std::vector<Mail> SqlMailRepository::inbox(CharId, std::size_t) const { throw NotImplemented("SqlMailRepository::inbox"); }
+MailId SqlMailRepository::create(Mail) { throw NotImplemented("SqlMailRepository::create"); }
+void SqlMailRepository::save(const Mail&) { throw NotImplemented("SqlMailRepository::save"); }
+bool SqlMailRepository::remove(MailId) { throw NotImplemented("SqlMailRepository::remove"); }
 
 } // namespace rathena::persistence

@@ -4,7 +4,8 @@
 
 #include "rathena/persistence/errors.hpp"
 #include "rathena/persistence/in_memory.hpp"
-#include "rathena/persistence/mysql.hpp"
+#include "rathena/persistence/sql_repositories.hpp"
+#include "rathena/persistence/sqlite.hpp"
 
 using namespace rathena::persistence;
 
@@ -143,21 +144,16 @@ TEST(MailRepository, AttachmentLimitAndMappingEnforced) {
 	EXPECT_THROW((void)mail.create(m), RepositoryError);
 }
 
-TEST(MysqlRepositories, StubsReportNotImplementedWithoutTouchingANetwork) {
-	DbEndpoint ep;
-	ep.user = "rathena";
-	ep.password = "fake-db-pass-0000";
-	ep.host = "db.invalid";
-	ep.database = "rathena_main";
-	MysqlConnection conn(ep);
-	// Repositories not yet ported to SQL stay NotImplemented whether or not a client is linked.
-	MysqlCharacterRepository chars(conn, TableNames{});
+TEST(SqlRepositories, NotYetPortedRepositoriesReportNotImplemented) {
+	// Character, party, guild and mail move to the portable subset in DATABASE_DECISION.md
+	// increment 3; until then they must fail loudly rather than silently do nothing.
+	SqliteConnection conn(":memory:");
+	SqlCharacterRepository chars(conn, TableNames{});
+	SqlPartyRepository parties(conn, TableNames{});
+	SqlGuildRepository guilds(conn, TableNames{});
+	SqlMailRepository mail(conn, TableNames{});
 	EXPECT_THROW((void)chars.find(CharId{150'000}), NotImplemented);
-	if (mysql_client_available()) return; // connect() is real; covered by mysql_integration_test.cpp
-	EXPECT_THROW(conn.connect(), NotImplemented);
-	try {
-		conn.connect();
-	} catch (const NotImplemented& e) {
-		EXPECT_EQ(std::string(e.what()).find("fake-db-pass-0000"), std::string::npos) << "password leaked";
-	}
+	EXPECT_THROW((void)parties.find(PartyId{1}), NotImplemented);
+	EXPECT_THROW((void)guilds.find(GuildId{1}), NotImplemented);
+	EXPECT_THROW((void)mail.find(MailId{1}), NotImplemented);
 }

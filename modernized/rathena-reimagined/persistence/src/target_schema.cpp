@@ -44,8 +44,6 @@ std::string create_table(SqlDialect d, std::string_view table, const std::vector
 } // namespace
 
 std::vector<Statement> target_schema_statements(SqlDialect d, const TableNames& t) {
-	if (d == SqlDialect::MySql)
-		throw std::invalid_argument("MySQL keeps the legacy schema plus rathena-migrate steps during the transition");
 	auto q = [d](std::string_view n) { return quote_identifier(n, d); };
 	std::vector<Statement> out;
 
