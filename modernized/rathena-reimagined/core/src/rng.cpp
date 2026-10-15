@@ -10,7 +10,7 @@ std::uint32_t Rng::below(std::uint32_t bound) {
 		return 0;
 	}
 	// Reject the low partial bucket: threshold = 2^32 mod bound.
-	const std::uint32_t threshold = static_cast<std::uint32_t>(-bound) % bound;
+	const std::uint32_t threshold = (0u - bound) % bound; // 0u - bound: no unary minus on unsigned
 	for (;;) {
 		const std::uint32_t r = next_u32();
 		if (r >= threshold) {

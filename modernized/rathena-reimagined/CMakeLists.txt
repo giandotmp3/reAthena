@@ -25,6 +25,12 @@ set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 
 enable_testing()
 
+# MSVC deprecates std::getenv (C4996) in favour of _dupenv_s. The units read their configuration
+# from the environment once at startup, single-threaded, so the standard function is kept.
+if(MSVC)
+  add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+endif()
+
 set(RATHENA_REIMAGINED_UNITS
   core
   netproto
