@@ -38,7 +38,7 @@ C4Container
     Container(char, "char-server", "C++20 in-place refactor; single-threaded loop, sync SQL", "CAP-04..12: char lifecycle, PIN, system of record, party/guild/mail/companions")
     Container(map, "map-server (1..N, map-sharded)", "C++20 in-place refactor; single sim thread, timer wheel, sync SQL", "CAP-13..21, 23, 24: world sim, combat, items, trade, script VM, anti-cheat")
     Container(web, "web-server", "C++20 rebuild; cpp-httplib + nlohmann/json", "CAP-22: config, emblem, party booking")
-    ContainerDb(db, "PostgreSQL 16+ (servers) / SQLite (embedded, dev, tests)", "MySQL/MariaDB only during the transition; separate log DB allowed", "${DATABASE_URL}, ${LOG_DB_URL}")
+    ContainerDb(db, "PostgreSQL 16+ (servers) / SQLite (embedded, dev, tests)", "MySQL/MariaDB retired; separate log DB allowed", "${DATABASE_URL}, ${LOG_DB_URL}")
     Container(content, "Content", "YAML, NPC scripts, GRF, mapcache", "db/, npc/, data/ — upstream-compatible")
   }
   Rel(player, login, "client protocol", "TCP 6900")
@@ -65,7 +65,7 @@ src/
                       with version field and widened group_id (BR-INTER-003). Packet layouts: the existing headers, verbatim.
   domain/        NEW  pure value types: Item (one type, one persistence mapping), Zeny (checked, ≥0, ≤INT32_MAX), ids, Stats
   rules/         NEW  pure, IO-free rule functions grouped by capability. Inputs: domain values + BattleConfig + Rng&.
-  persistence/   NEW  repositories (concrete MySQL classes; interfaces only where a test fake exists), rathena-migrate tool
+  persistence/   NEW  repositories (concrete SQL classes on SQLite/PostgreSQL; interfaces only where a test fake exists), rathena-migrate tool
   login/         REBUILT on core/netproto/rules/persistence
   web/           REBUILT
   char/          LEGACY, refactored in place: handlers delegate to rules/ and persistence/
@@ -138,10 +138,10 @@ The full file → module manifest is `modernized/rathena-reimagined/map-rules/ma
 |---|---|
 | **C++20** (CMake; MSVC 19.30+, gcc 11+, clang 14+), bump from C++17 at `CMakeLists.txt:31` | The vision. Concepts for rule signatures; `std::span`; `fmt` fallback where `std::format` is missing. |
 | **Standalone Asio** at the IO edges of the rebuilt login/web only | Replaces select/epoll for new processes. The char/map sim keeps the legacy loop and timer wheel (determinism). |
-| **Existing 3rdparty kept**: rapidyaml/yaml-cpp, nlohmann/json, httplib, libconfig, zlib, pcre, MySQL client | Already vendored. nlohmann/json fixes S3. |
+| **Existing 3rdparty kept**: rapidyaml/yaml-cpp, nlohmann/json, httplib, libconfig, zlib, pcre; MySQL client replaced by vendored SQLite + optional libpq | Already vendored. nlohmann/json fixes S3. |
 | **spdlog + fmt** | Redaction filter for tokens and passwords (S2). |
 | **GoogleTest + rapidcheck** | Acceptance tests per BR-ID; property tests (zeny ∈ [0, INT32_MAX], hit ∈ [5,100]%). |
-| **PostgreSQL 16+** for servers, **SQLite** (vendored amalgamation) for local development, tests and single-host small servers; MySQL/MariaDB only until the legacy writers are gone | See `DATABASE_DECISION.md` (accepted 2026-10-15): transactional DDL, real constraints, zero-install development and tests. Replaces the earlier "MySQL/MariaDB with InnoDB" choice. |
+| **PostgreSQL 16+** for servers, **SQLite** (vendored amalgamation) for local development, tests and single-host small servers; MySQL/MariaDB fully retired (legacy servers included) | See `DATABASE_DECISION.md` (accepted 2026-10-15): transactional DDL, real constraints, zero-install development and tests. Replaces the earlier "MySQL/MariaDB with InnoDB" choice. |
 | **libsodium Argon2id**, bounded worker pool | Password-at-rest drop decision; back-pressure prevents login CPU exhaustion. |
 | **Legacy inter-server framing kept** + version field in the 0x2710/0x2af8 handshake | A schema-generated v2 is deferred until after the map refactor, and only if still needed. The `group_id` width (BR-INTER-003) and S4 are fixed in place. |
 | **Secrets from env** (`${INTER_SERVER_USER}`, `${INTER_SERVER_PASS}`, `${*_DB_URL}`) | S1 / BR-INTER-016: startup refuses the shipped default inter-server credential. |
@@ -149,6 +149,8 @@ The full file → module manifest is `modernized/rathena-reimagined/map-rules/ma
 
 ## 5. Data migration
 
+> **Amended again 2026-10-15: MySQL is fully retired** (`DATABASE_DECISION.md`, "Amendment: full retirement"). The legacy servers already run on SQLite/PostgreSQL; the one-time `rathena-migrate import` copies a MySQL database into the generated legacy schema, and the steps below (0 → NULL, FKs, type fixes) become a migration of that schema rather than of MySQL. The paragraph below is kept for history.
+>
 > **Amended 2026-10-15 by `DATABASE_DECISION.md`.** Production moves to PostgreSQL by **export → transform → import into a clean, constrained schema**, staged by table ownership (stage B: login-owned tables after phase 2; stage C: everything else at the M3a "no legacy writers" gate). M2, M3a, M3b and M4 then become part of the import transform and never run against production MySQL. The exception is M2 on the login-owned tables, if the rebuilt login-server ships on MySQL before stage B. The table below remains the plan for the MySQL transition period.
 
 The migration is in place, forward-only and idempotent. The `rathena-migrate` tool records applied versions in `schema_migrations`.

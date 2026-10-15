@@ -44,13 +44,12 @@ Windows | [MS Visual Studio 2017 or newer](https://www.visualstudio.com/download
 ### Required Applications
 Application | Name
 ------|------
-Database | [MySQL 5 or newer](https://www.mysql.com/downloads/) / [MariaDB 5 or newer](https://downloads.mariadb.org/)
 Git | [Windows](https://gitforwindows.org/) / [Linux](https://git-scm.com/download/linux)
 
 ### Optional Applications
 Application | Name
 ------|------
-Database | [MySQL Workbench 5 or newer](http://www.mysql.com/downloads/workbench/)
+Database | [PostgreSQL 16 or newer](https://www.postgresql.org/download/) for production (SQLite is built in and needs nothing). See [doc/database.md](doc/database.md)
 
 ## 2. Installation 
 

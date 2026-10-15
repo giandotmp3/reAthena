@@ -2,13 +2,15 @@
 
 **Status:** Accepted, 2026-10-15. Requested by the user ("move away from MariaDB/MySQL 8 into a better persistent database solution… and for local development that does not require a live server"). This amends `REIMAGINED_ARCHITECTURE.md` §4 (database row) and §5 (data migration).
 
+**Amended 2026-10-15: MySQL fully retired.** The user then asked to "do whatever is needed to fully retire MySQL". The staged cutover below (stages A-C, MySQL as a transition backend) is superseded by [Amendment: full retirement](#amendment-full-retirement); the rest of the decision stands.
+
 ## Decision
 
 | Use | Engine | Why |
 |---|---|---|
 | **Production servers** (any deployment, including multi-host and map-sharded) | **PostgreSQL 16+** | Transactional DDL, real FKs/CHECK/partial indexes, MVCC concurrency, JSONB, partitioning for the append-only log tables, a mature migration path from MySQL. |
 | **Local development, tests, CI, single-host small servers** | **SQLite 3.45+**, vendored as the amalgamation and built in | No server process, no install on any OS: one file, or `:memory:` for tests. Transactional DDL, FKs, `STRICT` tables, WAL mode for several processes on one host. |
-| **Transition only** | MySQL/MariaDB (current backend) | The legacy char-server and map-server talk to MySQL directly (348 query sites through `src/common/sql.cpp`, 262 of them in `src/char`) until their persistence moves behind the repositories. The backend is retired at the end of the strangler phase. |
+| ~~Transition only~~ **Retired** | MySQL/MariaDB | No server runs on it. Its only remaining use is as the *source* of the one-time `rathena-migrate import`. |
 
 All three sit behind the existing repository interfaces in `persistence/`. Rules and services never see which engine is underneath. One portable SQL subset is used (below), and only DDL and a few functions differ per backend.
 
@@ -58,7 +60,7 @@ Production cutover becomes **export from MySQL → transform → import into a f
 
 Migration steps M2 (to InnoDB), M3a (0 → NULL), M3b (foreign keys) and M4 (type fixes) then never run against MySQL in production. They become part of the import, and the new schema is born with FKs and correct types. The M0 fingerprint check stays: the importer refuses an unknown legacy schema. `rathena-migrate` gains `export`/`import` subcommands, and `pgloader` is an alternative for very large databases.
 
-### Cutover is staged by table ownership
+### ~~Cutover is staged by table ownership~~ (superseded by the amendment below)
 | Stage | When | What moves to PostgreSQL | Why it is safe then |
 |---|---|---|---|
 | A | now | nothing in production. New code is written against the portable subset; every repository test runs on SQLite on all CI platforms; PostgreSQL CI job added. | No behaviour change. |
@@ -82,3 +84,39 @@ If the rebuilt login-server ships on MySQL before stage B, M2 must run on the lo
 3. Port the remaining repositories (character, party, guild, mail) to the portable subset, so each test runs on all backends.
 4. `rathena-migrate export/import` (MySQL → PostgreSQL/SQLite), with the transform above and an M0 check on the source.
 5. Stage B cutover; then stage C with the char/map persistence work.
+
+## Amendment: full retirement
+
+Instead of keeping MySQL until the strangler phase moves each table behind a repository, the legacy
+servers were moved off MySQL directly:
+
+- **`src/common/sql.cpp` runs on SQLite or PostgreSQL** behind the unchanged `Sql_*`/`SqlStmt` API, so
+  none of the 348 query sites had to be rewritten wholesale. `db_backend: sqlite|postgresql` in
+  `conf/inter_athena.conf` selects the engine; SQLite is the default and needs nothing installed.
+- **A translation layer** (`src/common/sql_dialect.cpp`) adapts the MySQL spelling the servers and
+  NPC scripts write: backticks, `LIMIT a,b`, `BINARY`, `START TRANSACTION`, and `REPLACE INTO` (an
+  upsert on the primary key, looked up from the catalog, on PostgreSQL). `NOW()`,
+  `UNIX_TIMESTAMP()` and `FROM_UNIXTIME()` are provided as functions on both engines. The few
+  queries the layer cannot express (`INTERVAL` arithmetic, `UPDATE/DELETE ... LIMIT`,
+  `INSERT DELAYED`) were rewritten at their call sites. The portable-subset rules above still
+  apply to new code (repositories); the legacy queries keep their MySQL spelling.
+- **The legacy schema is kept as-is**, generated per engine from the MySQL source files by
+  `tools/sql/mysql2portable.py` (`sql-files/postgresql/`, `sql-files/sqlite/`). Case-insensitive
+  names use `citext` (PostgreSQL) and `COLLATE NOCASE` (SQLite). PostgreSQL databases are
+  `SQL_ASCII` with the `C` locale, so client bytes are stored unchanged, as in MySQL `latin1`.
+  Servers create the schema in an empty database on first start.
+- **Import keeps the legacy shape.** `rathena-migrate import` copies a MySQL database into the
+  generated schema byte for byte (with an M0 check on the source). The transform listed under
+  "Data migration" (0 → NULL, orphans, `pass_hash`, FKs) moves to the reimagined schema's own
+  migration, together with the deferred D4/D5/D6 fixes; it no longer gates leaving MySQL.
+- **Builds and CI:** autotools, CMake and MSBuild build the vendored SQLite and, when found, libpq.
+  `build_servers_database.yml` runs the Sql/SqlStmt contract tests on both engines and a scripted
+  login → char → map session (`tools/ci/smoke.sh`) on each. The MySQL-only tooling (`sql.sh`,
+  `config.pl`, `update.pl`, `yaml2sql`, the `use_sql_db` item/mob tables) was removed.
+- **`use_sql_db` is gone** (HITL #2): items and monsters come from the YAML databases only.
+- **Ecosystem:** FluxCP-style tools that use the MySQL schema directly must switch to PostgreSQL
+  (the table and column names are unchanged, so most queries port with identifier-quoting changes).
+  Operator `query_sql` scripts keep working when they use the forms the translation layer handles;
+  `doc/database.md` lists the forms that need porting.
+
+User-facing documentation: `doc/database.md`.
