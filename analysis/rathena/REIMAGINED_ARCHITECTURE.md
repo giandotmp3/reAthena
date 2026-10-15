@@ -1,6 +1,6 @@
 # rAthena Reimagined — Target Architecture (Modern C++20)
 
-**Status:** v3. Architecture-critic review incorporated (§9). **Awaiting HITL checkpoint #2. Nothing is scaffolded until it is approved.**
+**Status:** v3. Architecture-critic review incorporated (§9). **Approved at HITL #2 on 2026-10-15.** The user also confirmed both deferrals: `use_sql_db` is dropped, and the D4/D5/D6 schema fixes are deferred until after M3b.
 **Spec:** `analysis/rathena/AI_NATIVE_SPEC.md`: 26 capabilities (`CAP-NN`), **191** behavior-contract rules (`BR-*`), HITL #1 decisions in §1.1.
 **Vision:** Modern C++20 refactor of the whole suite. Same language and contributor base; rebuilt into clean modules with dependency injection and executable tests.
 
@@ -162,8 +162,8 @@ The migration is in place, forward-only and idempotent. The `rathena-migrate` to
 | M5 | 3 | Code fix for clan/elemental table-name defaults (D2). | — |
 | M3a | **after map direct-write paths are on `persistence/`** | Convert `0`-as-none to NULL for `party_id`, `guild_id`, `pet_id`, `homun_id`, `elemental_id`, `clan_id`, `partner_id`… | no legacy binary still writes those tables |
 | M3b | after M3a | Add FKs. Cascade order is verified against the BR-CHAR-013 cleanup-sequence test. | M1 report is clean |
-| D4/D5/D6 | **deferred, recorded** | `mercenary_owner` link, denormalized names, item schema repeated in six tables. Handled in code through the one `Item` mapping and rename propagation. Schema consolidation is deferred until after M3b (HITL to confirm). | — |
-| `use_sql_db` | — | The SQL mirror of item/mob DBs (`inter_athena.conf:176`) is **dropped**; YAML is the single source (CAP-23). | HITL to confirm |
+| D4/D5/D6 | **deferred (confirmed at HITL #2)** | `mercenary_owner` link, denormalized names, item schema repeated in six tables. Handled in code through the one `Item` mapping and rename propagation. Schema consolidation is deferred until after M3b. | — |
+| `use_sql_db` | — | The SQL mirror of item/mob DBs (`inter_athena.conf:176`) is **dropped**; YAML is the single source (CAP-23). | confirmed at HITL #2 |
 
 ## 6. Verification strategy
 
@@ -227,7 +227,7 @@ The migration is in place, forward-only and idempotent. The `rathena-migrate` to
 | m2 | Zeny BIGINT rewrite for no gain. | Minor | INT + CHECK. |
 | m3 | M6 scheduled after the login phase. | Minor | M6 moved to phase 1. |
 | m4 | No upgrade tracking for the baseline. | Minor | Schema fingerprint; refuse on drift. |
-| m5 | `use_sql_db` unaddressed. | Minor | Dropped (HITL to confirm). |
+| m5 | `use_sql_db` unaddressed. | Minor | Dropped (confirmed at HITL #2). |
 | m6 | Interfaces with a single implementation. | Minor | Concrete classes unless a test fake exists. |
 | m7 | Coroutines in the sim risk dangling sessions. | Minor | Timer wheel in the sim; coroutines only at IO edges. |
 | m8 | BR-WEB-010 inversion may break clients. | Minor | Client-capture test before phase 2. |
