@@ -45,25 +45,25 @@ struct Inter_Config inter_config {};
 std::shared_ptr<httplib::Server> http_server;
 
 std::string login_server_ip = "127.0.0.1";
-uint16 login_server_port = 3306;
+uint16 login_server_port = 5432;
 std::string login_server_id = "ragnarok";
 std::string login_server_pw = "";
 std::string login_server_db = "ragnarok";
 
 std::string char_server_ip = "127.0.0.1";
-uint16  char_server_port = 3306;
+uint16  char_server_port = 5432;
 std::string char_server_id = "ragnarok";
 std::string char_server_pw = "";
 std::string char_server_db = "ragnarok";
 
 std::string map_server_ip = "127.0.0.1";
-uint16 map_server_port = 3306;
+uint16 map_server_port = 5432;
 std::string map_server_id = "ragnarok";
 std::string map_server_pw = "";
 std::string map_server_db = "ragnarok";
 
 std::string web_server_ip = "127.0.0.1";
-uint16 web_server_port = 3306;
+uint16 web_server_port = 5432;
 std::string web_server_id = "ragnarok";
 std::string web_server_pw = "";
 std::string web_server_db = "ragnarok";

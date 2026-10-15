@@ -58,7 +58,7 @@ using namespace rathena::server_map;
 
 std::string default_codepage = "";
 
-int32 map_server_port = 3306;
+int32 map_server_port = 5432;
 std::string map_server_ip = "127.0.0.1";
 std::string map_server_id = "ragnarok";
 std::string map_server_pw = "";
@@ -66,25 +66,9 @@ std::string map_server_db = "ragnarok";
 Sql* mmysql_handle;
 Sql* qsmysql_handle; /// For query_sql
 
-int32 db_use_sqldbs = 0;
 char barter_table[32] = "barter";
 char buyingstores_table[32] = "buyingstores";
 char buyingstore_items_table[32] = "buyingstore_items";
-#ifdef RENEWAL
-char item_table[32] = "item_db_re";
-char item2_table[32] = "item_db2_re";
-char mob_table[32] = "mob_db_re";
-char mob2_table[32] = "mob_db2_re";
-char mob_skill_table[32] = "mob_skill_db_re";
-char mob_skill2_table[32] = "mob_skill_db2_re";
-#else
-char item_table[32] = "item_db";
-char item2_table[32] = "item_db2";
-char mob_table[32] = "mob_db";
-char mob2_table[32] = "mob_db2";
-char mob_skill_table[32] = "mob_skill_db";
-char mob_skill2_table[32] = "mob_skill_db2";
-#endif
 char sales_table[32] = "sales";
 char vendings_table[32] = "vendings";
 char vending_items_table[32] = "vending_items";
@@ -95,7 +79,7 @@ char guild_storage_log_table[32] = "guild_storage_log";
 
 // log database
 std::string log_db_ip = "127.0.0.1";
-uint16 log_db_port = 3306;
+uint16 log_db_port = 5432;
 std::string log_db_id = "ragnarok";
 std::string log_db_pw = "";
 std::string log_db_db = "log";
@@ -4302,18 +4286,6 @@ int32 inter_config_read(const char *cfgName)
 			safestrncpy( buyingstores_table, w2, sizeof(buyingstores_table) );
 		else if( strcmpi( w1, "buyingstore_items_table" ) == 0 )
 			safestrncpy( buyingstore_items_table, w2, sizeof(buyingstore_items_table) );
-		else if(strcmpi(w1,"item_table")==0)
-			safestrncpy(item_table,w2,sizeof(item_table));
-		else if(strcmpi(w1,"item2_table")==0)
-			safestrncpy(item2_table,w2,sizeof(item2_table));
-		else if(strcmpi(w1,"mob_table")==0)
-			safestrncpy(mob_table,w2,sizeof(mob_table));
-		else if(strcmpi(w1,"mob2_table")==0)
-			safestrncpy(mob2_table,w2,sizeof(mob2_table));
-		else if(strcmpi(w1,"mob_skill_table")==0)
-			safestrncpy(mob_skill_table,w2,sizeof(mob_skill_table));
-		else if(strcmpi(w1,"mob_skill2_table")==0)
-			safestrncpy(mob_skill2_table,w2,sizeof(mob_skill2_table));
 		else if( strcmpi( w1, "vending_db" ) == 0 )
 			safestrncpy( vendings_table, w2, sizeof(vendings_table) );
 		else if( strcmpi( w1, "vending_items_table" ) == 0 )
@@ -4349,8 +4321,9 @@ int32 inter_config_read(const char *cfgName)
 			default_codepage = w2;
 		else
 		if(strcmpi(w1,"use_sql_db")==0) {
-			db_use_sqldbs = config_switch(w2);
-			ShowStatus ("Using SQL dbs: %s\n",w2);
+			// Removed: item/mob data always comes from the YAML databases (db/).
+			if( config_switch(w2) )
+				ShowWarning("use_sql_db is no longer supported; item and monster data are read from the YAML databases.\n");
 		} else
 		if(strcmpi(w1,"log_db_ip")==0)
 			log_db_ip = w2;

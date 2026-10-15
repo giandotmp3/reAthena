@@ -120,7 +120,7 @@ void char_set_charselect(uint32 account_id) {
 
 void char_set_char_online(int32 map_id, uint32 char_id, uint32 account_id) {
 	//Update DB
-	if( SQL_ERROR == Sql_Query(sql_handle, "UPDATE `%s` SET `online`='1', `last_login`=NOW() WHERE `char_id`='%d' LIMIT 1", schema_config.char_db, char_id) )
+	if( SQL_ERROR == Sql_Query(sql_handle, "UPDATE `%s` SET `online`='1', `last_login`=NOW() WHERE `char_id`='%d'", schema_config.char_db, char_id) )
 		Sql_ShowDebug(sql_handle);
 
 	//Check to see for online conflicts
@@ -173,7 +173,7 @@ void char_set_char_offline(uint32 char_id, uint32 account_id){
 		if (cp)
 			char_get_chardb().erase( char_id );
 
-		if( SQL_ERROR == Sql_Query(sql_handle, "UPDATE `%s` SET `online`='0' WHERE `char_id`='%d' LIMIT 1", schema_config.char_db, char_id) )
+		if( SQL_ERROR == Sql_Query(sql_handle, "UPDATE `%s` SET `online`='0' WHERE `char_id`='%d'", schema_config.char_db, char_id) )
 			Sql_ShowDebug(sql_handle);
 	}
 
@@ -688,7 +688,7 @@ int32 char_memitemdata_to_sql(const struct item items[], int32 max, int32 id, en
 		}
 		if( !found )
 		{// Item not present in inventory, remove it.
-			if( SQL_ERROR == Sql_Query(sql_handle, "DELETE from `%s` where `id`='%d' LIMIT 1", tablename, item.id) )
+			if( SQL_ERROR == Sql_Query(sql_handle, "DELETE from `%s` where `id`='%d'", tablename, item.id) )
 			{
 				Sql_ShowDebug(sql_handle);
 				errors++;
@@ -1528,9 +1528,10 @@ int32 char_make_new_char( struct char_session_data* sd, char* name_, int32 str, 
 /* Divorce Players */
 /*----------------------------------------------------------------------------------------------------------*/
 int32 char_divorce_char_sql(int32 partner_id1, int32 partner_id2){
-	if( SQL_ERROR == Sql_Query(sql_handle, "UPDATE `%s` SET `partner_id`='0' WHERE `char_id`='%d' OR `char_id`='%d' LIMIT 2", schema_config.char_db, partner_id1, partner_id2) )
+	if( SQL_ERROR == Sql_Query(sql_handle, "UPDATE `%s` SET `partner_id`='0' WHERE `char_id`='%d' OR `char_id`='%d'", schema_config.char_db, partner_id1, partner_id2) )
 		Sql_ShowDebug(sql_handle);
-	if( SQL_ERROR == Sql_Query(sql_handle, "DELETE FROM `%s` WHERE (`nameid`='%u' OR `nameid`='%u') AND (`char_id`='%d' OR `char_id`='%d') LIMIT 2", schema_config.inventory_db, WEDDING_RING_M, WEDDING_RING_F, partner_id1, partner_id2) )
+	// at most two rings (UPDATE/DELETE ... LIMIT is not portable, a subquery is)
+	if( SQL_ERROR == Sql_Query(sql_handle, "DELETE FROM `%s` WHERE `id` IN (SELECT `id` FROM `%s` WHERE (`nameid`='%u' OR `nameid`='%u') AND (`char_id`='%d' OR `char_id`='%d') LIMIT 2)", schema_config.inventory_db, schema_config.inventory_db, WEDDING_RING_M, WEDDING_RING_F, partner_id1, partner_id2) )
 		Sql_ShowDebug(sql_handle);
 	chmapif_send_ackdivorce(partner_id1, partner_id2);
 	return 0;
@@ -1643,9 +1644,9 @@ enum e_char_del_response char_delete(struct char_session_data* sd, uint32 char_i
 		Sql_ShowDebug(sql_handle);
 
 	//Delete all pets that are stored in eggs (inventory + cart)
-	if( SQL_ERROR == Sql_Query(sql_handle, "DELETE FROM `%s` USING `%s` JOIN `%s` ON `pet_id` = `card1`|`card2`<<16 WHERE `%s`.char_id = '%d' AND card0 = 256", schema_config.pet_db, schema_config.pet_db, schema_config.inventory_db, schema_config.inventory_db, char_id) )
+	if( SQL_ERROR == Sql_Query(sql_handle, "DELETE FROM `%s` WHERE `pet_id` IN (SELECT (`card1` | (`card2` << 16)) FROM `%s` WHERE `char_id` = '%d' AND `card0` = 256)", schema_config.pet_db, schema_config.inventory_db, char_id) )
 		Sql_ShowDebug(sql_handle);
-	if( SQL_ERROR == Sql_Query(sql_handle, "DELETE FROM `%s` USING `%s` JOIN `%s` ON `pet_id` = `card1`|`card2`<<16 WHERE `%s`.char_id = '%d' AND card0 = 256", schema_config.pet_db, schema_config.pet_db, schema_config.cart_db, schema_config.cart_db, char_id) )
+	if( SQL_ERROR == Sql_Query(sql_handle, "DELETE FROM `%s` WHERE `pet_id` IN (SELECT (`card1` | (`card2` << 16)) FROM `%s` WHERE `char_id` = '%d' AND `card0` = 256)", schema_config.pet_db, schema_config.cart_db, char_id) )
 		Sql_ShowDebug(sql_handle);
 
 	/* remove homunculus */
@@ -2234,7 +2235,8 @@ TIMER_FUNC(char_clan_member_cleanup){
 		return 0;
 	}
 
-	if( SQL_ERROR == Sql_Query( sql_handle, "UPDATE `%s` SET `clan_id`='0' WHERE `online`='0' AND `clan_id`<>'0' AND `last_login` IS NOT NULL AND `last_login` <= NOW() - INTERVAL %d DAY", schema_config.char_db, charserv_config.clan_remove_inactive_days ) ){
+	const std::string cutoff = Sql_DateTime( time( nullptr ) - (time_t)charserv_config.clan_remove_inactive_days * 86400 );
+	if( SQL_ERROR == Sql_Query( sql_handle, "UPDATE `%s` SET `clan_id`='0' WHERE `online`='0' AND `clan_id`<>'0' AND `last_login` IS NOT NULL AND `last_login` <= '%s'", schema_config.char_db, cutoff.c_str() ) ){
 		Sql_ShowDebug(sql_handle);
 	}
 
@@ -2683,7 +2685,6 @@ void char_sql_config_read(const char* cfgName) {
 
 
 void char_set_default_sql(){
-//	schema_config.db_use_sqldbs;
 	safestrncpy(schema_config.db_path,"db",sizeof(schema_config.db_path));
 	safestrncpy(schema_config.char_db,"char",sizeof(schema_config.char_db));
 	safestrncpy(schema_config.scdata_db,"sc_data",sizeof(schema_config.scdata_db));

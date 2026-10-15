@@ -6,6 +6,7 @@
 #include <algorithm> //min / max
 #include <cstdlib>
 #include <cstring>
+#include <random>
 
 #include <common/malloc.hpp>
 #include <common/mmo.hpp>
@@ -24,7 +25,7 @@ typedef struct AccountDB_SQL {
 	AccountDB vtable;    // public interface
 	Sql* accounts;       // SQL handle accounts storage
 	std::string db_hostname = "127.0.0.1";
-	uint16 db_port = 3306;
+	uint16 db_port = 5432;
 	std::string db_username = "ragnarok";
 	std::string db_password = "";
 	std::string db_database = "ragnarok";
@@ -649,45 +650,34 @@ static bool mmo_auth_tosql(AccountDB_SQL* db, const struct mmo_account* acc, boo
 	}
 
 	if( acc->sex != 'S' && login_config.use_web_auth_token && refresh_token ){
-		static bool initialized = false;
-		static const char* query;
-
-		// Pseudo Scope to break out
-		while( !initialized ){
-			if( SQL_SUCCESS == Sql_Query( sql_handle, "SELECT SHA2( 'test', 256 )" ) ){
-				query = "UPDATE `%s` SET `web_auth_token` = LEFT( SHA2( CONCAT( UUID(), RAND() ), 256 ), %d ), `web_auth_token_enabled` = '1' WHERE `account_id` = '%d'";
-				initialized = true;
-				break;
-			}
-
-			if( SQL_SUCCESS == Sql_Query( sql_handle, "SELECT MD5( 'test' )" ) ){
-				query = "UPDATE `%s` SET `web_auth_token` = LEFT( MD5( CONCAT( UUID(), RAND() ) ), %d ), `web_auth_token_enabled` = '1' WHERE `account_id` = '%d'";
-				initialized = true;
-				break;
-			}
-
-			ShowWarning( "Your MySQL does not support SHA2 and MD5 - no hashing will be used for login token creation.\n" );
-			ShowWarning( "If you are using an old version of MySQL consider upgrading to a newer release.\n" );
-			query = "UPDATE `%s` SET `web_auth_token` = LEFT( CONCAT( UUID(), RAND() ), %d ), `web_auth_token_enabled` = '1' WHERE `account_id` = '%d'";
-			initialized = true;
-			break;
-		}
-
+		// The token is generated here from the OS random source (it used to come from the
+		// database's SHA2/UUID/RAND functions, which are not portable between engines).
+		static std::random_device entropy;
+		static const char hex[] = "0123456789abcdef";
 		const int32 MAX_RETRIES = 20;
-		int32 i = 0;
+		char token[WEB_AUTH_TOKEN_LENGTH] = {};
 		bool success = false;
 
-		// Retry it for a maximum number of retries
-		do{
-			if( SQL_SUCCESS == Sql_Query( sql_handle, query, db->account_db, WEB_AUTH_TOKEN_LENGTH - 1, acc->account_id ) ){
+		// Retry with a new token while it collides with an existing one (unique key)
+		for( int32 i = 0; i < MAX_RETRIES; ++i ){
+			for( size_t c = 0; c < WEB_AUTH_TOKEN_LENGTH - 1; ++c ){
+				token[c] = hex[entropy() & 0xF];
+			}
+			token[WEB_AUTH_TOKEN_LENGTH - 1] = '\0';
+
+			if( SQL_SUCCESS == Sql_Query( sql_handle, "UPDATE `%s` SET `web_auth_token` = '%s', `web_auth_token_enabled` = '1' WHERE `account_id` = '%d'", db->account_db, token, acc->account_id ) ){
 				success = true;
 				break;
 			}
-		}while( i < MAX_RETRIES && Sql_GetError( sql_handle ) == 1062 );
+
+			if( Sql_GetError( sql_handle ) != SQL_ERRNO_DUPLICATE ){
+				break;
+			}
+		}
 
 		if( !success ){
-			if( i == MAX_RETRIES ){
-				ShowError( "Failed to generate a unique web_auth_token with %d retries...\n", i );
+			if( Sql_GetError( sql_handle ) == SQL_ERRNO_DUPLICATE ){
+				ShowError( "Failed to generate a unique web_auth_token with %d retries...\n", MAX_RETRIES );
 			}else{
 				Sql_ShowDebug( sql_handle );
 			}
@@ -695,20 +685,7 @@ static bool mmo_auth_tosql(AccountDB_SQL* db, const struct mmo_account* acc, boo
 			break;
 		}
 
-		char* data;
-		size_t len;
-
-		if( SQL_SUCCESS != Sql_Query( sql_handle, "SELECT `web_auth_token` from `%s` WHERE `account_id` = '%d'", db->account_db, acc->account_id ) ||
-			SQL_SUCCESS != Sql_NextRow( sql_handle ) ||
-			SQL_SUCCESS != Sql_GetData( sql_handle, 0, &data, &len )
-			){
-			Sql_ShowDebug( sql_handle );
-			break;
-		}
-
-		safestrncpy( (char *)&acc->web_auth_token, data, sizeof( acc->web_auth_token ) );
-
-		Sql_FreeResult( sql_handle );
+		safestrncpy( (char *)&acc->web_auth_token, token, sizeof( acc->web_auth_token ) );
 	}
 
 	// if we got this far, everything was successful

@@ -5,6 +5,8 @@
 #define SQL_HPP
 
 #include <cstdarg>// va_list
+#include <ctime>
+#include <string>
 #include <memory>
 #include <stdexcept>
 
@@ -337,6 +339,10 @@ public:
 // TODO: we have to keep this until C++20 and std::source_location is available [Lemongrass]
 #define SqlStmt_ShowDebug(self) (self).ShowDebug_( __FILE__, __LINE__ )
 #endif
+
+/// Local time formatted as a DATETIME value ('YYYY-MM-DD HH:MM:SS'), the form stored by NOW().
+/// Use it instead of `NOW() - INTERVAL ...` arithmetic, which is not portable between engines.
+std::string Sql_DateTime( time_t timestamp );
 
 void Sql_Init(void);
 

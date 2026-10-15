@@ -251,7 +251,9 @@ int32 mail_timer_sub( int32 limit, enum mail_inbox_type type ){
 	}
 
 	// Start by deleting all expired mails sent by the server
-	if( SQL_ERROR == Sql_Query( sql_handle, "DELETE FROM `%s`WHERE `type` = '%d' AND `send_id` = '0' AND `time` <= UNIX_TIMESTAMP( NOW() - INTERVAL %d DAY )", schema_config.mail_db, type, limit ) ){
+	// `time` is a UNIX timestamp; compute the cutoff here (portable across database engines)
+	const int64 cutoff = (int64)time( nullptr ) - (int64)limit * 86400;
+	if( SQL_ERROR == Sql_Query( sql_handle, "DELETE FROM `%s` WHERE `type` = '%d' AND `send_id` = '0' AND `time` <= '%" PRId64 "'", schema_config.mail_db, type, cutoff ) ){
 		Sql_ShowDebug( sql_handle );
 		return 0;
 	}
@@ -274,9 +276,9 @@ int32 mail_timer_sub( int32 limit, enum mail_inbox_type type ){
 		"FROM `%s` `m` "
 		"INNER JOIN `%s` `c` ON `c`.`char_id`=`m`.`dest_id` "
 		"INNER JOIN `%s` `c2` ON `c2`.`char_id`=`m`.`send_id` "
-		"WHERE `type` = '%d' AND `time` <= UNIX_TIMESTAMP( NOW() - INTERVAL %d DAY ) "
+		"WHERE `type` = '%d' AND `time` <= '%" PRId64 "' "
 		"ORDER BY `id` LIMIT %d",
-		schema_config.mail_db, schema_config.char_db, schema_config.char_db, type, limit, MAIL_ITERATION_SIZE + 1 ) ){
+		schema_config.mail_db, schema_config.char_db, schema_config.char_db, type, cutoff, MAIL_ITERATION_SIZE + 1 ) ){
 		Sql_ShowDebug(sql_handle);
 		return 0;
 	}

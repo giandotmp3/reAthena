@@ -567,12 +567,16 @@ int32 inter_guildcastle_tosql( std::shared_ptr<struct guild_castle> gc ){
 	int32 i;
 
 	StringBuf_Init(&buf);
-	StringBuf_Printf(&buf, "REPLACE INTO `%s` SET `castle_id`='%d', `guild_id`='%d', `economy`='%d', `defense`='%d', "
-	    "`triggerE`='%d', `triggerD`='%d', `nextTime`='%d', `payTime`='%d', `createTime`='%d', `visibleC`='%d'",
-	    schema_config.guild_castle_db, gc->castle_id, gc->guild_id, gc->economy, gc->defense,
+	StringBuf_Printf(&buf, "REPLACE INTO `%s` (`castle_id`, `guild_id`, `economy`, `defense`, "
+	    "`triggerE`, `triggerD`, `nextTime`, `payTime`, `createTime`, `visibleC`", schema_config.guild_castle_db);
+	for (i = 0; i < MAX_GUARDIANS; ++i)
+		StringBuf_Printf(&buf, ", `visibleG%d`", i);
+	StringBuf_Printf(&buf, ") VALUES ('%d', '%d', '%d', '%d', '%d', '%d', '%d', '%d', '%d', '%d'",
+	    gc->castle_id, gc->guild_id, gc->economy, gc->defense,
 	    gc->triggerE, gc->triggerD, gc->nextTime, gc->payTime, gc->createTime, gc->visibleC);
 	for (i = 0; i < MAX_GUARDIANS; ++i)
-		StringBuf_Printf(&buf, ", `visibleG%d`='%d'", i, gc->guardian[i].visible);
+		StringBuf_Printf(&buf, ", '%d'", gc->guardian[i].visible);
+	StringBuf_AppendStr(&buf, ")");
 
 	if (SQL_ERROR == Sql_Query(sql_handle, StringBuf_Value(&buf)))
 		Sql_ShowDebug(sql_handle);

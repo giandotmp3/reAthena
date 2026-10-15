@@ -691,7 +691,7 @@ int32 chmapif_parse_askrmfriend(int32 fd){
 		uint32 char_id, friend_id;
 		char_id = RFIFOL(fd,2);
 		friend_id = RFIFOL(fd,6);
-		if( SQL_ERROR == Sql_Query(sql_handle, "DELETE FROM `%s` WHERE `char_id`='%d' AND `friend_id`='%d' LIMIT 1",
+		if( SQL_ERROR == Sql_Query(sql_handle, "DELETE FROM `%s` WHERE `char_id`='%d' AND `friend_id`='%d'",
 			schema_config.friend_db, char_id, friend_id) ) {
 			Sql_ShowDebug(sql_handle);
 			return 1;
@@ -1219,7 +1219,7 @@ int32 chmapif_parse_reqcharban(int32 fd){
 			if( unban_time < now ) unban_time=0; //we have totally reduce the time
 
 			if( SQL_SUCCESS != stmt.Prepare(
-					  "UPDATE `%s` SET `unban_time` = ? WHERE `char_id` = ? LIMIT 1",
+					  "UPDATE `%s` SET `unban_time` = ? WHERE `char_id` = ?",
 					  schema_config.char_db)
 				|| SQL_SUCCESS != stmt.BindParam(0, SQLDT_LONG,   (void*)&unban_time,   sizeof(unban_time))
 				|| SQL_SUCCESS != stmt.BindParam(1, SQLDT_INT32,    (void*)&t_cid,     sizeof(t_cid))
@@ -1256,7 +1256,7 @@ int32 chmapif_parse_reqcharunban(int32 fd){
 		RFIFOSKIP(fd,6+NAME_LENGTH);
 
 		Sql_EscapeStringLen(sql_handle, esc_name, name, strnlen(name, NAME_LENGTH));
-		if( SQL_ERROR == Sql_Query(sql_handle, "UPDATE `%s` SET `unban_time` = '0' WHERE `name` = '%s' LIMIT 1", schema_config.char_db, esc_name) ) {
+		if( SQL_ERROR == Sql_Query(sql_handle, "UPDATE `%s` SET `unban_time` = '0' WHERE `name` = '%s'", schema_config.char_db, esc_name) ) {
 			Sql_ShowDebug(sql_handle);
 			return 1;
 		}

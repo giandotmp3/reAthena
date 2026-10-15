@@ -46,13 +46,8 @@ e_log_filter;
 struct Log_Config log_config;
 
 
-#ifdef SQL_INNODB
-// database is using an InnoDB engine so do not use DELAYED
+// Plain INSERT: INSERT DELAYED was a MySQL/MyISAM extension (no longer supported engines).
 #define LOG_QUERY "INSERT"
-#else
-// database is using a MyISAM engine so use DELAYED
-#define LOG_QUERY "INSERT DELAYED"
-#endif
 
 
 /// obtain log type character for item/zeny logs

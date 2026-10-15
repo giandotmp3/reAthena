@@ -1499,7 +1499,7 @@ void chclif_block_character( int32 fd, char_session_data& sd){
 				j++;
 			}else{
 				sd.unban_time[i] = 0;
-				if( SQL_ERROR == Sql_Query( sql_handle, "UPDATE `%s` SET `unban_time`='0' WHERE `char_id`='%d' LIMIT 1", schema_config.char_db, sd.found_char[i] ) )
+				if( SQL_ERROR == Sql_Query( sql_handle, "UPDATE `%s` SET `unban_time`='0' WHERE `char_id`='%d'", schema_config.char_db, sd.found_char[i] ) )
 					Sql_ShowDebug(sql_handle);
 			}
 		}

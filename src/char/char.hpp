@@ -61,7 +61,6 @@ enum e_char_del_response {
 };
 
 struct Schema_Config {
-	int32 db_use_sqldbs;
 	char db_path[1024];
 	char char_db[DB_NAME_LEN];
 	char scdata_db[DB_NAME_LEN];

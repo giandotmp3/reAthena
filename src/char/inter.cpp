@@ -46,7 +46,7 @@ InterServerDatabase interServerDb;
 
 Sql* sql_handle = nullptr;	///Link to mysql db, connection FD
 
-int32 char_server_port = 3306;
+int32 char_server_port = 5432;
 std::string char_server_ip = "127.0.0.1";
 std::string char_server_id = "ragnarok";
 std::string char_server_pw = ""; // Allow user to send empty password (bugreport:7787)

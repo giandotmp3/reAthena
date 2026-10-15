@@ -1167,6 +1167,10 @@ void Sql_inter_server_read(const char* cfgName, bool first) {
 	return;
 }
 
+std::string Sql_DateTime( time_t timestamp ){
+	return format_local_time( timestamp );
+}
+
 void Sql_Init(void) {
 	Sql_inter_server_read(INTER_CONF_NAME,true);
 }

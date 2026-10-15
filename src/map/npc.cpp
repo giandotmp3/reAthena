@@ -4813,7 +4813,7 @@ void npc_market_delfromsql_(const char *exname, t_itemid nameid, bool clear) {
 			SQL_ERROR == stmt.Execute())
 			SqlStmt_ShowDebug(stmt);
 	} else {
-		if (SQL_ERROR == stmt.Prepare("DELETE FROM `%s` WHERE `name`='%s' AND `nameid`='%u' LIMIT 1", market_table, exname, nameid) ||
+		if (SQL_ERROR == stmt.Prepare("DELETE FROM `%s` WHERE `name`='%s' AND `nameid`='%u'", market_table, exname, nameid) ||
 			SQL_ERROR == stmt.Execute())
 			SqlStmt_ShowDebug(stmt);
 	}

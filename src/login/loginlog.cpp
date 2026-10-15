@@ -15,7 +15,7 @@
 
 
 std::string log_db_hostname = "127.0.0.1";
-uint16 log_db_port = 3306;
+uint16 log_db_port = 5432;
 std::string log_db_username = "ragnarok";
 std::string log_db_password = "";
 std::string log_db_database = "ragnarok";
@@ -38,8 +38,9 @@ unsigned long loginlog_failedattempts(uint32 ip, uint32 minutes) {
 	if( !enabled )
 		return 0;
 
-	if( SQL_ERROR == Sql_Query(sql_handle, "SELECT count(*) FROM `%s` WHERE `ip` = '%s' AND (`rcode` = '0' OR `rcode` = '1') AND `time` > NOW() - INTERVAL %d MINUTE",
-		log_login_db.c_str(), ip2str(ip,nullptr), minutes) )// how many times failed account? in one ip.
+	const std::string since = Sql_DateTime( time( nullptr ) - (time_t)minutes * 60 );
+	if( SQL_ERROR == Sql_Query(sql_handle, "SELECT count(*) FROM `%s` WHERE `ip` = '%s' AND (`rcode` = '0' OR `rcode` = '1') AND `time` > '%s'",
+		log_login_db.c_str(), ip2str(ip,nullptr), since.c_str()) )// how many times failed account? in one ip.
 		Sql_ShowDebug(sql_handle);
 
 	if( SQL_SUCCESS == Sql_NextRow(sql_handle) )
