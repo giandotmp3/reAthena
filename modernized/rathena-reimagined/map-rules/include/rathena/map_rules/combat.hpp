@@ -15,16 +15,25 @@ namespace rathena::map_rules::combat {
 // --- Derived stats (status.cpp) ---------------------------------------------------------------
 
 struct MaxHpInput {
-	std::int32_t base_hp = 0;        // job_db HP table at the current base level
-	std::int32_t vit = 0;
+	std::uint32_t base_hp = 0;       // job_db HP table at the current base level
+	std::uint32_t vit = 0;
+	/// Transcendent: any JOBL_UPPER class, transcendent 3rd jobs included; Fourth: a primary 4th
+	/// job. Both get x1.25. Third (non-transcendent) and Normal get no class mod.
 	ClassTier tier = ClassTier::Normal;
-	std::int32_t flat_bonus = 0;     // bMaxHP
-	std::int32_t rate_bonus_pct = 0; // bMaxHPrate (additive percent)
+	bool taekwon_ranker = false;     // x3 instead, when no x1.25 applies
+	std::int32_t equip_vit = 0;      // VIT from equipment: +1 HP each
+	std::int32_t flat_bonus = 0;     // bMaxHP and status bonuses (STATUS_BONUS_FIX)
+	std::int32_t equip_rate_pct = 0; // bMaxHPrate from equipment (maxhprate - 100)
+	std::int32_t item_rate_pct = 0;  // usable-item rate bonus
+	std::int32_t rate_bonus_pct = 0; // STATUS_BONUS_RATE; its increment is truncated ("Aegis accuracy")
 };
-/// BR-MAP-004: base x (1 + VIT/100) x class mod (+25% transcendent) + bonuses, at least 1.
-std::int32_t max_hp(const MaxHpInput& in);
+/// BR-MAP-004: base x (1 + VIT/100) x class mod (+25% transcendent / 4th, x3 Taekwon ranker)
+/// + equip VIT + flat bonus, then the rate bonuses; at least 1. Computed in double and truncated
+/// once, as legacy status_calc_maxhp_pc.
+std::uint32_t max_hp(const MaxHpInput& in);
 
-/// BR-MAP-005: RE base ATK = STR + DEX/5 + LUK/3 + Lv/4 + 5*POW.
+/// BR-MAP-005: RE base ATK = STR + DEX/5 + LUK/3 + Lv/4 + 5*POW, the first four terms summed in
+/// tenths before truncating (legacy status_base_atk).
 std::int32_t base_atk_re(const Stats& s, std::int32_t base_level);
 
 struct MatkRange {
@@ -41,9 +50,9 @@ std::int32_t hit_re(const Stats& s, std::int32_t base_level);
 /// BR-MAP-007: RE FLEE = 100 + Lv + AGI + LUK/5 + 2*CON.
 std::int32_t flee_re(const Stats& s, std::int32_t base_level);
 
-/// BR-MAP-008: RE soft DEF = (Lv + VIT)/2 + AGI/5.
+/// BR-MAP-008: RE soft DEF = (Lv + VIT)/2 + AGI/5, truncated once (not per term).
 std::int32_t soft_def_re(const Stats& s, std::int32_t base_level);
-/// BR-MAP-008: RE soft MDEF = INT + Lv/4 + (DEX + VIT)/5.
+/// BR-MAP-008: RE soft MDEF = INT + Lv/4 + (DEX + VIT)/5, truncated once (not per term).
 std::int32_t soft_mdef_re(const Stats& s, std::int32_t base_level);
 
 /// BR-MAP-009: RE CRI = 10 + 3*LUK + Lv/10 (units of 0.1%).
@@ -61,22 +70,30 @@ struct CritInput {
 /// BR-MAP-010: CRI - target LUK*2 (*3 when a non-player hits a player), then x2 vs sleeping.
 /// Result is in 0.1% units (89 -> 8.9%); never negative.
 std::int32_t crit_chance_permille(const CritInput& in);
-/// BR-MAP-010: legacy `rnd()%1000 < cri`.
+/// BR-MAP-010: the same before the floor at 0. Legacy is_attack_critical applies skill modifiers
+/// (Sharpshooting +, Breaker /2, ...) to this possibly negative value.
+std::int32_t crit_chance_raw(const CritInput& in);
+/// BR-MAP-010: legacy `rnd()%1000 < cri`. Always draws once, even when the chance is <= 0.
 bool roll_critical(std::int32_t permille, Rng& rng);
 
 /// BR-MAP-011: (80 pre-RE / 0 RE) + HIT - FLEE, clamped to [min_hitrate, max_hitrate] (5..100).
 std::int32_t hit_chance_pct(std::int32_t hit, std::int32_t flee, const BattleConfig& cfg);
-/// BR-MAP-011: legacy `rnd()%100 < hitrate`.
+/// BR-MAP-011: legacy `rnd()%100 < hitrate`. Always draws once, even when the chance is <= 0.
 bool roll_hit(std::int32_t hit_pct, Rng& rng);
 
-/// BR-MAP-012: with >= agi_penalty_count attackers, FLEE x (100 - (n - (count-1)) x num)%.
+/// BR-MAP-012: with >= agi_penalty_count attackers, FLEE x (100 - (n - (count-1)) x num)%
+/// (type 1), or FLEE - (n - (count-1)) x num (type 2). Not floored: legacy stores the value in an
+/// int16 and then floors it at 1, which the caller does.
 std::int32_t crowd_flee(std::int32_t flee, std::int32_t attackers, const BattleConfig& cfg);
-/// BR-MAP-013: with >= vit_penalty_count attackers, DEF x (100 - (n - (count-1)) x num)%.
+/// BR-MAP-013: with >= vit_penalty_count attackers, DEF x (100 - (n - (count-1)) x num)% (type 1)
+/// or DEF - (n - (count-1)) x num (type 2). Not floored: hard DEF may go negative; legacy floors
+/// soft DEF at 1 afterwards.
 std::int32_t crowd_def(std::int32_t def, std::int32_t attackers, const BattleConfig& cfg);
 
 // --- Defense (battle.cpp) ---------------------------------------------------------------------
 
-/// BR-MAP-014: RE: dmg x (4000 + DEF)/(4000 + 10 x DEF) - softDEF. Never negative.
+/// BR-MAP-014: RE: dmg x (4000 + DEF)/(4000 + 10 x DEF) - softDEF. Negative DEF raises the damage
+/// and the result may be negative (later steps floor it), as legacy. DEF -400 is read as -399.
 std::int64_t apply_defense_re(std::int64_t damage, std::int32_t hard_def, std::int32_t soft_def);
 
 /// Inclusive range [min, max] of a randomised value.
@@ -99,9 +116,9 @@ std::int32_t roll_vit_def(Range r, Rng& rng);
 /// negative; the post-defense step (refine bonus, then minimum damage 1) handles that, as legacy.
 std::int64_t apply_defense_pre_re(std::int64_t damage, std::int32_t hard_def, std::int32_t vit_def);
 
-/// BR-MAP-016: total ignore-DEF percent is capped to [0, 100].
+/// BR-MAP-016: total ignore-DEF percent is capped at 100 (a negative total raises DEF).
 std::int32_t capped_ignore_def_pct(std::int32_t summed_bonus_pct);
-/// BR-MAP-016: DEF remaining after ignore-DEF bonuses.
+/// BR-MAP-016: DEF remaining after ignore-DEF bonuses: DEF - DEF x pct/100 (legacy rounding).
 std::int32_t def_after_ignore(std::int32_t def, std::int32_t summed_bonus_pct);
 
 // --- Element / size tables (db/{re,pre-re}/attr_fix.yml, size_fix.yml) ------------------------
@@ -142,7 +159,7 @@ struct AspdReInput {
 	std::int32_t skill_bonus = 0;    // `val` from passive skills / riding
 	std::int32_t status_aspd_bonus = 0;
 };
-/// BR-MAP-019: RE ASPD (display value, before the cap).
+/// BR-MAP-019: RE ASPD (display value, before the cap). Single precision, as legacy.
 std::int32_t aspd_re_uncapped(const AspdReInput& in);
 /// BR-MAP-019: cap to max_aspd (190), or max_third_aspd (193) for 3rd/4th jobs.
 std::int32_t cap_aspd(std::int32_t aspd, ClassTier tier, const BattleConfig& cfg);

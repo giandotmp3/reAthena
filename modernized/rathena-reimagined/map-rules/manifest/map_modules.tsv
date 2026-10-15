@@ -48,3 +48,4 @@ log.cpp	ops	-
 chrif.cpp	ops	-
 intif.cpp	ops	-
 date.cpp	ops	-	Confirmed 2026-10-15: date/time helpers for events and mapflags; owned by ops
+rules_bridge.cpp	ops	-	Phase 4 bridge to map-rules: rules_config() snapshot of battle_config, rules_rng() legacy stream

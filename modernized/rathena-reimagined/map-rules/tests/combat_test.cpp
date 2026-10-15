@@ -28,11 +28,33 @@ mr::BattleConfig pre_re() {
 
 TEST(Combat, BR_MAP_004_MaxHpTranscendentWorkedExample) {
 	// Base 5000, VIT 80, transcendent -> 11250.
-	EXPECT_EQ(cb::max_hp({.base_hp = 5000, .vit = 80, .tier = mr::ClassTier::Transcendent}), 11250);
+	EXPECT_EQ(cb::max_hp({.base_hp = 5000, .vit = 80, .tier = mr::ClassTier::Transcendent}), 11250u);
 }
 
 TEST(Combat, BR_MAP_004_MaxHpIsAtLeastOne) {
-	EXPECT_EQ(cb::max_hp({.base_hp = 10, .vit = 0, .flat_bonus = -1000}), 1);
+	EXPECT_EQ(cb::max_hp({.base_hp = 10, .vit = 0, .flat_bonus = -1000}), 1u);
+}
+
+TEST(Combat, BR_MAP_004_MaxHpRunsInDoubleLikeLegacy) {
+	// Legacy status_calc_maxhp_pc: 100 x (1.0 + 13 x 0.01) is 112.999... in double -> 112, not 113.
+	EXPECT_EQ(cb::max_hp({.base_hp = 100, .vit = 13}), 112u);
+	// Class mods: 4th jobs get x1.25 like transcendent; Taekwon rankers x3; 3rd jobs nothing.
+	EXPECT_EQ(cb::max_hp({.base_hp = 1000, .vit = 50, .tier = mr::ClassTier::Fourth}), 1875u);
+	EXPECT_EQ(cb::max_hp({.base_hp = 1000, .vit = 50, .taekwon_ranker = true}), 4500u);
+	EXPECT_EQ(cb::max_hp({.base_hp = 1000, .vit = 50, .tier = mr::ClassTier::Third}), 1500u);
+	EXPECT_EQ(cb::max_hp({.base_hp = 1000, .vit = 50, .tier = mr::ClassTier::Transcendent, .taekwon_ranker = true}),
+	          1875u)
+		<< "x1.25 wins over the ranker bonus";
+	// 5000 x 1.8 x 1.25 + 5 equip VIT + 100 = 11355; +10% equip = 12490.5; +7% rate: the increment
+	// truncates (874), the total once at the end -> 13364.
+	EXPECT_EQ(cb::max_hp({.base_hp = 5000,
+	                      .vit = 80,
+	                      .tier = mr::ClassTier::Transcendent,
+	                      .equip_vit = 5,
+	                      .flat_bonus = 100,
+	                      .equip_rate_pct = 10,
+	                      .rate_bonus_pct = 7}),
+	          13364u);
 }
 
 TEST(Combat, BR_MAP_005_RenewalBaseAtkWorkedExample) {
@@ -41,6 +63,11 @@ TEST(Combat, BR_MAP_005_RenewalBaseAtkWorkedExample) {
 	EXPECT_EQ(cb::base_atk_re(s, 150), 157);
 	s.pow = 2;
 	EXPECT_EQ(cb::base_atk_re(s, 150), 167);
+}
+
+TEST(Combat, BR_MAP_005_RenewalBaseAtkSumsFractionsLikeLegacy) {
+	// Legacy sums in tenths: (10 + 4*10/5 + 2*10/3 + 3*10/4) / 10 = (10 + 8 + 6 + 7) / 10 = 3.
+	EXPECT_EQ(cb::base_atk_re({.str = 1, .dex = 4, .luk = 2}, 3), 3);
 }
 
 TEST(Combat, BR_MAP_006_RenewalMatk) {
@@ -74,6 +101,15 @@ TEST(Combat, BR_MAP_008_RenewalSoftDefAndMdef) {
 	EXPECT_EQ(cb::soft_mdef_re(s, 99), 108);
 }
 
+TEST(Combat, BR_MAP_008_SoftDefTruncatesOnceLikeLegacy) {
+	// Legacy (int)((1 + 0)/2.f + 3/5.f) = (int)1.1 = 1, where per-term truncation would give 0.
+	EXPECT_EQ(cb::soft_def_re({.agi = 3, .vit = 0}, 1), 1);
+	// (int)(0 + 3/4.f + 4/5.f) = (int)1.55 = 1.
+	EXPECT_EQ(cb::soft_mdef_re({.vit = 0, .int_ = 0, .dex = 4}, 3), 1);
+	// Negative stats truncate toward zero, as the float cast does: (int)(-3/2.f + 0) = -1.
+	EXPECT_EQ(cb::soft_def_re({.agi = 0, .vit = -3}, 0), -1);
+}
+
 TEST(Combat, BR_MAP_009_RenewalCriWorkedExample) {
 	// LUK 30, Lv 99 -> 109.
 	EXPECT_EQ(cb::cri_re({.luk = 30}, 99), 109);
@@ -99,6 +135,20 @@ TEST(Combat, BR_MAP_010_CritRollIsRndMod1000) {
 	EXPECT_FALSE(cb::roll_critical(89, at));
 }
 
+TEST(Combat, BR_MAP_010_CritRollDrawsEvenWithoutAChance) {
+	// Legacy `rnd()%1000 < cri` draws whatever cri is; the random stream must not depend on it.
+	mr::SequenceRng rng{{0}};
+	EXPECT_FALSE(cb::roll_critical(0, rng));
+	EXPECT_FALSE(cb::roll_critical(-50, rng));
+	EXPECT_EQ(rng.calls(), 2u);
+}
+
+TEST(Combat, BR_MAP_010_RawCritChanceIsNotFloored) {
+	// Skill modifiers apply to the raw value: CRI 10 vs LUK 50 is -90 (Sharpshooting's +200 -> 110).
+	EXPECT_EQ(cb::crit_chance_raw({.cri = 10, .target_luk = 50}), -90);
+	EXPECT_EQ(cb::crit_chance_raw({.cri = 10, .target_luk = 50, .target_sleeping = true}), -180);
+}
+
 TEST(Combat, BR_MAP_011_RenewalHitChanceWorkedExample) {
 	// RE 374 vs 300 -> 74%.
 	EXPECT_EQ(cb::hit_chance_pct(374, 300, re()), 74);
@@ -110,10 +160,27 @@ TEST(Combat, BR_MAP_011_PreRenewalBaseAndClamp) {
 	EXPECT_EQ(cb::hit_chance_pct(500, 10, re()), 100);
 }
 
+TEST(Combat, BR_MAP_011_HitRollDrawsEvenWithoutAChance) {
+	mr::SequenceRng rng{{0}};
+	EXPECT_FALSE(cb::roll_hit(0, rng));
+	EXPECT_TRUE(cb::roll_hit(1, rng));
+	EXPECT_EQ(rng.calls(), 2u);
+}
+
 TEST(Combat, BR_MAP_012_CrowdFleeWorkedExample) {
 	// 5 attackers, FLEE 300 -> 210.
 	EXPECT_EQ(cb::crowd_flee(300, 5, re()), 210);
 	EXPECT_EQ(cb::crowd_flee(300, 2, re()), 300);
+}
+
+TEST(Combat, BR_MAP_012_CrowdFleeIsNotFlooredByTheRule) {
+	// Legacy stores the value (int16) and then floors it at 1; the rule returns the raw value.
+	// 13 attackers: 300 x (100 - 11 x 10) / 100 = -30.
+	EXPECT_EQ(cb::crowd_flee(300, 13, re()), -30);
+	mr::BattleConfig absolute = re();
+	absolute.agi_penalty_type = 2;
+	EXPECT_EQ(cb::crowd_flee(30, 5, absolute), 0); // 30 - 3 x 10
+	EXPECT_EQ(cb::crowd_flee(20, 5, absolute), -10);
 }
 
 TEST(Combat, BR_MAP_013_CrowdDefMinusFivePercentPerExtraAttacker) {
@@ -122,9 +189,26 @@ TEST(Combat, BR_MAP_013_CrowdDefMinusFivePercentPerExtraAttacker) {
 	EXPECT_EQ(cb::crowd_def(100, 2, re()), 100);
 }
 
+TEST(Combat, BR_MAP_013_CrowdDefMayGoNegativeLikeLegacy) {
+	// Type 2 (absolute): hard DEF 10, 6 attackers -> 10 - 4 x 5 = -10 (legacy keeps it).
+	mr::BattleConfig absolute = re();
+	absolute.vit_penalty_type = 2;
+	EXPECT_EQ(cb::crowd_def(10, 6, absolute), -10);
+	EXPECT_EQ(cb::crowd_def(-7, 4, re()), -6) << "integer division truncates toward zero";
+}
+
 TEST(Combat, BR_MAP_014_RenewalDefenseWorkedExample) {
 	// 1000 dmg, DEF 100, softDEF 50 -> 770.
 	EXPECT_EQ(cb::apply_defense_re(1000, 100, 50), 770);
+}
+
+TEST(Combat, BR_MAP_014_RenewalDefenseKeepsLegacyEdges) {
+	// Negative DEF raises the damage: 1000 x 3900 / 3000 = 1300.
+	EXPECT_EQ(cb::apply_defense_re(1000, -100, 0), 1300);
+	// The result is not floored here (later steps apply the minimum damage).
+	EXPECT_EQ(cb::apply_defense_re(10, 0, 30), -20);
+	// DEF -400 would divide by zero; legacy reads it as -399: 1000 x 3601 / 10 = 360100.
+	EXPECT_EQ(cb::apply_defense_re(1000, -400, 0), 360100);
 }
 
 TEST(Combat, BR_MAP_015_PreRenewalPlayerVitDefRange) {
@@ -195,6 +279,14 @@ TEST(Combat, BR_MAP_016_IgnoreDefCappedAtHundredPercent) {
 	EXPECT_EQ(cb::capped_ignore_def_pct(150), 100);
 	EXPECT_EQ(cb::def_after_ignore(100, 150), 0);
 	EXPECT_EQ(cb::def_after_ignore(100, 30), 70);
+}
+
+TEST(Combat, BR_MAP_016_IgnoreDefRoundsLikeLegacy) {
+	// Legacy: def -= def x i / 100, so DEF 7 with 50% keeps 4 (7 - 3), not 3.
+	EXPECT_EQ(cb::def_after_ignore(7, 50), 4);
+	// Only the top is capped: a negative total raises DEF.
+	EXPECT_EQ(cb::capped_ignore_def_pct(-30), -30);
+	EXPECT_EQ(cb::def_after_ignore(100, -50), 150);
 }
 
 TEST(Combat, BR_MAP_017_ElementTableWorkedExamples) {

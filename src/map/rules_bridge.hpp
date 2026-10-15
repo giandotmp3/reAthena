@@ -13,6 +13,8 @@
 #ifndef MAP_RULES_BRIDGE_HPP
 #define MAP_RULES_BRIDGE_HPP
 
+#include <cstdint>
+
 #include <rathena/map_rules/battle_config.hpp>
 #include <rathena/map_rules/rng.hpp>
 
@@ -26,5 +28,10 @@ rules::Rng& rules_rng();
 
 /// Takes the snapshot from battle_config (battle_config_read, before battle_adjust_conf).
 void rules_config_snapshot();
+
+/// Re-copies the knob at `knob` (a battle_config field) after a runtime change by battle_set_value
+/// (setbattleflag, @setbattleflag), so the rules keep seeing what legacy sees. Knobs that are not
+/// listed keep their snapshot value.
+void rules_config_refresh( const std::int32_t* knob );
 
 #endif /* MAP_RULES_BRIDGE_HPP */

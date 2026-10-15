@@ -35,7 +35,10 @@
 #include "pc.hpp"
 #include "pc_groups.hpp"
 #include "pet.hpp"
+#include "rules_bridge.hpp"
 #include "script.hpp"
+
+#include <rathena/map_rules/combat.hpp>
 
 using namespace rathena;
 
@@ -2362,7 +2365,7 @@ int32 status_base_amotion_pc(map_session_data* sd, struct status_data* status)
 		return 0;
 
 	int16 skill_lv, val = 0;
-	float temp_aspd = 0;
+	bool ranged_weapon = false;
 
 	int32 aspd = job->aspd_base[sd->weapontype1]; // Single weapon
 	if (sd->status.shield)
@@ -2379,13 +2382,11 @@ int32 status_base_amotion_pc(map_session_data* sd, struct status_data* status)
 		case W_GATLING:
 		case W_SHOTGUN:
 		case W_GRENADE:
-			temp_aspd = status->dex * status->dex / 7.0f + status->agi * status->agi * 0.5f;
+			ranged_weapon = true; // DEX^2/7 instead of DEX^2/5
 			break;
 		default:
-			temp_aspd = status->dex * status->dex / 5.0f + status->agi * status->agi * 0.5f;
 			break;
 	}
-	temp_aspd = (float)(sqrt(temp_aspd) * 0.25f) + 196;
 	if ((skill_lv = pc_checkskill(sd,SA_ADVANCEDBOOK)) > 0 && sd->status.weapon == W_BOOK)
 		val += (skill_lv - 1) / 2 + 1;
 	if ((skill_lv = pc_checkskill(sd, SG_DEVIL)) > 0 && ((sd->class_&MAPID_THIRDMASK) == MAPID_STAR_EMPEROR || pc_is_maxjoblv(sd)))
@@ -2397,10 +2398,14 @@ int32 status_base_amotion_pc(map_session_data* sd, struct status_data* status)
 	else if (pc_isridingdragon(sd))
 		val -= 25 - 5 * pc_checkskill(sd, RK_DRAGONTRAINING);
 	const int16 status_bonus = status_calc_aspd(sd, &sd->sc, true);
+	// BR-MAP-019 (map-rules): sqrt(DEX^2/5 (or /7) + AGI^2/2)/4 + 196 + (bonus x AGI/200) - job base,
+	// in float as legacy.
+	const int32 result = rules::combat::aspd_re_uncapped( { .job_aspd_base = aspd, .agi = status->agi, .dex = status->dex,
+		.ranged_weapon = ranged_weapon, .skill_bonus = val, .status_aspd_bonus = status_bonus } );
 	GOLDEN_TRACE( "aspd_re", { "class", sd->status.class_ }, { "weapon", sd->status.weapon }, { "job_aspd", aspd },
 		{ "agi", status->agi }, { "dex", status->dex }, { "skill_bonus", val }, { "status_bonus", status_bonus },
-		{ "result", (int32)(temp_aspd + ((float)(status_bonus + val) * status->agi / 200)) - min(aspd, 200) } );
-	aspd = ((int32)(temp_aspd + ((float)(status_bonus + val) * status->agi / 200)) - min(aspd, 200));
+		{ "result", result } );
+	aspd = result;
 	return aspd;
 #else
 	if (job == nullptr)
@@ -2411,11 +2416,9 @@ int32 status_base_amotion_pc(map_session_data* sd, struct status_data* status)
 	 ? (job->aspd_base[sd->status.weapon]) // Single weapon
 	 : (job->aspd_base[sd->weapontype1] + job->aspd_base[sd->weapontype2]) * 7 / 10; // Dual-wield
 
-	// Percentual delay reduction from stats
-	amotion -= amotion * (4 * status->agi + status->dex) / 1000;
-
-	// Raw delay adjustment from bAspd bonus
-	amotion += sd->bonus.aspd_add;
+	// BR-MAP-020 (map-rules): percentual delay reduction from stats, base x (4 x AGI + DEX)/1000,
+	// then the raw delay adjustment from the bAspd bonus
+	amotion = rules::combat::amotion_pre_re( amotion, status->agi, status->dex, sd->bonus.aspd_add );
 	return amotion;
 #endif
 }
@@ -2479,7 +2482,9 @@ uint16 status_base_atk(const block_list *bl, const struct status_data *status, i
 			break;
 		case BL_PC:
 #ifdef RENEWAL
-			str = (dstr * 10 + dex * 10 / 5 + status->luk * 10 / 3 + level * 10 / 4) / 10 + 5 * status->pow;
+			// BR-MAP-005 (map-rules): (STR*10 + DEX*10/5 + LUK*10/3 + Lv*10/4)/10 + 5*POW, with STR and
+			// DEX swapped for ranged weapons
+			str = rules::combat::base_atk_re( { .str = dstr, .dex = dex, .luk = status->luk, .pow = status->pow }, level );
 #else
 			dstr = str / 10;
 			str += dstr*dstr;
@@ -2514,10 +2519,12 @@ uint32 status_weapon_atk( const weapon_atk& wa ){
 
 #ifndef RENEWAL
 uint16 status_base_matk_min( const status_data* status ) {
-	return status->int_ + (status->int_ / 7) * (status->int_ / 7);
+	// BR-MAP-006 (map-rules): pre-RE MATK min = INT + (INT/7)^2
+	return rules::combat::matk_pre_re( { .int_ = status->int_ } ).min;
 }
 uint16 status_base_matk_max( const status_data* status ) {
-	return status->int_ + (status->int_ / 5) * (status->int_ / 5);
+	// BR-MAP-006 (map-rules): pre-RE MATK max = INT + (INT/5)^2
+	return rules::combat::matk_pre_re( { .int_ = status->int_ } ).max;
 }
 #else
 /*
@@ -2573,7 +2580,8 @@ uint16 status_base_matk_min( const block_list* bl, const status_data* status, in
 			return status_get_homint(bl) + level + (status_get_homint(bl) + status_get_homdex(bl)) / 5;
 		case BL_PC:
 		default:
-			return status->int_ + (status->int_ / 2) + (status->dex / 5) + (status->luk / 3) + (level / 4) + 5 * status->spl;
+			// BR-MAP-006 (map-rules): RE MATK = INT + INT/2 + DEX/5 + LUK/3 + Lv/4 + 5*SPL
+			return rules::combat::matk_re( { .int_ = status->int_, .dex = status->dex, .luk = status->luk, .spl = status->spl }, level );
 	}
 }
 
@@ -2592,7 +2600,8 @@ uint16 status_base_matk_max( const block_list* bl, const status_data* status, in
 			return status_get_homint(bl) + level + (status_get_homluk(bl) + status_get_homint(bl) + status_get_homdex(bl)) / 3;
 		case BL_PC:
 		default:
-			return status->int_ + (status->int_ / 2) + (status->dex / 5) + (status->luk / 3) + (level / 4) + 5 * status->spl;
+			// BR-MAP-006 (map-rules): RE MATK = INT + INT/2 + DEX/5 + LUK/3 + Lv/4 + 5*SPL
+			return rules::combat::matk_re( { .int_ = status->int_, .dex = status->dex, .luk = status->luk, .spl = status->spl }, level );
 	}
 }
 #endif
@@ -2643,28 +2652,44 @@ void status_calc_misc(block_list *bl, struct status_data *status, int32 level)
 	} else {
 		// Hit
 		stat = status->hit;
-		stat += level + status->dex + (bl->type == BL_PC ? status->luk / 3 + 175 : 150); //base level + ( every 1 dex = +1 hit ) + (every 3 luk = +1 hit) + 175
-		stat += 2 * status->con;
+		if (bl->type == BL_PC) // BR-MAP-007 (map-rules): 175 + Lv + DEX + LUK/3 + 2*CON
+			stat += rules::combat::hit_re( { .dex = status->dex, .luk = status->luk, .con = status->con }, level );
+		else {
+			stat += level + status->dex + 150; //base level + ( every 1 dex = +1 hit ) + 150
+			stat += 2 * status->con;
+		}
 		status->hit = cap_value(stat, 1, SHRT_MAX);
 		// Flee
 		stat = status->flee;
-		stat += level + status->agi + (bl->type == BL_MER ? 0 : bl->type == BL_PC ? status->luk / 5 : 0) + 100; //base level + ( every 1 agi = +1 flee ) + (every 5 luk = +1 flee) + 100
-		stat += 2 * status->con;
+		if (bl->type == BL_PC) // BR-MAP-007 (map-rules): 100 + Lv + AGI + LUK/5 + 2*CON
+			stat += rules::combat::flee_re( { .agi = status->agi, .luk = status->luk, .con = status->con }, level );
+		else {
+			stat += level + status->agi + 100; //base level + ( every 1 agi = +1 flee ) + 100
+			stat += 2 * status->con;
+		}
 		status->flee = cap_value(stat, 1, SHRT_MAX);
 		// Def2
 		if (bl->type == BL_MER)
 			stat = (int32)(status->vit + ((float)level / 10) + ((float)status->vit / 5));
-		else {
+		else if (bl->type == BL_PC) {
+			// BR-MAP-008 (map-rules): (Lv + VIT)/2 + AGI/5, truncated once as the legacy float sum was
 			stat = status->def2;
-			stat += (int32)(((float)level + status->vit) / 2 + (bl->type == BL_PC ? ((float)status->agi / 5) : 0)); //base level + (every 2 vit = +1 def) + (every 5 agi = +1 def)
+			stat += rules::combat::soft_def_re( { .agi = status->agi, .vit = status->vit }, level );
+		} else {
+			stat = status->def2;
+			stat += (int32)(((float)level + status->vit) / 2); //base level + (every 2 vit = +1 def)
 		}
 		status->def2 = cap_value(stat, 0, SHRT_MAX);
 		// Mdef2
 		if (bl->type == BL_MER)
 			stat = (int32)(((float)level / 10) + ((float)status->int_ / 5));
-		else {
+		else if (bl->type == BL_PC) {
+			// BR-MAP-008 (map-rules): INT + Lv/4 + (DEX + VIT)/5, truncated once as the legacy float sum was
 			stat = status->mdef2;
-			stat += (int32)(bl->type == BL_PC ? (status->int_ + ((float)level / 4) + ((float)(status->dex + status->vit) / 5)) : ((float)(status->int_ + level) / 4)); //(every 4 base level = +1 mdef) + (every 1 int32 = +1 mdef) + (every 5 dex = +1 mdef) + (every 5 vit = +1 mdef)
+			stat += rules::combat::soft_mdef_re( { .vit = status->vit, .int_ = status->int_, .dex = status->dex }, level );
+		} else {
+			stat = status->mdef2;
+			stat += (int32)((float)(status->int_ + level) / 4); //(every 4 base level = +1 mdef) + (every 4 int32 = +1 mdef)
 		}
 		status->mdef2 = cap_value(stat, 0, SHRT_MAX);
 		// PAtk
@@ -2728,8 +2753,8 @@ void status_calc_misc(block_list *bl, struct status_data *status, int32 level)
 	if( bl->type&battle_config.enable_critical ) {
 		stat = status->cri;
 #ifdef RENEWAL
-		stat += (level / 10); // (every 10 BaseLevel = +0.1 critical)
-		stat += 10 + (status->luk*3); // (every 1 luk = +0.3 critical)
+		// BR-MAP-009 (map-rules): 10 + 3*LUK + Lv/10 (every 1 luk = +0.3, every 10 BaseLevel = +0.1 critical)
+		stat += rules::combat::cri_re( { .luk = status->luk }, level );
 #else
 		stat += 10 + (status->luk*10/3); // (every 1 luk = +0.3 critical)
 #endif
@@ -3523,38 +3548,28 @@ static uint32 status_calc_maxhp_pc( map_session_data& sd, uint32 vit ){
 	// Prevent negative array index
 	uint32 level = umax( sd.status.base_level, 1 ) - 1;
 
-	double dmax = job->base_hp[level];
-
-	if( vit > 0 ){
-		dmax *= ( 1.0 + vit * 0.01 );
+	// BR-MAP-004 (map-rules): base x (1 + VIT/100) x class mod + equip VIT + bonuses, then the rate
+	// bonuses, at least 1; in double, truncated once. The bonuses are read here in the legacy order.
+	rules::combat::MaxHpInput in;
+	in.base_hp = job->base_hp[level];
+	in.vit = vit;
+	if( sd.class_&JOBL_UPPER ){
+		in.tier = rules::ClassTier::Transcendent; // x1.25, transcendent 3rd jobs included
+	}else if( pc_is_primary_fourth(sd.class_) ){
+		in.tier = rules::ClassTier::Fourth; // x1.25
+	}else{
+		in.taekwon_ranker = pc_is_taekwon_ranker( &sd ); // x3
 	}
-
-	if( (sd.class_&JOBL_UPPER) || pc_is_primary_fourth(sd.class_) ){
-		dmax *= 1.25;
-	}else if( pc_is_taekwon_ranker( &sd ) ){
-		dmax *= 3;
-	}
-
 	// Vit from equip gives +1 additional HP
-	dmax += sd.indexed_bonus.param_equip[PARAM_VIT];
-
-	dmax += status_get_hpbonus( &sd, STATUS_BONUS_FIX );
-
-	double equip_bonus = ( dmax * status_get_hpbonus_equip( &sd ) / 100 );
+	in.equip_vit = sd.indexed_bonus.param_equip[PARAM_VIT];
+	in.flat_bonus = status_get_hpbonus( &sd, STATUS_BONUS_FIX );
+	in.equip_rate_pct = status_get_hpbonus_equip( &sd );
 	// TODO: using bMaxHP* for usable items may cause rounding issue
-	double item_bonus = ( dmax * status_get_hpbonus_item( &sd ) / 100 );
-
-	dmax += equip_bonus + item_bonus;
-
+	in.item_rate_pct = status_get_hpbonus_item( &sd );
 	// Aegis accuracy
-	dmax += static_cast<int64>( dmax * status_get_hpbonus( &sd, STATUS_BONUS_RATE ) / 100 );
+	in.rate_bonus_pct = status_get_hpbonus( &sd, STATUS_BONUS_RATE );
 
-	// Make sure it's not negative before casting to uint32
-	if( dmax < 1.0 ){
-		dmax = 1.0;
-	}
-
-	return cap_value( static_cast<uint32>( dmax ), 1, std::numeric_limits<uint32>::max() );
+	return rules::combat::max_hp( in );
 }
 
 /**

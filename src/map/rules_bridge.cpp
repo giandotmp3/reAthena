@@ -95,3 +95,13 @@ void rules_config_snapshot(){
 	c.party_even_share_bonus = static_cast<std::int32_t>( battle_config.party_even_share_bonus );
 	snapshot = c;
 }
+
+void rules_config_refresh( const std::int32_t* knob ){
+	// combat (BR-MAP-012, 013): crowd penalties; battle_adjust_conf leaves these knobs as read
+	if( knob == &battle_config.agi_penalty_type ) snapshot.agi_penalty_type = static_cast<std::int32_t>( *knob );
+	if( knob == &battle_config.agi_penalty_count ) snapshot.agi_penalty_count = static_cast<std::int32_t>( *knob );
+	if( knob == &battle_config.agi_penalty_num ) snapshot.agi_penalty_num = static_cast<std::int32_t>( *knob );
+	if( knob == &battle_config.vit_penalty_type ) snapshot.vit_penalty_type = static_cast<std::int32_t>( *knob );
+	if( knob == &battle_config.vit_penalty_count ) snapshot.vit_penalty_count = static_cast<std::int32_t>( *knob );
+	if( knob == &battle_config.vit_penalty_num ) snapshot.vit_penalty_num = static_cast<std::int32_t>( *knob );
+}

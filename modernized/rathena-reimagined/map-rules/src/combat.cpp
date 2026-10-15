@@ -14,20 +14,42 @@ std::size_t idx(Element e) { return static_cast<std::size_t>(e); }
 
 } // namespace
 
-std::int32_t max_hp(const MaxHpInput& in) {
-	std::int64_t hp = static_cast<std::int64_t>(in.base_hp) * (100 + in.vit) / 100;
-	if (in.tier == ClassTier::Transcendent) {
-		hp = hp * 125 / 100;
+std::uint32_t max_hp(const MaxHpInput& in) {
+	// Legacy status_calc_maxhp_pc, statement for statement: the pipeline runs in double and is
+	// truncated once at the end (the rate step truncates its own increment, "Aegis accuracy").
+	double dmax = in.base_hp;
+
+	if (in.vit > 0) {
+		dmax *= (1.0 + in.vit * 0.01);
 	}
-	hp += in.flat_bonus;
-	if (in.rate_bonus_pct != 0) {
-		hp += hp * in.rate_bonus_pct / 100;
+
+	if (in.tier == ClassTier::Transcendent || in.tier == ClassTier::Fourth) {
+		dmax *= 1.25;
+	} else if (in.taekwon_ranker) {
+		dmax *= 3;
 	}
-	return to_i32(std::max<std::int64_t>(hp, 1));
+
+	dmax += in.equip_vit;
+	dmax += in.flat_bonus;
+
+	const double equip_bonus = (dmax * in.equip_rate_pct / 100);
+	const double item_bonus = (dmax * in.item_rate_pct / 100);
+
+	dmax += equip_bonus + item_bonus;
+
+	dmax += static_cast<double>(static_cast<std::int64_t>(dmax * in.rate_bonus_pct / 100));
+
+	if (dmax < 1.0) {
+		dmax = 1.0;
+	}
+
+	return std::max(static_cast<std::uint32_t>(dmax), 1u);
 }
 
 std::int32_t base_atk_re(const Stats& s, std::int32_t lv) {
-	return s.str + s.dex / 5 + s.luk / 3 + lv / 4 + 5 * s.pow;
+	// Legacy status_base_atk sums the terms in tenths before dividing, so the fractions of
+	// DEX/5, LUK/3 and Lv/4 add up (DEX 4, LUK 2: 0.8 + 0.6 -> +1).
+	return (s.str * 10 + s.dex * 10 / 5 + s.luk * 10 / 3 + lv * 10 / 4) / 10 + 5 * s.pow;
 }
 
 std::int32_t matk_re(const Stats& s, std::int32_t lv) {
@@ -44,26 +66,31 @@ std::int32_t hit_re(const Stats& s, std::int32_t lv) { return 175 + lv + s.dex +
 
 std::int32_t flee_re(const Stats& s, std::int32_t lv) { return 100 + lv + s.agi + s.luk / 5 + 2 * s.con; }
 
-std::int32_t soft_def_re(const Stats& s, std::int32_t lv) { return (lv + s.vit) / 2 + s.agi / 5; }
+// Legacy status_calc_misc truncates the real-valued sum once, in float: (int)((Lv+VIT)/2.f + AGI/5.f).
+// The sum is a multiple of 1/10 (of 1/20 for MDEF), never within float error of an integer it is
+// not equal to, so the exact integer form below gives the same value (truncation toward zero).
+std::int32_t soft_def_re(const Stats& s, std::int32_t lv) { return (5 * (lv + s.vit) + 2 * s.agi) / 10; }
 
-std::int32_t soft_mdef_re(const Stats& s, std::int32_t lv) { return s.int_ + lv / 4 + (s.dex + s.vit) / 5; }
+std::int32_t soft_mdef_re(const Stats& s, std::int32_t lv) {
+	return (20 * s.int_ + 5 * lv + 4 * (s.dex + s.vit)) / 20;
+}
 
 std::int32_t cri_re(const Stats& s, std::int32_t lv) { return 10 + 3 * s.luk + lv / 10; }
 
-std::int32_t crit_chance_permille(const CritInput& in) {
+std::int32_t crit_chance_raw(const CritInput& in) {
 	std::int32_t cri = in.cri;
 	cri -= in.target_luk * ((!in.attacker_is_player && in.target_is_player) ? 3 : 2);
 	if (in.target_sleeping) {
 		cri *= 2;
 	}
-	return std::max(cri, 0);
+	return cri;
 }
 
+std::int32_t crit_chance_permille(const CritInput& in) { return std::max(crit_chance_raw(in), 0); }
+
 bool roll_critical(std::int32_t permille, Rng& rng) {
-	if (permille <= 0) {
-		return false;
-	}
-	return rng.below(1000) < static_cast<std::uint32_t>(permille);
+	// Legacy draws even when the chance is 0 or negative; the stream must not depend on it.
+	return static_cast<std::int64_t>(rng.below(1000)) < permille;
 }
 
 std::int32_t hit_chance_pct(std::int32_t hit, std::int32_t flee, const BattleConfig& cfg) {
@@ -73,10 +100,8 @@ std::int32_t hit_chance_pct(std::int32_t hit, std::int32_t flee, const BattleCon
 }
 
 bool roll_hit(std::int32_t hit_pct, Rng& rng) {
-	if (hit_pct <= 0) {
-		return false;
-	}
-	return rng.below(100) < static_cast<std::uint32_t>(hit_pct);
+	// Legacy draws even when the chance is 0 (min_hitrate may be 0); the stream must not depend on it.
+	return static_cast<std::int64_t>(rng.below(100)) < hit_pct;
 }
 
 namespace {
@@ -85,14 +110,16 @@ std::int32_t crowd_penalty(std::int32_t value, std::int32_t attackers, std::int3
 	if (type == 0 || attackers < count) {
 		return value;
 	}
-	const std::int64_t extra = static_cast<std::int64_t>(attackers) - (count - 1);
+	// No floor here: legacy lets DEF go negative and floors FLEE (at 1) and soft DEF (at 1) only
+	// after storing the value in its int16 field, which the call site does.
+	const std::int64_t extra = static_cast<std::int64_t>(attackers) - (static_cast<std::int64_t>(count) - 1);
 	std::int64_t out = value;
 	if (type == 1) {
-		out = out * std::max<std::int64_t>(0, 100 - extra * num) / 100;
+		out = out * (100 - extra * num) / 100;
 	} else {
 		out -= extra * num;
 	}
-	return to_i32(std::max<std::int64_t>(out, 0));
+	return to_i32(out);
 }
 } // namespace
 
@@ -105,9 +132,10 @@ std::int32_t crowd_def(std::int32_t def, std::int32_t attackers, const BattleCon
 }
 
 std::int64_t apply_defense_re(std::int64_t damage, std::int32_t hard_def, std::int32_t soft_def) {
-	const std::int64_t def = std::max<std::int64_t>(hard_def, 0);
-	const std::int64_t reduced = damage * (4000 + def) / (4000 + 10 * def) - soft_def;
-	return std::max<std::int64_t>(reduced, 0);
+	// Negative DEF raises the damage and the result may be negative, as legacy; DEF -400 would
+	// divide by zero and is read as -399 (battle_calc_defense_reduction).
+	const std::int64_t def = hard_def == -400 ? -399 : hard_def;
+	return damage * (4000 + def) / (4000 + 10 * def) - soft_def;
 }
 
 Range vit_def_pre_re_player_range(std::int32_t def2) {
@@ -129,11 +157,12 @@ std::int64_t apply_defense_pre_re(std::int64_t damage, std::int32_t hard_def, st
 	return damage * (100 - def) / 100 - vit_def;
 }
 
-std::int32_t capped_ignore_def_pct(std::int32_t summed_bonus_pct) { return std::clamp(summed_bonus_pct, 0, 100); }
+std::int32_t capped_ignore_def_pct(std::int32_t summed_bonus_pct) { return std::min(summed_bonus_pct, 100); }
 
 std::int32_t def_after_ignore(std::int32_t def, std::int32_t summed_bonus_pct) {
 	const std::int64_t ignore = capped_ignore_def_pct(summed_bonus_pct);
-	return to_i32(static_cast<std::int64_t>(def) * (100 - ignore) / 100);
+	const std::int64_t d = def;
+	return to_i32(d - d * ignore / 100);
 }
 
 AttrFixTable::AttrFixTable() {
@@ -178,12 +207,18 @@ std::int64_t apply_size(std::int64_t damage, const SizeFixTable& table, WeaponTy
 }
 
 std::int32_t aspd_re_uncapped(const AspdReInput& in) {
-	const double dex = in.dex;
-	const double agi = in.agi;
-	double temp = in.ranged_weapon ? dex * dex / 7.0 + agi * agi * 0.5 : dex * dex / 5.0 + agi * agi * 0.5;
-	temp = std::sqrt(temp) * 0.25 + 196.0;
-	const double total = temp + static_cast<double>(in.status_aspd_bonus + in.skill_bonus) * agi / 200.0;
-	return static_cast<std::int32_t>(total) - std::min(in.job_aspd_base, 200);
+	// Single precision, operation for operation as legacy status_base_amotion_pc. The square root's
+	// precision does not matter: x0.25 is exact, so (float)(sqrt(x) * 0.25) is the same whether
+	// sqrt runs in float or double.
+	float temp_aspd;
+	if (in.ranged_weapon) {
+		temp_aspd = static_cast<float>(in.dex * in.dex) / 7.0f + static_cast<float>(in.agi * in.agi) * 0.5f;
+	} else {
+		temp_aspd = static_cast<float>(in.dex * in.dex) / 5.0f + static_cast<float>(in.agi * in.agi) * 0.5f;
+	}
+	temp_aspd = static_cast<float>(std::sqrt(temp_aspd) * 0.25f) + 196.0f;
+	const float bonus = static_cast<float>(in.status_aspd_bonus + in.skill_bonus) * static_cast<float>(in.agi) / 200.0f;
+	return static_cast<std::int32_t>(temp_aspd + bonus) - std::min(in.job_aspd_base, 200);
 }
 
 std::int32_t cap_aspd(std::int32_t aspd, ClassTier tier, const BattleConfig& cfg) {

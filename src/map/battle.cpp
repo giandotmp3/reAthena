@@ -3062,10 +3062,11 @@ static bool is_attack_critical(struct Damage* wd, block_list *src, const block_l
 
 		//The official equation is *2, but that only applies when sd's do critical.
 		//Therefore, we use the old value 3 on cases when an sd gets attacked by a mob
-		cri -= tstatus->luk * ((!sd && tsd) ? 3 : 2);
-
-		if( tsc && tsc->getSCE(SC_SLEEP) )
-			cri *= 2;
+		// BR-MAP-010 (map-rules): CRI - target LUK x2 (x3), x2 vs a sleeping target. The raw value (the
+		// skill modifiers below apply to it even when negative), stored in the int16 as legacy.
+		cri = static_cast<int16>( rules::combat::crit_chance_raw( { .cri = cri, .target_luk = tstatus->luk,
+			.attacker_is_player = sd != nullptr, .target_is_player = tsd != nullptr,
+			.target_sleeping = tsc && tsc->getSCE(SC_SLEEP) } ) );
 
 		switch(skill_id) {
 			case 0:
@@ -3153,7 +3154,8 @@ static bool is_attack_critical(struct Damage* wd, block_list *src, const block_l
 		}
 		if(tsd && tsd->bonus.critical_def)
 			cri = cri * ( 100 - tsd->bonus.critical_def ) / 100;
-		return (rnd()%1000 < cri);
+		// BR-MAP-010 (map-rules): rnd()%1000 < cri, drawn even when cri <= 0
+		return rules::combat::roll_critical( cri, rules_rng() );
 	}
 	return false;
 }
@@ -3270,10 +3272,9 @@ static bool is_attack_hitting(struct Damage* wd, block_list *src, block_list *ta
 		unsigned char attacker_count = unit_counttargeted(target); //256 max targets should be a sane max
 
 		if(attacker_count >= battle_config.agi_penalty_count) {
-			if (battle_config.agi_penalty_type == 1)
-				flee = (flee * (100 - (attacker_count - (battle_config.agi_penalty_count - 1)) * battle_config.agi_penalty_num)) / 100;
-			else //assume type 2: absolute reduction
-				flee -= (attacker_count - (battle_config.agi_penalty_count - 1)) * battle_config.agi_penalty_num;
+			// BR-MAP-012 (map-rules): crowd FLEE penalty (type 1 percent, type 2 absolute); stored in the
+			// int16 before the floor at 1, as legacy
+			flee = static_cast<int16>( rules::combat::crowd_flee( flee, attacker_count, rules_config() ) );
 			if(flee < 1)
 				flee = 1;
 		}
@@ -3318,7 +3319,8 @@ static bool is_attack_hitting(struct Damage* wd, block_list *src, block_list *ta
 	if(skill_id == PA_SHIELDCHAIN)
 		hitrate += 20; //Rapid Smiting gives a flat +20 hit after the hitrate was capped
 
-	return (rnd()%100 < hitrate);
+	// BR-MAP-011 (map-rules): rnd()%100 < hitrate, drawn even when hitrate <= 0
+	return rules::combat::roll_hit( hitrate, rules_rng() );
 }
 
 /*==========================================
@@ -4743,9 +4745,9 @@ static void battle_calc_defense_reduction( Damage* wd, block_list* src, block_li
 		int32 i = sd->indexed_bonus.ignore_def_by_race[tstatus->race] + sd->indexed_bonus.ignore_def_by_race[RC_ALL];
 		i += sd->indexed_bonus.ignore_def_by_class[tstatus->class_] + sd->indexed_bonus.ignore_def_by_class[CLASS_ALL];
 		if (i) {
-			i = min(i,100); //cap it to 100 for 0 def min
-			def1 -= def1 * i / 100;
-			def2 -= def2 * i / 100;
+			// BR-MAP-016 (map-rules): capped to 100 for 0 def min; DEF - DEF x i/100
+			def1 = static_cast<defType>( rules::combat::def_after_ignore( def1, i ) );
+			def2 = static_cast<int16>( rules::combat::def_after_ignore( def2, i ) );
 		}
 
 		//Kagerou/Oboro Earth Charm effect +10% eDEF
@@ -4791,15 +4793,11 @@ static void battle_calc_defense_reduction( Damage* wd, block_list* src, block_li
 		//Official servers limit the count to 22 targets
 		target_count = min(unit_counttargeted(target), (100 / battle_config.vit_penalty_num) + (battle_config.vit_penalty_count - 1));
 		if(target_count >= battle_config.vit_penalty_count) {
-			if(battle_config.vit_penalty_type == 1) {
-				if( !tsc || !tsc->getSCE(SC_STEELBODY) )
-					def1 = (def1 * (100 - (target_count - (battle_config.vit_penalty_count - 1))*battle_config.vit_penalty_num))/100;
-				def2 = (def2 * (100 - (target_count - (battle_config.vit_penalty_count - 1))*battle_config.vit_penalty_num))/100;
-			} else { //Assume type 2
-				if( !tsc || !tsc->getSCE(SC_STEELBODY) )
-					def1 -= (target_count - (battle_config.vit_penalty_count - 1))*battle_config.vit_penalty_num;
-				def2 -= (target_count - (battle_config.vit_penalty_count - 1))*battle_config.vit_penalty_num;
-			}
+			// BR-MAP-013 (map-rules): crowd DEF penalty (type 1 percent, type 2 absolute); hard DEF may go
+			// negative and is untouched under Steel Body
+			if( !tsc || !tsc->getSCE(SC_STEELBODY) )
+				def1 = static_cast<defType>( rules::combat::crowd_def( def1, target_count, rules_config() ) );
+			def2 = static_cast<int16>( rules::combat::crowd_def( def2, target_count, rules_config() ) );
 		}
 		if(def2 < 1)
 			def2 = 1;
@@ -4892,9 +4890,9 @@ static void battle_calc_defense_reduction( Damage* wd, block_list* src, block_li
 			is_attack_piercing(wd, src, target, skill_id, skill_lv, EQI_HAND_L) ? (def1 * battle_calc_attack_skill_ratio(wd, src, target, skill_id, skill_lv)) / 200 : 0
 		);
 		if (!attack_ignores_def(wd, src, target, skill_id, skill_lv, EQI_HAND_R) && !is_attack_piercing(wd, src, target, skill_id, skill_lv, EQI_HAND_R))
-			wd->damage = wd->damage * (4000 + def1) / (4000 + 10 * def1) - vit_def;
+			wd->damage = rules::combat::apply_defense_re( wd->damage, def1, vit_def ); // BR-MAP-014 (map-rules)
 		if (is_attack_left_handed(src, skill_id) && !attack_ignores_def(wd, src, target, skill_id, skill_lv, EQI_HAND_L) && !is_attack_piercing(wd, src, target, skill_id, skill_lv, EQI_HAND_L))
-			wd->damage2 = wd->damage2 * (4000 + def1) / (4000 + 10 * def1) - vit_def;
+			wd->damage2 = rules::combat::apply_defense_re( wd->damage2, def1, vit_def ); // BR-MAP-014 (map-rules)
 	}
 #else
 		if (def1 > 100) def1 = 100;
@@ -6647,10 +6645,8 @@ struct Damage battle_calc_misc_attack(block_list *src,block_list *target,uint16 
 				unsigned char attacker_count = unit_counttargeted(target); //256 max targets should be a sane max
 
 				if(attacker_count >= battle_config.agi_penalty_count) {
-					if (battle_config.agi_penalty_type == 1)
-						flee = (flee * (100 - (attacker_count - (battle_config.agi_penalty_count - 1))*battle_config.agi_penalty_num))/100;
-					else //assume type 2: absolute reduction
-						flee -= (attacker_count - (battle_config.agi_penalty_count - 1))*battle_config.agi_penalty_num;
+					// BR-MAP-012 (map-rules): crowd FLEE penalty; stored in the int16 before the floor at 1
+					flee = static_cast<int16>( rules::combat::crowd_flee( flee, attacker_count, rules_config() ) );
 					if(flee < 1)
 						flee = 1;
 				}
@@ -6663,7 +6659,7 @@ struct Damage battle_calc_misc_attack(block_list *src,block_list *target,uint16 
 #endif
 			hitrate = cap_value(hitrate, battle_config.min_hitrate, battle_config.max_hitrate);
 
-			if(rnd()%100 < hitrate)
+			if( rules::combat::roll_hit( hitrate, rules_rng() ) ) // BR-MAP-011 (map-rules): rnd()%100 < hitrate
 				i = 1;
 		}
 		if (!i) {
@@ -8963,6 +8959,7 @@ int32 battle_set_value(const char* w1, const char* w2)
 	}
 
 	*battle_data[i].val = val;
+	rules_config_refresh( battle_data[i].val ); // setbattleflag / @setbattleflag at runtime
 	return 1;
 }
 
