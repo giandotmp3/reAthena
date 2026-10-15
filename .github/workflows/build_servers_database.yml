@@ -92,3 +92,39 @@ jobs:
           name: smoke-logs
           path: smoke-logs/
           if-no-files-found: ignore
+
+  # The other platforms: build with the embedded SQLite engine and run the contract tests.
+  windows-msbuild:
+    if: "!contains(github.event.head_commit.message, 'ci-skip')"
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+      - name: Build solution (warnings are errors)
+        run: msbuild rAthena.sln -t:rebuild -property:Configuration=Debug /p:DefineConstants="BUILDBOT" /warnaserror
+
+  windows-cmake:
+    if: "!contains(github.event.head_commit.message, 'ci-skip')"
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B cbuild -DBUILD_TESTING=ON -DWITH_POSTGRESQL=OFF
+      - name: Build
+        run: cmake --build cbuild --config Debug --parallel 4
+      - name: Sql/SqlStmt contract tests (SQLite)
+        run: ctest --test-dir cbuild --build-config Debug --output-on-failure -R sql_test
+
+  macos:
+    if: "!contains(github.event.head_commit.message, 'ci-skip')"
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install packages
+        run: brew install pcre libpq
+      - name: Configure
+        run: cmake -S . -B cbuild -DBUILD_TESTING=ON -DWITH_POSTGRESQL=ON -DCMAKE_PREFIX_PATH="$(brew --prefix libpq)"
+      - name: Build
+        run: cmake --build cbuild --parallel 4
+      - name: Sql/SqlStmt contract tests (SQLite)
+        run: ctest --test-dir cbuild --output-on-failure -R sql_test
