@@ -17,6 +17,18 @@ inline std::mt19937 generator = std::mt19937(device());
 int32 rnd(void);// [0, SINT32_MAX]
 
 /*
+ * Reseeds the global generator so a run is reproducible (golden-vector capture, tests).
+ * Normal servers never call this and keep the std::random_device seed.
+ */
+void rnd_seed(uint32 seed);
+
+/*
+ * Reseeds the global generator from the RATHENA_RNG_SEED environment variable, if it is set.
+ * @return true if a seed was applied
+ */
+bool rnd_seed_from_env(void);
+
+/*
  * Generates a random number in the interval [min, max]
  * @return random number
  */

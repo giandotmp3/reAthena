@@ -22,6 +22,14 @@
 	X(std::int32_t, max_cart_weight, 8000, 100, 1000000)                               \
 	X(std::int32_t, prevent_logout, 10000, 0, 3600000) /* BR-MAP-056 */                \
 	X(std::int32_t, vip_storage_increase, 300, 0, 10000) /* BR-MAP-050 */              \
+	X(std::int32_t, natural_healhp_interval, 6000, 500, RATHENA_I32_MAX) /* BR-MAP-055 */ \
+	X(std::int32_t, natural_healsp_interval, 8000, 500, RATHENA_I32_MAX) /* BR-MAP-055 */ \
+	/* skill.conf */                                                                   \
+	X(std::int32_t, castrate_dex_scale, 150, 1, RATHENA_I32_MAX) /* BR-MAP-051 */       \
+	X(std::int32_t, vcast_stat_scale, 530, 1, RATHENA_I32_MAX) /* BR-MAP-052 */         \
+	X(std::int32_t, default_fixed_castrate, 20, 0, 100) /* BR-MAP-052 */               \
+	X(std::int32_t, delay_rate, 100, 0, RATHENA_I32_MAX) /* BR-MAP-053 */               \
+	X(std::int32_t, min_skill_delay_limit, 100, 10, RATHENA_I32_MAX) /* BR-MAP-053 */   \
 	/* battle.conf */                                                                  \
 	X(std::int32_t, enable_critical, 17, 0, 31)                                        \
 	X(std::int32_t, min_hitrate, 5, 0, 100) /* BR-MAP-011 */                           \
@@ -36,11 +44,23 @@
 	X(std::int32_t, vending_max_value, 1000000000, 1, RATHENA_I32_MAX) /* [§5.6 drift: 10,000,000 -> 1,000,000,000] */ \
 	X(std::int32_t, vending_tax, 500, 0, 10000) /* [§5.6 drift: 0 -> 500] BR-MAP-044 */ \
 	X(std::int32_t, vending_tax_min, 100000000, 0, RATHENA_I32_MAX) /* BR-MAP-044 */   \
+	X(std::int32_t, min_shop_buy, 1, 0, RATHENA_I32_MAX) /* BR-MAP-047 */               \
+	X(std::int32_t, min_shop_sell, 0, 0, RATHENA_I32_MAX) /* BR-MAP-047 */              \
 	/* drops.conf */                                                                   \
 	X(std::int32_t, item_rate_common, 100, 0, 1000000) /* BR-MAP-035 */               \
 	X(std::int32_t, item_drop_common_min, 1, 1, 10000)                                 \
 	X(std::int32_t, item_drop_common_max, 10000, 1, 10000)                             \
 	X(bool, item_logarithmic_drops, false, 0, 1)                                       \
+	X(std::int32_t, drop_rate_cap, 9000, 0, 10000) /* BR-MAP-036 */                    \
+	X(std::int32_t, drop_rate_cap_vip, 9000, 0, 10000) /* BR-MAP-036 */                \
+	X(bool, drop_rate0item, false, 0, 1) /* BR-MAP-036 */                              \
+	X(std::int32_t, vip_drop_increase, 50, 0, RATHENA_I32_MAX) /* BR-MAP-036 */         \
+	X(std::int32_t, item_first_get_time, 3000, 0, RATHENA_I32_MAX) /* BR-MAP-037 */     \
+	X(std::int32_t, item_second_get_time, 2000, 0, RATHENA_I32_MAX) /* BR-MAP-037 */    \
+	X(std::int32_t, item_third_get_time, 2000, 0, RATHENA_I32_MAX) /* BR-MAP-037 */     \
+	X(std::int32_t, mvp_item_first_get_time, 10000, 0, RATHENA_I32_MAX) /* BR-MAP-037 */ \
+	X(std::int32_t, mvp_item_second_get_time, 10000, 0, RATHENA_I32_MAX) /* BR-MAP-037 */ \
+	X(std::int32_t, mvp_item_third_get_time, 2000, 0, RATHENA_I32_MAX) /* BR-MAP-037 */ \
 	/* exp.conf */                                                                     \
 	X(std::int32_t, base_exp_rate, 100, 0, RATHENA_I32_MAX)                            \
 	X(std::int32_t, job_exp_rate, 100, 0, RATHENA_I32_MAX)                             \

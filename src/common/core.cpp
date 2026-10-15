@@ -26,6 +26,7 @@
 #include "cbasetypes.hpp"
 #include "malloc.hpp"
 #include "mmo.hpp"
+#include "random.hpp"
 #include "showmsg.hpp"
 #include "strlib.hpp"
 
@@ -357,6 +358,12 @@ int32 Core::start( int32 argc, char **argv ){
 	malloc_init();// needed for Show* in display_title() [FlavioJS]
 	display_title();
 	usercheck();
+
+#ifndef MINICORE
+	if( rnd_seed_from_env() ){
+		ShowWarning( "Random generator seeded from RATHENA_RNG_SEED; results are reproducible. Do not use this on a live server.\n" );
+	}
+#endif
 
 #ifndef MINICORE
 	Sql_Init();

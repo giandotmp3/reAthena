@@ -20,7 +20,7 @@ This is a hybrid. **login-server** and **web-server** are full C++20 rebuilds: d
 
 | Unit | Responsibility | Owns rules | Tests (pending) |
 |---|---|---|---|
-| `core/` | Config with `import:` overlays, env secrets that refuse known defaults, injectable `Rng`, typed immutable `BattleConfig` (X-macro `knobs.def.hpp`, shipped defaults), logger with redaction | BR-INTER-016; S1/S2 parts of BR-WEB-017, BR-LOGIN-025, BR-CHAR-030 | 79 (1) |
+| `core/` | Config with `import:` overlays, env secrets that refuse known defaults, injectable `Rng`, typed immutable `BattleConfig` (X-macro `knobs.def.hpp`, shipped defaults), logger with redaction | BR-INTER-016; S1/S2 parts of BR-WEB-017, BR-LOGIN-025, BR-CHAR-030 | 81 (1) |
 | `netproto/` | LE framing, length validation (S4), unknown-packet disconnect, inter-server length tables, handshakes 0x2710/0x2af8 + version, 0x2717 with widened `group_id`, stall and flood policies | BR-INTER-001, 002, 003, 007, 010–013 | 87 (6) |
 | `persistence/` | Single `Item` mapping (×6 tables), checked `Zeny`, repositories (MySQL + in-memory fake), `rathena-migrate` with gated steps M0…M3b | BR-LOGIN-008, 037; BR-CHAR-013 (cascade order); BR-MAP-045 | 91 (5) |
 | `login-server/` | Auth order, refusal codes, tickets (30 s), online state, IP ban + failure counter independent of the log, web token (retry ≤ 20), Argon2id behind a bounded pool (stub), char-server registry, client handler stubs | BR-LOGIN-001…039 (004 → "Removed"), BR-INTER-004, 005, 006, 014, 017 | 80 (7) |
@@ -28,13 +28,22 @@ This is a hybrid. **login-server** and **web-server** are full C++20 rebuilds: d
 | `char-rules/` | charlife, PIN, party, guild, mail (RODEX only), registry, clan, GM (authority re-check), session rules, **save→auth barrier per char_id** | BR-CHAR-001…055, BR-INTER-008, 009, 015, 018, 019 | 121 (9) |
 | `map-rules/` | combat, progression, economy, trade, skills, anticheat; renewal + pre-renewal; property tests; `manifest/map_modules.tsv` (each `src/map/*.cpp` → one module) | BR-MAP-001…061 | 94 (9) |
 
-**Totals: 656 tests. 617 pass, 39 skipped as pending, 0 fail.** All 191 rule IDs appear in at least one test.
+**Totals: 658 tests. 619 pass, 39 skipped as pending, 0 fail.** All 191 rule IDs appear in at least one test.
 
 Pending tests are `GTEST_SKIP() << "PENDING <BR-ID>"`. They are mostly waiting on golden vectors from an instrumented legacy build, a live MySQL, libsodium, or verbatim packet headers. Pending rule IDs:
 BR-CHAR-013, 022, 028, 031, 032, 034, 042, 047 · BR-INTER-001, 003, 006, 007, 010, 013, 017, 018 · BR-LOGIN-001, 036, 037, 039 · BR-MAP-015, 017, 019, 032, 033, 034, 049, 053, 055 · BR-WEB-010 (client-capture gate), 016 (httplib end-to-end).
 Most of these also have passing tests for their pure logic; only the integration part is pending.
 
 ## How to build and test
+
+All units at once (superbuild):
+
+```sh
+cmake -S modernized/rathena-reimagined -B build -DCMAKE_BUILD_TYPE=Debug -DRATHENA_REIMAGINED_WERROR=ON
+cmake --build build -j && ctest --test-dir build -j --output-on-failure
+```
+
+One unit:
 
 ```sh
 cd modernized/rathena-reimagined/<unit>
@@ -46,7 +55,7 @@ ctest --test-dir build --output-on-failure
 - Offline: add `-DFETCHCONTENT_SOURCE_DIR_GOOGLETEST=<path-to-googletest-checkout>`. `web-server` also fetches nlohmann/json.
 - Run a single rule's tests: `ctest --test-dir build -R BR_MAP_014`. Test names embed the BR-ID; dashes become underscores.
 - `web-server`: the real HTTP transport is behind `-DRATHENA_WEB_WITH_HTTPLIB=ON`. Until the persistence wiring lands, the binary refuses to start unless `RATHENA_WEB_DEV_INMEMORY=1`.
-- Verified on gcc 13.3 (and clang for netproto). MSVC and macOS CI are not wired yet.
+- Verified locally on gcc 13.3 and clang 18 with `-Werror`. CI also covers MSVC and macOS.
 
 ## Configuration and secrets (names only, never values)
 
@@ -100,9 +109,9 @@ The full file → module map for the map server is `map-rules/manifest/map_modul
 
 ## Open items for the next engineer
 
-1. **Integrate the units.** Each one currently carries small local copies of `Rng`/`BattleConfig`/types so it can build standalone. On promotion into `src/`, replace them with `core`'s types. Fold the ~20 knobs that `map-rules` lists as missing from `core/knobs.def.hpp` into it, then generate the full 581-knob list from `conf/battle/*.conf`.
-2. **Golden vectors.** Add the injectable Rng to legacy `src/common/random.hpp`, build an instrumented legacy binary, and capture vectors. That unblocks most of the pending tests (BR-MAP-015/017/019, BR-CHAR-013, …).
+1. **Integrate the units.** Each one currently carries small local copies of `Rng`/`BattleConfig`/types so it can build standalone. On promotion into `src/`, replace them with `core`'s types. Every knob `map-rules` uses is now in `core/knobs.def.hpp`. A drift test (`core/tests/test_shipped_conf_parity.cpp`) checks every typed default against the legacy `conf/` files. The full 581-knob list is still to be generated.
+2. **Golden vectors.** Legacy `src/common/random.{hpp,cpp}` now has `rnd_seed()` / `rnd_seed_from_env()`. Starting a legacy server with `RATHENA_RNG_SEED=<uint32>` makes its random stream reproducible (it logs a warning; tools built in minimal-core mode skip this). Next: build an instrumented legacy binary that dumps formula inputs and outputs, and capture vectors. That unblocks most of the pending tests (BR-MAP-015/017/019, BR-CHAR-013, …).
 3. Wire `persistence` to the MySQL client (`3rdparty/mysql`), generate the M0 baseline fingerprints from `sql-files/upgrades/`, and vendor libsodium for Argon2id.
 4. Replace `login-server/include/.../protocol/client_packets.hpp` with the verbatim legacy packet headers (K1).
 5. Before phase 2 ships, capture what real clients send on web `*/load` (BR-WEB-010 gate).
-6. CI: add a workflow that builds and tests all 7 units on gcc, clang, MSVC and macOS.
+6. CI: `.github/workflows/build_reimagined_units.yml` builds the superbuild on Linux gcc/clang (`-Werror`), Windows MSVC and macOS. Turn on `RATHENA_REIMAGINED_WERROR` for MSVC and macOS once they are clean.
