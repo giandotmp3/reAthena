@@ -262,15 +262,21 @@ def render_table(t: Table, dialect: str) -> str:
     ai_cols = [c for c in t.columns if c.auto_increment]
     pk = list(t.primary_key)
     extra_unique: list[list[str]] = []
-    # SQLite only auto-increments a lone INTEGER PRIMARY KEY. MyISAM allowed an auto_increment
-    # column inside a composite key (guild); there the column is unique on its own, so it becomes
-    # the key and the original composite stays enforced as a UNIQUE constraint.
+    # SQLite only auto-increments a lone INTEGER PRIMARY KEY. MyISAM also allowed an
+    # auto_increment column inside a composite key:
+    #  - guild (guild_id, char_id): guild_id is unique on its own (it has its own unique key), so
+    #    it becomes the rowid key and the composite stays enforced as a UNIQUE constraint;
+    #  - mail_attachments (id, index): id repeats once per attachment and the server always
+    #    supplies it, so the composite key is kept and id is a plain integer.
     sqlite_rowid_col = None
     if dialect == "sqlite" and ai_cols:
-        sqlite_rowid_col = ai_cols[0].name
-        if pk and pk != [sqlite_rowid_col]:
-            extra_unique.append(pk)
-        pk = []  # the key is declared inline on the rowid column
+        col = ai_cols[0].name
+        unique_alone = any(unique and cols == [col] for _, unique, cols in t.indexes)
+        if not pk or pk == [col] or unique_alone:
+            sqlite_rowid_col = col
+            if pk and pk != [col]:
+                extra_unique.append(pk)
+            pk = []  # the key is declared inline on the rowid column
     for c in t.columns:
         q = f'"{c.name}"'
         if dialect == "pg":

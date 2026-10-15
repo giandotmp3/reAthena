@@ -12,7 +12,7 @@ INSERT INTO `char` (`char_id`, `account_id`, `char_num`, `name`, `last_login`) V
   (150001, 2000001, 0, X'C7D1B1DBB0FA', '2024-05-01 10:20:30');
 INSERT INTO `guild` (`guild_id`, `name`, `char_id`, `master`, `emblem_data`) VALUES (11, X'47C7D1', 150000, X'4A6F73E9', X'00010280FF');
 INSERT INTO `mail` (`id`, `send_name`, `dest_id`, `title`, `message`) VALUES (1, 'gm', 150000, 'hi', X'E9E8'), (2, 'gm', 150001, 'two', 'x');
-INSERT INTO `mail_attachments` (`id`, `index`, `nameid`, `amount`) VALUES (1, 0, 501, 1), (2, 0, 502, 3);
+INSERT INTO `mail_attachments` (`id`, `index`, `nameid`, `amount`) VALUES (1, 0, 501, 1), (1, 1, 503, 2), (2, 0, 502, 3);
 INSERT INTO `zenylog` (`time`, `char_id`, `src_id`, `type`, `amount`, `map`) VALUES ('0000-00-00 00:00:00', 150000, 0, 'S', 100, 'prontera');
 INSERT INTO `picklog` (`time`, `char_id`, `type`, `nameid`, `amount`, `map`) VALUES ('2024-01-02 03:04:05', 150001, 'P', 501, 1, 'prontera');
 ALTER TABLE `char` AUTO_INCREMENT = 150050;

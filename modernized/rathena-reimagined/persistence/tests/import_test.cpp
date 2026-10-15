@@ -255,10 +255,9 @@ FakeSource legacy_database() {
 	                  {{"11", "Guild" + kHangul, "150000", emblem_bytes()}}});
 	s.data.push_back({{"mail", {col("id", "bigint", false, true), col("dest_id", "int"), col("title", "varchar")}, 4},
 	                  {{"1", "150000", "hi"}, {"2", "150001", "there"}, {"3", "150001", "again"}}});
-	// One attachment per mail: the generated SQLite schema currently makes mail_attachments.id the
-	// rowid key on its own (MySQL's key is (id, index)), so a second attachment of one mail fails.
+	// Two attachments on mail 1: the key is (id, index) on every engine.
 	s.data.push_back({{"mail_attachments", {col("id", "bigint"), col("index", "tinyint"), col("nameid", "int")}, 0},
-	                  {{"1", "0", "501"}, {"2", "0", "502"}, {"3", "0", "503"}}});
+	                  {{"1", "0", "501"}, {"1", "1", "502"}, {"3", "0", "503"}}});
 	s.data.push_back({{"zenylog",
 	                   {col("id", "int", false, true), col("time", "datetime"), col("type", "enum"), col("amount", "int")},
 	                   5},
