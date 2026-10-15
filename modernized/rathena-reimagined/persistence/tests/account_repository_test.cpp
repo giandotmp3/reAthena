@@ -170,10 +170,8 @@ TEST(BR_LOGIN_037_AtomicAccountDeleteSql, BR_LOGIN_037_MysqlStatementsCoverRowAn
 	for (const auto& s : st) EXPECT_EQ(std::get<std::uint64_t>(s.params.at(0)), 2'000'123u);
 }
 
-TEST(BR_LOGIN_037_AtomicAccountDeleteSql, BR_LOGIN_037_MysqlRemoveRollsBackOnFailure) {
-	GTEST_SKIP() << "PENDING BR-LOGIN-037: MysqlConnection::execute_in_transaction is not wired to the "
-	                "MySQL client yet; needs a disposable DB (testcontainer) to prove ROLLBACK.";
-}
+// The live ROLLBACK proof is MysqlAccountIT.BR_LOGIN_037_MysqlRemoveRollsBackOnFailure
+// (mysql_integration_test.cpp), run against RATHENA_TEST_DATABASE_URL.
 
 // ---------------------------------------------------------------- BR-LOGIN-038 (repository half)
 

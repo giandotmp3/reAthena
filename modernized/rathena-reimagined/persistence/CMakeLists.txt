@@ -39,6 +39,31 @@ add_library(rathena_persistence
   src/migrate/migrator.cpp
 )
 add_library(rathena::persistence ALIAS rathena_persistence)
+
+# MySQL/MariaDB client: AUTO uses one if found (MariaDB Connector/C or libmysqlclient), ON
+# requires it, OFF always builds the NotImplemented stub.
+set(RATHENA_PERSISTENCE_WITH_MYSQL "AUTO" CACHE STRING "Link a MySQL/MariaDB client (AUTO, ON, OFF)")
+set_property(CACHE RATHENA_PERSISTENCE_WITH_MYSQL PROPERTY STRINGS AUTO ON OFF)
+set(_rathena_mysql_found FALSE)
+if(NOT RATHENA_PERSISTENCE_WITH_MYSQL STREQUAL "OFF")
+  find_path(RATHENA_MYSQL_INCLUDE_DIR mysql.h PATH_SUFFIXES mariadb mysql)
+  find_library(RATHENA_MYSQL_LIBRARY NAMES mariadb mariadbclient mysqlclient libmariadb libmysql)
+  if(RATHENA_MYSQL_INCLUDE_DIR AND RATHENA_MYSQL_LIBRARY)
+    set(_rathena_mysql_found TRUE)
+  elseif(RATHENA_PERSISTENCE_WITH_MYSQL STREQUAL "ON")
+    message(FATAL_ERROR "RATHENA_PERSISTENCE_WITH_MYSQL=ON but no MySQL/MariaDB client was found")
+  endif()
+endif()
+if(_rathena_mysql_found)
+  message(STATUS "rathena-persistence: MySQL client ${RATHENA_MYSQL_LIBRARY}")
+  target_sources(rathena_persistence PRIVATE src/mysql_client.cpp)
+  target_include_directories(rathena_persistence PRIVATE ${RATHENA_MYSQL_INCLUDE_DIR})
+  target_link_libraries(rathena_persistence PRIVATE ${RATHENA_MYSQL_LIBRARY})
+  target_compile_definitions(rathena_persistence PUBLIC RATHENA_PERSISTENCE_HAS_MYSQL_CLIENT=1)
+else()
+  message(STATUS "rathena-persistence: no MySQL client; MysqlConnection is a stub")
+  target_sources(rathena_persistence PRIVATE src/mysql_client_stub.cpp)
+endif()
 target_include_directories(rathena_persistence PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)

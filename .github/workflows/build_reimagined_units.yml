@@ -64,3 +64,45 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --build-config Debug --output-on-failure --parallel 4
+
+  # Live-database tests (persistence unit) against a throwaway MariaDB service container.
+  mariadb-integration:
+    name: linux-gcc-mariadb
+    runs-on: ubuntu-24.04
+    env:
+      # Per-run throwaway credential for the service container below; not a real secret.
+      TEST_DB_PASSWORD: ci-${{ github.run_id }}-${{ github.run_attempt }}
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_RANDOM_ROOT_PASSWORD: '1'
+          MARIADB_DATABASE: rathena_it
+          MARIADB_USER: rathena_it
+          MARIADB_PASSWORD: ci-${{ github.run_id }}-${{ github.run_attempt }}
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install MariaDB client library
+        run: sudo apt-get update -q && sudo apt-get install -y -q libmariadb-dev
+
+      - name: Configure
+        run: >
+          cmake -S modernized/rathena-reimagined -B build
+          -DCMAKE_BUILD_TYPE=Debug
+          -DRATHENA_REIMAGINED_WERROR=ON
+          -DRATHENA_PERSISTENCE_WITH_MYSQL=ON
+
+      - name: Build
+        run: cmake --build build --parallel 4 --target rathena_persistence_tests
+
+      - name: Test (live database)
+        env:
+          RATHENA_TEST_DATABASE_URL: mysql://rathena_it:${{ env.TEST_DB_PASSWORD }}@127.0.0.1:3306/rathena_it
+        run: ctest --test-dir build --output-on-failure -R 'Mysql'

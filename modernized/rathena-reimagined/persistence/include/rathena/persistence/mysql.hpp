@@ -1,7 +1,8 @@
 #pragma once
-// Concrete MySQL/MariaDB repositories. In this scaffold the connection and query execution are
-// stubs (NotImplemented); the parameterized statement builders are real and unit-tested, so the
-// SQL each operation will issue is pinned before the client library is wired in.
+// Concrete MySQL/MariaDB repositories. The connection uses the MySQL C client API (server-side
+// prepared statements, so parameters are never spliced into SQL text) when the build finds a
+// client library (RATHENA_PERSISTENCE_HAS_MYSQL_CLIENT); otherwise it throws NotImplemented.
+// The parameterized statement builders are real and unit-tested either way.
 #include <memory>
 #include <vector>
 
@@ -12,24 +13,45 @@
 
 namespace rathena::persistence {
 
-/// One connection to ${DATABASE_URL} (or ${LOG_DB_URL}). Not implemented in the scaffold.
+/// True when this build links a MySQL/MariaDB client library.
+bool mysql_client_available() noexcept;
+
+/// One connection to ${DATABASE_URL} (or ${LOG_DB_URL}).
+/// Result values: integer columns come back as int64/uint64 (by the column's UNSIGNED flag),
+/// NULL as monostate, everything else as string.
 class MysqlConnection {
 public:
-	explicit MysqlConnection(DbEndpoint endpoint) : endpoint_(std::move(endpoint)) {}
-	void connect();                                        ///< throws NotImplemented
-	void execute(const Statement& st);                     ///< throws NotImplemented
-	std::vector<Row> query(const Statement& st);           ///< throws NotImplemented
+	explicit MysqlConnection(DbEndpoint endpoint);
+	~MysqlConnection();
+	MysqlConnection(const MysqlConnection&) = delete;
+	MysqlConnection& operator=(const MysqlConnection&) = delete;
+
+	void connect();                                        ///< throws RepositoryError (or NotImplemented without a client)
+	void execute(const Statement& st);                     ///< throws RepositoryError on failure
+	std::vector<Row> query(const Statement& st);           ///< throws RepositoryError on failure
+	/// Rows changed by the last execute().
+	[[nodiscard]] std::uint64_t affected_rows() const noexcept { return affected_rows_; }
 	/// Runs all statements in one START TRANSACTION ... COMMIT; ROLLBACK on any failure.
-	bool execute_in_transaction(const std::vector<Statement>& statements); ///< NotImplemented
+	/// Atomic only on transactional engines: the legacy MyISAM tables need migration M2 first.
+	bool execute_in_transaction(const std::vector<Statement>& statements);
 	[[nodiscard]] const DbEndpoint& endpoint() const noexcept { return endpoint_; }
 
 private:
+	struct Impl;
 	DbEndpoint endpoint_;
+	std::unique_ptr<Impl> impl_;
+	std::uint64_t affected_rows_ = 0;
 };
 
 namespace sql {
 /// BR-LOGIN-008: `SELECT MAX(account_id) FROM login` (+1 and range checks happen in C++).
 Statement select_max_account_id(const TableNames& t);
+/// Columns read into persistence::Account (login + M6 pass_hash/pass_scheme).
+Statement select_account_by_id(const TableNames& t, AccountId id);
+/// BR-LOGIN-038: LIMIT 2 so a duplicate is detected without scanning further.
+Statement select_account_by_userid(const TableNames& t, std::string_view userid, bool case_sensitive);
+Statement insert_account(const TableNames& t, const Account& a);
+Statement update_account(const TableNames& t, const Account& a);
 /// BR-LOGIN-037: the statements run inside ONE transaction, in this order.
 std::vector<Statement> remove_account(const TableNames& t, AccountId id);
 } // namespace sql

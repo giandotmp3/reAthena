@@ -150,9 +150,11 @@ TEST(MysqlRepositories, StubsReportNotImplementedWithoutTouchingANetwork) {
 	ep.host = "db.invalid";
 	ep.database = "rathena_main";
 	MysqlConnection conn(ep);
-	EXPECT_THROW(conn.connect(), NotImplemented);
+	// Repositories not yet ported to SQL stay NotImplemented whether or not a client is linked.
 	MysqlCharacterRepository chars(conn, TableNames{});
 	EXPECT_THROW((void)chars.find(CharId{150'000}), NotImplemented);
+	if (mysql_client_available()) return; // connect() is real; covered by mysql_integration_test.cpp
+	EXPECT_THROW(conn.connect(), NotImplemented);
 	try {
 		conn.connect();
 	} catch (const NotImplemented& e) {
