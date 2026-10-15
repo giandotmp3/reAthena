@@ -108,9 +108,139 @@ enum class EquipError : std::uint8_t { None, WrongJob, LevelTooLow, LevelTooHigh
 /// BR-MAP-048: job, level, sex and location requirements.
 EquipError check_equip(const ItemDef& item, const EquipCandidate& who);
 
-/// BR-MAP-049 (pending): consumable-use requirements; nullopt until extracted.
-enum class UseItemError : std::uint8_t { None, WrongJob, LevelTooLow, Restricted, Cooldown };
-std::optional<UseItemError> check_use_item(const ItemDef& item, const EquipCandidate& who, Tick now);
+// --- Using consumables (pc.cpp pc_isUseitem) ---------------------------------------------------
+
+/// Legacy item_types that matter here; every other type is not consumable.
+enum class ItemType : std::uint8_t { Healing, Usable, Cash, Other };
+
+/// Legacy class_ bits (map.hpp) used by the job and class-tier checks.
+inline constexpr std::uint32_t kMapIdFirstMask = 0xff; // MAPID_FIRSTMASK
+inline constexpr std::uint32_t kJobl21 = 0x100;        // JOBL_2_1
+inline constexpr std::uint32_t kJobl22 = 0x200;        // JOBL_2_2
+inline constexpr std::uint32_t kJoblThird = 0x1000;    // JOBL_THIRD
+inline constexpr std::uint32_t kJoblFourth = 0x10000;  // JOBL_FOURTH
+inline constexpr std::uint32_t kJoblUpper = 0x100000;  // JOBL_UPPER
+inline constexpr std::uint32_t kJoblBaby = 0x200000;   // JOBL_BABY
+
+/// Legacy e_item_job (itemdb.hpp): the item_db `Classes` bits.
+inline constexpr std::uint8_t kItemJobNormal = 0x01;
+inline constexpr std::uint8_t kItemJobUpper = 0x02;
+inline constexpr std::uint8_t kItemJobBaby = 0x04;
+inline constexpr std::uint8_t kItemJobThird = 0x08;
+inline constexpr std::uint8_t kItemJobThirdUpper = 0x10;
+inline constexpr std::uint8_t kItemJobThirdBaby = 0x20;
+inline constexpr std::uint8_t kItemJobFourth = 0x40;
+inline constexpr std::uint8_t kItemJobAll = 0x7f;
+
+/// Mercenary potions (pc_isUseitem `switch (nameid)`).
+enum class MercenaryPotion : std::uint8_t {
+	None,
+	Basic,     // ITEMID_MERCENARY_RED_POTION, _BLUE_POTION, ITEMID_M_CENTER_POTION
+	Awakening, // ITEMID_M_AWAKENING_POTION: mercenary level >= 40
+	Berserk,   // ITEMID_M_BERSERK_POTION: mercenary level >= 80
+};
+
+/// The item_db / item_group facts pc_isUseitem looks at (the caller resolves them from the db).
+struct UsableItem {
+	ItemType type = ItemType::Usable;
+	bool cash_food = false;          // in IG_CASH_FOOD
+	bool sitting_restricted = false; // item_usage.sitting
+	std::int32_t sitting_override = 100; // item_usage.override (group level that ignores it)
+	bool dead_branch = false;        // flag.dead_branch
+	bool no_teleport_group = false;  // in IG_MF_NOTELEPORT (fly wings, ...)
+	bool no_return_group = false;    // in IG_MF_NORETURN (butterfly wings, ...)
+	bool giant_fly_wing = false;     // in IG_GIANT_FLY_WING
+	MercenaryPotion mercenary_potion = MercenaryPotion::None;
+	bool neuralizer = false;         // ITEMID_NEURALIZER
+	bool mercenary_scroll = false;   // in IG_MERCENARY
+	bool box = false;                // flag.group (item boxes)
+	std::optional<Sex> sex{};        // nullopt = both
+	std::int32_t equip_level_min = 0; // elv (0 = none)
+	std::int32_t equip_level_max = 0; // elvmax (0 = none)
+	std::array<std::uint64_t, 3> class_base{~0ull, ~0ull, ~0ull}; // job bits for base / 2-1 / 2-2 jobs
+	std::uint8_t class_upper = kItemJobAll;
+};
+
+/// The player and map state pc_isUseitem looks at.
+struct UseItemContext {
+	bool unconditional = false;       // PC_PERM_ITEM_UNCONDITIONAL
+	Tick now = 0;
+	Tick can_use_item_tick = 0;       // sd->canuseitem_tick
+	Tick can_use_cash_food_tick = 0;  // sd->canusecashfood_tick
+	bool sitting = false;
+	std::int32_t group_level = 0;
+	bool storage_open = false;        // sd->state.storage_flag
+	bool in_duel = false;
+	// Map flags.
+	bool map_no_item_consumption = false;
+	bool map_no_branch = false;
+	bool map_gvg = false;             // mapdata_flag_gvg2 (GvG, WoE castles, battlegrounds-as-gvg)
+	bool map_no_teleport = false;
+	bool map_no_return = false;
+	bool map_reset = false;           // MF_RESET
+	// Party (Giant Fly Wing).
+	bool in_party = false;
+	bool party_leader = false;
+	bool party_member_alive_on_map = false; // another online, living member on the same map
+	// Mercenary.
+	bool has_mercenary = false;
+	bool mercenary_cant_consume = false;
+	std::int32_t mercenary_level = 0; // mercenary db level
+	// Boxes.
+	std::int32_t weight_pct = 0;      // pc_getpercentweight: weight x 100 / max_weight
+	std::int32_t free_slots = 100;    // pc_inventoryblank
+	// Character.
+	Sex sex = Sex::Male;
+	std::int32_t base_level = 1;
+	std::uint32_t class_ = 0;         // sd->class_ (MAPID_* with JOBL_* bits)
+	bool cant_consume = false;        // sc.cant.consume
+};
+
+enum class UseItemError : std::uint8_t {
+	None,
+	NotConsumable,
+	MapNoItemConsumption,
+	UseInterval,         // within item_use_interval (or cashfood_use_interval for cash food)
+	Sitting,
+	StorageOpen,
+	DeadBranchMap,
+	NoTeleportMap,
+	DuelNoTeleport,
+	NoReturnMap,
+	NotPartyLeader,      // also "not in a party" (same client message)
+	NoPartyMemberOnMap,
+	MercenaryUnavailable, // no mercenary, it cannot consume, or its level is too low
+	NotResetMap,         // Neuralizer outside an MF_RESET map
+	MercenaryScroll,     // already has a mercenary
+	Overweight,          // boxes / cash items: weight >= open_box_weight_rate
+	InventoryFull,       // boxes / cash items: <= 10 free slots
+	WrongSex,
+	LevelTooLow,
+	LevelTooHigh,
+	WrongJob,
+	CantConsume,
+	WrongClassTier,
+};
+
+/// BR-MAP-049: pc_isUseitem, check by check in legacy order (the first failure is returned).
+/// Renewal and pre-renewal differ only in the class-tier check (`item_class_allows`).
+/// A dead-branch item that passes is logged by the caller (log_branch).
+UseItemError check_use_item(const UsableItem& item, const UseItemContext& ctx, const BattleConfig& cfg);
+
+/// BR-MAP-049: pc_job_can_use_item: bit (class_ & MAPID_FIRSTMASK) of class_base[0 base | 1 2-1 | 2 2-2].
+bool job_can_use_item(const UsableItem& item, std::uint32_t class_);
+
+/// BR-MAP-049: pc_isItemClass. Pre-renewal lets third jobs use transcendent items and every third
+/// job use any third-job item; renewal matches each tier exactly (fourth jobs only ITEMJ_FOURTH).
+bool item_class_allows(std::uint8_t class_upper, std::uint32_t class_, Mode mode);
+
+struct ItemUseTicks {
+	Tick can_use_item = 0;
+	Tick can_use_cash_food = 0;
+};
+/// BR-MAP-049: pc_useitem stamps the next allowed use: now + item_use_interval, and for cash food
+/// also now + cashfood_use_interval (otherwise the cash-food tick is unchanged).
+ItemUseTicks after_item_use(Tick now, bool cash_food, Tick previous_cash_food_tick, const BattleConfig& cfg);
 
 /// BR-MAP-050: personal storage 300 (MIN_STORAGE), VIP + vip_storage_increase, max 600.
 std::int32_t storage_capacity(bool vip, const BattleConfig& cfg);

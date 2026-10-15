@@ -172,10 +172,155 @@ TEST(Economy, BR_MAP_048_EquipRequirements) {
 	EXPECT_EQ(ec::check_equip(def, c), ec::EquipError::WrongLocation);
 }
 
-TEST(Economy, BR_MAP_049_ConsumableUseRequirements) {
-	if (!ec::check_use_item({}, {}, 0).has_value()) {
-		GTEST_SKIP() << "PENDING BR-MAP-049: consumable-use requirements (pc.cpp:6276-6442) not extracted";
-	}
+// --- BR-MAP-049: pc.cpp pc_isUseitem / pc_job_can_use_item / pc_isItemClass / pc_useitem ------
+
+namespace {
+using UE = ec::UseItemError;
+constexpr std::uint32_t kSwordman = 0x1;                  // MAPID_SWORDMAN
+constexpr std::uint32_t kKnight = ec::kJobl21 | kSwordman;  // MAPID_KNIGHT
+constexpr std::uint32_t kCrusader = ec::kJobl22 | kSwordman; // MAPID_CRUSADER
+} // namespace
+
+TEST(Economy, BR_MAP_049_OnlyConsumablesAndUnconditionalBypass) {
+	const ec::UsableItem potion;
+	EXPECT_EQ(ec::check_use_item(potion, {}, re()), UE::None);
+	EXPECT_EQ(ec::check_use_item({.type = ec::ItemType::Other}, {}, re()), UE::NotConsumable);
+	EXPECT_EQ(ec::check_use_item({.type = ec::ItemType::Other}, {.unconditional = true}, re()), UE::NotConsumable);
+	EXPECT_EQ(ec::check_use_item(potion, {.map_no_item_consumption = true}, re()), UE::MapNoItemConsumption);
+	// PC_PERM_ITEM_UNCONDITIONAL skips every later check.
+	EXPECT_EQ(ec::check_use_item({.sex = mr::Sex::Female, .equip_level_min = 99},
+	                             {.unconditional = true, .map_no_item_consumption = true}, re()),
+	          UE::None);
+}
+
+TEST(Economy, BR_MAP_049_UseIntervalAndCashFoodInterval) {
+	const ec::UsableItem potion;
+	// DIFF_TICK(canuseitem_tick, now) > 0 blocks: 1001 vs now 1000 blocks, 1000 does not.
+	EXPECT_EQ(ec::check_use_item(potion, {.now = 1000, .can_use_item_tick = 1001}, re()), UE::UseInterval);
+	EXPECT_EQ(ec::check_use_item(potion, {.now = 1000, .can_use_item_tick = 1000}, re()), UE::None);
+	// The cash-food tick only gates IG_CASH_FOOD items.
+	EXPECT_EQ(ec::check_use_item(potion, {.now = 1000, .can_use_cash_food_tick = 50000}, re()), UE::None);
+	EXPECT_EQ(ec::check_use_item({.cash_food = true}, {.now = 1000, .can_use_cash_food_tick = 50000}, re()),
+	          UE::UseInterval);
+	// pc_useitem: canuseitem_tick = now + item_use_interval (100); cash food also + 60000.
+	const auto t = ec::after_item_use(1000, false, 7, re());
+	EXPECT_EQ(t.can_use_item, 1100);
+	EXPECT_EQ(t.can_use_cash_food, 7);
+	EXPECT_EQ(ec::after_item_use(1000, true, 7, re()).can_use_cash_food, 61000);
+}
+
+TEST(Economy, BR_MAP_049_SittingStorageAndMapRestrictions) {
+	const ec::UsableItem sit_item{.sitting_restricted = true, .sitting_override = 50};
+	EXPECT_EQ(ec::check_use_item(sit_item, {.sitting = true, .group_level = 49}, re()), UE::Sitting);
+	EXPECT_EQ(ec::check_use_item(sit_item, {.sitting = true, .group_level = 50}, re()), UE::None);
+	EXPECT_EQ(ec::check_use_item(sit_item, {.sitting = false}, re()), UE::None);
+	// Storage open blocks everything except cash items.
+	EXPECT_EQ(ec::check_use_item({}, {.storage_open = true}, re()), UE::StorageOpen);
+	EXPECT_EQ(ec::check_use_item({.type = ec::ItemType::Cash}, {.storage_open = true}, re()), UE::None);
+	// Dead branch: MF_NOBRANCH or GvG.
+	EXPECT_EQ(ec::check_use_item({.dead_branch = true}, {.map_gvg = true}, re()), UE::DeadBranchMap);
+	EXPECT_EQ(ec::check_use_item({.dead_branch = true}, {.map_no_branch = true}, re()), UE::DeadBranchMap);
+	EXPECT_EQ(ec::check_use_item({.dead_branch = true}, {}, re()), UE::None);
+	// Fly Wing (IG_MF_NOTELEPORT): no-teleport or GvG map; in a duel unless duel_allow_teleport.
+	const ec::UsableItem fly{.no_teleport_group = true};
+	EXPECT_EQ(ec::check_use_item(fly, {.map_gvg = true}, re()), UE::NoTeleportMap);
+	EXPECT_EQ(ec::check_use_item(fly, {.map_no_teleport = true}, re()), UE::NoTeleportMap);
+	EXPECT_EQ(ec::check_use_item(fly, {.in_duel = true}, re()), UE::DuelNoTeleport);
+	auto duel_ok = re();
+	duel_ok.duel_allow_teleport = true;
+	EXPECT_EQ(ec::check_use_item(fly, {.in_duel = true}, duel_ok), UE::None);
+	// Butterfly Wing (IG_MF_NORETURN): GvG alone does not block it.
+	const ec::UsableItem butterfly{.no_return_group = true};
+	EXPECT_EQ(ec::check_use_item(butterfly, {.map_no_return = true}, re()), UE::NoReturnMap);
+	EXPECT_EQ(ec::check_use_item(butterfly, {.map_gvg = true}, re()), UE::None);
+	EXPECT_EQ(ec::check_use_item(butterfly, {.in_duel = true}, re()), UE::DuelNoTeleport);
+	// Neuralizer only on MF_RESET maps.
+	EXPECT_EQ(ec::check_use_item({.neuralizer = true}, {}, re()), UE::NotResetMap);
+	EXPECT_EQ(ec::check_use_item({.neuralizer = true}, {.map_reset = true}, re()), UE::None);
+}
+
+TEST(Economy, BR_MAP_049_GiantFlyWingAndMercenaryItems) {
+	const ec::UsableItem giant{.giant_fly_wing = true};
+	EXPECT_EQ(ec::check_use_item(giant, {}, re()), UE::NotPartyLeader); // no party
+	EXPECT_EQ(ec::check_use_item(giant, {.in_party = true}, re()), UE::NotPartyLeader);
+	EXPECT_EQ(ec::check_use_item(giant, {.in_party = true, .party_leader = true}, re()), UE::NoPartyMemberOnMap);
+	EXPECT_EQ(ec::check_use_item(giant, {.in_party = true, .party_leader = true, .party_member_alive_on_map = true},
+	                             re()),
+	          UE::None);
+	const ec::UsableItem red{.mercenary_potion = ec::MercenaryPotion::Basic};
+	const ec::UsableItem awake{.mercenary_potion = ec::MercenaryPotion::Awakening};
+	const ec::UsableItem berserk{.mercenary_potion = ec::MercenaryPotion::Berserk};
+	EXPECT_EQ(ec::check_use_item(red, {}, re()), UE::MercenaryUnavailable);
+	EXPECT_EQ(ec::check_use_item(red, {.has_mercenary = true, .mercenary_level = 1}, re()), UE::None);
+	EXPECT_EQ(ec::check_use_item(red, {.has_mercenary = true, .mercenary_cant_consume = true}, re()),
+	          UE::MercenaryUnavailable);
+	EXPECT_EQ(ec::check_use_item(awake, {.has_mercenary = true, .mercenary_level = 39}, re()), UE::MercenaryUnavailable);
+	EXPECT_EQ(ec::check_use_item(awake, {.has_mercenary = true, .mercenary_level = 40}, re()), UE::None);
+	EXPECT_EQ(ec::check_use_item(berserk, {.has_mercenary = true, .mercenary_level = 79}, re()), UE::MercenaryUnavailable);
+	EXPECT_EQ(ec::check_use_item(berserk, {.has_mercenary = true, .mercenary_level = 80}, re()), UE::None);
+	// A mercenary scroll is refused while a mercenary is out.
+	EXPECT_EQ(ec::check_use_item({.mercenary_scroll = true}, {.has_mercenary = true}, re()), UE::MercenaryScroll);
+	EXPECT_EQ(ec::check_use_item({.mercenary_scroll = true}, {}, re()), UE::None);
+}
+
+TEST(Economy, BR_MAP_049_BoxesNeedWeightHeadroomAndElevenFreeSlots) {
+	const ec::UsableItem box{.box = true};
+	const auto pre = mr::BattleConfig::shipped(mr::Mode::PreRenewal);
+	// open_box_weight_rate: 90 renewal, 70 pre-renewal (code defaults; the conf line is commented out).
+	EXPECT_EQ(ec::check_use_item(box, {.weight_pct = 90}, re()), UE::Overweight);
+	EXPECT_EQ(ec::check_use_item(box, {.weight_pct = 89}, re()), UE::None);
+	EXPECT_EQ(ec::check_use_item(box, {.weight_pct = 70}, pre), UE::Overweight);
+	EXPECT_EQ(ec::check_use_item(box, {.weight_pct = 69}, pre), UE::None);
+	// pc_inventoryblank <= 10 fails ("the <= is intentional").
+	EXPECT_EQ(ec::check_use_item(box, {.free_slots = 10}, re()), UE::InventoryFull);
+	EXPECT_EQ(ec::check_use_item(box, {.free_slots = 11}, re()), UE::None);
+	// Cash items get the same checks; ordinary potions do not.
+	EXPECT_EQ(ec::check_use_item({.type = ec::ItemType::Cash}, {.free_slots = 0}, re()), UE::InventoryFull);
+	EXPECT_EQ(ec::check_use_item({}, {.weight_pct = 100, .free_slots = 0}, re()), UE::None);
+}
+
+TEST(Economy, BR_MAP_049_SexLevelJobAndConsumeChecks) {
+	EXPECT_EQ(ec::check_use_item({.sex = mr::Sex::Female}, {.sex = mr::Sex::Male}, re()), UE::WrongSex);
+	EXPECT_EQ(ec::check_use_item({.sex = mr::Sex::Female}, {.sex = mr::Sex::Female}, re()), UE::None);
+	EXPECT_EQ(ec::check_use_item({.equip_level_min = 50}, {.base_level = 49}, re()), UE::LevelTooLow);
+	EXPECT_EQ(ec::check_use_item({.equip_level_min = 50}, {.base_level = 50}, re()), UE::None);
+	EXPECT_EQ(ec::check_use_item({.equip_level_max = 50}, {.base_level = 51}, re()), UE::LevelTooHigh);
+	// pc_job_can_use_item: bit (class_ & 0xff) of class_base[0 base | 1 2-1 job | 2 2-2 job].
+	const ec::UsableItem knight_only{.class_base = {0, 1ULL << kSwordman, 0}};
+	EXPECT_EQ(ec::check_use_item(knight_only, {.class_ = kKnight}, re()), UE::None);
+	EXPECT_EQ(ec::check_use_item(knight_only, {.class_ = kCrusader}, re()), UE::WrongJob);
+	EXPECT_EQ(ec::check_use_item(knight_only, {.class_ = kSwordman}, re()), UE::WrongJob);
+	EXPECT_EQ(ec::check_use_item({}, {.cant_consume = true}, re()), UE::CantConsume);
+	// The first failing check wins: sex is checked before level.
+	EXPECT_EQ(ec::check_use_item({.sex = mr::Sex::Female, .equip_level_min = 99}, {}, re()), UE::WrongSex);
+}
+
+TEST(Economy, BR_MAP_049_ClassTierRenewalVersusPreRenewal) {
+	using mr::Mode;
+	constexpr std::uint32_t third = ec::kJoblThird;
+	constexpr std::uint32_t third_upper = ec::kJoblThird | ec::kJoblUpper;
+	constexpr std::uint32_t fourth = ec::kJoblFourth | ec::kJoblThird | ec::kJoblUpper;
+	// Normal items: only classes without upper/baby/third/fourth bits.
+	EXPECT_TRUE(ec::item_class_allows(ec::kItemJobNormal, kKnight, Mode::Renewal));
+	EXPECT_FALSE(ec::item_class_allows(ec::kItemJobNormal, ec::kJoblUpper | kKnight, Mode::Renewal));
+	// Transcendent items: pre-renewal also lets third jobs use them; renewal excludes them.
+	EXPECT_TRUE(ec::item_class_allows(ec::kItemJobUpper, ec::kJoblUpper | kKnight, Mode::Renewal));
+	EXPECT_FALSE(ec::item_class_allows(ec::kItemJobUpper, third_upper, Mode::Renewal));
+	EXPECT_TRUE(ec::item_class_allows(ec::kItemJobUpper, third, Mode::PreRenewal));
+	// Third-job items: pre-renewal any third-job bit serves any third job; renewal matches exactly.
+	EXPECT_TRUE(ec::item_class_allows(ec::kItemJobThirdBaby, third, Mode::PreRenewal));
+	EXPECT_FALSE(ec::item_class_allows(ec::kItemJobThirdBaby, third, Mode::Renewal));
+	EXPECT_TRUE(ec::item_class_allows(ec::kItemJobThird, third, Mode::Renewal));
+	EXPECT_FALSE(ec::item_class_allows(ec::kItemJobThird, third_upper, Mode::Renewal));
+	EXPECT_TRUE(ec::item_class_allows(ec::kItemJobThirdUpper, third_upper, Mode::Renewal));
+	// Fourth-job items: renewal only (pre-renewal has no fourth-job rule).
+	EXPECT_TRUE(ec::item_class_allows(ec::kItemJobFourth, fourth, Mode::Renewal));
+	EXPECT_FALSE(ec::item_class_allows(ec::kItemJobThirdUpper, fourth, Mode::Renewal));
+	EXPECT_FALSE(ec::item_class_allows(ec::kItemJobFourth, fourth, Mode::PreRenewal));
+	// Through check_use_item, as the last check.
+	const ec::UsableItem trans_only{.class_upper = ec::kItemJobUpper};
+	EXPECT_EQ(ec::check_use_item(trans_only, {.class_ = third}, re()), UE::WrongClassTier);
+	EXPECT_EQ(ec::check_use_item(trans_only, {.class_ = third}, pre_re()), UE::None);
 }
 
 TEST(Economy, BR_MAP_050_StorageCapacity300Vip600) {

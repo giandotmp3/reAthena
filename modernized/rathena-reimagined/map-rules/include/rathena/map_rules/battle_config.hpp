@@ -4,8 +4,13 @@
 // conf/battle/*.conf, not the legacy code default. Field names match the conf keys so the
 // generated rathena::core::BattleConfig (581 knobs) can replace this struct field-for-field.
 //
-// Every knob here also exists in core/include/rathena/core/knobs.def.hpp with the same
-// shipped default; when this unit moves into src/rules/ this struct becomes core's BattleConfig.
+// Every knob here also exists in core's BattleConfig with the same shipped default (hand-typed in
+// core/include/rathena/core/knobs.def.hpp, or generated into battle_knobs.gen.hpp); when this unit
+// moves into src/rules/ this struct becomes core's BattleConfig.
+//
+// A few knobs ship a different value per mode because their conf line is commented out and the
+// legacy code default depends on RENEWAL. The field initialisers are the renewal values;
+// `BattleConfig::shipped(Mode::PreRenewal)` gives the pre-renewal ones.
 #pragma once
 
 #include <cstdint>
@@ -28,6 +33,9 @@ struct BattleConfig {
 	std::int32_t vip_storage_increase = 300; // BR-MAP-050
 	std::int32_t natural_healhp_interval = 6000; // BR-MAP-055
 	std::int32_t natural_healsp_interval = 8000; // BR-MAP-055
+	std::int32_t natural_heal_skill_interval = 10000; // BR-MAP-055
+	std::int32_t bone_drop = 0;             // BR-MAP-033 (0 off, 1 PvP maps only, 2 everywhere)
+	std::int32_t open_box_weight_rate = 90; // BR-MAP-049 (%; pre-renewal 70, conf line commented out)
 
 	// battle.conf
 	std::int32_t min_hitrate = 5;     // BR-MAP-011
@@ -45,6 +53,9 @@ struct BattleConfig {
 	std::int32_t default_fixed_castrate = 20; // BR-MAP-052
 	std::int32_t delay_rate = 100;            // BR-MAP-053
 	std::int32_t min_skill_delay_limit = 100; // BR-MAP-053
+	bool delay_dependon_dex = false;          // BR-MAP-053
+	bool delay_dependon_agi = false;          // BR-MAP-053
+	std::int32_t no_skill_delay = 0x2;        // BR-MAP-053 (BL_* mask; shipped 2 = BL_MOB)
 
 	// items.conf
 	std::int32_t vending_max_value = 1000000000; // BR-MAP-042 [§5.6 drift: 10,000,000 -> 1,000,000,000]
@@ -52,6 +63,8 @@ struct BattleConfig {
 	std::int32_t vending_tax_min = 100000000;    // BR-MAP-044
 	std::int32_t min_shop_buy = 1;               // BR-MAP-047
 	std::int32_t min_shop_sell = 0;              // BR-MAP-047
+	std::int32_t item_use_interval = 100;        // BR-MAP-049 (ms)
+	std::int32_t cashfood_use_interval = 60000;  // BR-MAP-049 (ms)
 
 	// drops.conf
 	std::int32_t item_rate_common = 100;       // BR-MAP-035
@@ -75,9 +88,27 @@ struct BattleConfig {
 	std::int32_t death_penalty_base = 100; // 1/10000 units [§5.6 drift: 0 -> 100]
 	std::int32_t death_penalty_job = 100;  // [§5.6 drift: 0 -> 100]
 
+	// monster.conf
+	bool mobs_level_up = false;             // BR-MAP-032
+	std::int32_t mobs_level_up_exp_rate = 1; // BR-MAP-032 (exp bonus % per level gained)
+	std::int32_t show_mob_info = 0;         // BR-MAP-032 (bit 4: the name shows the level)
+
+	// misc.conf
+	bool duel_allow_teleport = false;       // BR-MAP-049
+
 	// guild.conf / party.conf
 	std::int32_t guild_exp_limit = 50;       // BR-MAP-027 (max tax %)
 	std::int32_t party_even_share_bonus = 0; // BR-MAP-028
+
+	/// Shipped defaults for `mode`: the field initialisers plus the mode-dependent knobs.
+	static BattleConfig shipped(Mode mode) {
+		BattleConfig c;
+		c.mode = mode;
+		if (mode == Mode::PreRenewal) {
+			c.open_box_weight_rate = 70; // battle.cpp battle_data[] #else RENEWAL
+		}
+		return c;
+	}
 };
 
 } // namespace rathena::map_rules

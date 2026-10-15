@@ -202,7 +202,149 @@ EquipError check_equip(const ItemDef& item, const EquipCandidate& who) {
 	return EquipError::None;
 }
 
-std::optional<UseItemError> check_use_item(const ItemDef&, const EquipCandidate&, Tick) { return std::nullopt; }
+bool job_can_use_item(const UsableItem& item, std::uint32_t class_) {
+	// Every MAPID_* base job is below 64; legacy shifts unchecked (undefined above 63), here no bit matches.
+	const std::uint32_t base = class_ & kMapIdFirstMask;
+	const std::uint64_t job = base < 64 ? 1ULL << base : 0;
+	std::size_t index = 0; // base job
+	if ((class_ & kJobl21) != 0) {
+		index = 1;
+	} else if ((class_ & kJobl22) != 0) {
+		index = 2;
+	}
+	return (item.class_base[index] & job) != 0;
+}
+
+bool item_class_allows(std::uint8_t up, std::uint32_t c, Mode mode) {
+	if ((up & kItemJobNormal) != 0 && (c & (kJoblUpper | kJoblBaby | kJoblThird | kJoblFourth)) == 0) {
+		return true;
+	}
+	if (mode == Mode::PreRenewal) {
+		if ((up & kItemJobUpper) != 0 && (c & (kJoblUpper | kJoblThird)) != 0) {
+			return true; // third jobs may use transcendent items
+		}
+		if ((up & kItemJobBaby) != 0 && (c & kJoblBaby) != 0) {
+			return true;
+		}
+		// Any third-job item for any third job.
+		return (up & (kItemJobThird | kItemJobThirdUpper | kItemJobThirdBaby)) != 0 && (c & kJoblThird) != 0;
+	}
+	const bool third = (c & kJoblThird) != 0;
+	const bool fourth = (c & kJoblFourth) != 0;
+	const bool upper = (c & kJoblUpper) != 0;
+	const bool baby = (c & kJoblBaby) != 0;
+	if ((up & kItemJobUpper) != 0 && upper && !third) {
+		return true;
+	}
+	if ((up & kItemJobBaby) != 0 && baby && !third) {
+		return true;
+	}
+	if ((up & kItemJobThird) != 0 && third && !upper && !baby && !fourth) {
+		return true;
+	}
+	if ((up & kItemJobThirdUpper) != 0 && third && upper && !fourth) {
+		return true;
+	}
+	if ((up & kItemJobThirdBaby) != 0 && third && baby && !fourth) {
+		return true;
+	}
+	return (up & kItemJobFourth) != 0 && fourth;
+}
+
+UseItemError check_use_item(const UsableItem& item, const UseItemContext& ctx, const BattleConfig& cfg) {
+	using E = UseItemError;
+	if (item.type == ItemType::Other) {
+		return E::NotConsumable;
+	}
+	if (ctx.unconditional) {
+		return E::None;
+	}
+	if (ctx.map_no_item_consumption) {
+		return E::MapNoItemConsumption;
+	}
+	// DIFF_TICK(canuseitem_tick, now) > 0
+	if (ctx.can_use_item_tick > ctx.now || (item.cash_food && ctx.can_use_cash_food_tick > ctx.now)) {
+		return E::UseInterval;
+	}
+	if (item.sitting_restricted && ctx.sitting && ctx.group_level < item.sitting_override) {
+		return E::Sitting;
+	}
+	if (ctx.storage_open && item.type != ItemType::Cash) {
+		return E::StorageOpen;
+	}
+	if (item.dead_branch && (ctx.map_no_branch || ctx.map_gvg)) {
+		return E::DeadBranchMap;
+	}
+	if (item.no_teleport_group) {
+		if (ctx.map_no_teleport || ctx.map_gvg) {
+			return E::NoTeleportMap;
+		}
+		if (ctx.in_duel && !cfg.duel_allow_teleport) {
+			return E::DuelNoTeleport;
+		}
+	}
+	if (item.no_return_group) {
+		if (ctx.map_no_return) {
+			return E::NoReturnMap;
+		}
+		if (ctx.in_duel && !cfg.duel_allow_teleport) {
+			return E::DuelNoTeleport;
+		}
+	}
+	if (item.giant_fly_wing) {
+		if (!ctx.in_party || !ctx.party_leader) {
+			return E::NotPartyLeader;
+		}
+		if (!ctx.party_member_alive_on_map) {
+			return E::NoPartyMemberOnMap;
+		}
+	}
+	if (item.mercenary_potion != MercenaryPotion::None) {
+		if (!ctx.has_mercenary || ctx.mercenary_cant_consume ||
+		    (item.mercenary_potion == MercenaryPotion::Awakening && ctx.mercenary_level < 40) ||
+		    (item.mercenary_potion == MercenaryPotion::Berserk && ctx.mercenary_level < 80)) {
+			return E::MercenaryUnavailable;
+		}
+	}
+	if (item.neuralizer && !ctx.map_reset) {
+		return E::NotResetMap;
+	}
+	if (item.mercenary_scroll && ctx.has_mercenary) {
+		return E::MercenaryScroll;
+	}
+	if (item.box || item.type == ItemType::Cash) {
+		if (ctx.weight_pct >= cfg.open_box_weight_rate) {
+			return E::Overweight;
+		}
+		// "The <= is intentional": official servers need 11 free slots.
+		if (ctx.free_slots <= 10) {
+			return E::InventoryFull;
+		}
+	}
+	if (item.sex && *item.sex != ctx.sex) {
+		return E::WrongSex;
+	}
+	if (item.equip_level_min != 0 && ctx.base_level < item.equip_level_min) {
+		return E::LevelTooLow;
+	}
+	if (item.equip_level_max != 0 && ctx.base_level > item.equip_level_max) {
+		return E::LevelTooHigh;
+	}
+	if (!job_can_use_item(item, ctx.class_)) {
+		return E::WrongJob;
+	}
+	if (ctx.cant_consume) {
+		return E::CantConsume;
+	}
+	if (!item_class_allows(item.class_upper, ctx.class_, cfg.mode)) {
+		return E::WrongClassTier;
+	}
+	return E::None;
+}
+
+ItemUseTicks after_item_use(Tick now, bool cash_food, Tick previous_cash_food_tick, const BattleConfig& cfg) {
+	return {now + cfg.item_use_interval, cash_food ? now + cfg.cashfood_use_interval : previous_cash_food_tick};
+}
 
 std::int32_t storage_capacity(bool vip, const BattleConfig& cfg) {
 	const std::int32_t cap = vip ? kMinStorage + cfg.vip_storage_increase : kMinStorage;

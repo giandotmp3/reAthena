@@ -1,6 +1,10 @@
 // Acceptance tests: rules/progression, BR-MAP-021..034 (spec §5.4, CAP-15).
 #include <gtest/gtest.h>
 
+#include <array>
+#include <optional>
+#include <vector>
+
 #include "rathena/map_rules/progression.hpp"
 
 namespace mr = rathena::map_rules;
@@ -134,23 +138,199 @@ TEST(Progression, BR_MAP_031_SuperNoviceAngelAt99PercentOncePerLevel) {
 	EXPECT_FALSE(pg::super_novice_angel(999, 1000, true));
 }
 
-TEST(Progression, BR_MAP_032_MobLevelsUpOnKill) {
-	if (!pg::mob_level_after_kill(10, true).has_value()) {
-		GTEST_SKIP() << "PENDING BR-MAP-032: mob level-up on kill (pc.cpp:9922-9935) not extracted";
-	}
-	EXPECT_EQ(*pg::mob_level_after_kill(10, true), 11);
+// --- BR-MAP-032: pc.cpp pc_dead (case BL_MOB), status.cpp status_calc_mob_, mob.cpp mob_dead ----
+
+namespace {
+mr::BattleConfig mobs_level_up_on() {
+	auto c = re();
+	c.mobs_level_up = true;
+	return c;
+}
+} // namespace
+
+TEST(Progression, BR_MAP_032_MobLevelsUpOnKillWhenEnabled) {
+	// Shipped monster.conf: mobs_level_up: no.
+	EXPECT_FALSE(pg::mob_level_after_kill({.mob_level = 10, .mob_hp = 500}, re()).levelled);
+	const auto r = pg::mob_level_after_kill({.mob_level = 10, .mob_hp = 500, .victim_max_base_level = 99},
+	                                        mobs_level_up_on());
+	EXPECT_TRUE(r.levelled);
+	EXPECT_EQ(r.level, 11);
+	EXPECT_FALSE(r.refresh_name); // show_mob_info 0
+	auto cfg = mobs_level_up_on();
+	cfg.show_mob_info = 4;
+	EXPECT_TRUE(pg::mob_level_after_kill({.mob_level = 10, .mob_hp = 500}, cfg).refresh_name);
 }
 
-TEST(Progression, BR_MAP_033_SkullDropOnPk) {
-	if (!pg::drops_skull_on_pk(true, true).has_value()) {
-		GTEST_SKIP() << "PENDING BR-MAP-033: skull drop on PK (pc.cpp:9981-9993) not extracted";
-	}
-	EXPECT_TRUE(*pg::drops_skull_on_pk(true, true));
+TEST(Progression, BR_MAP_032_MobLevelUpCappedByVictimMaxLevelGuardiansAndSummonsExcluded) {
+	const auto cfg = mobs_level_up_on();
+	// `md->level < pc_maxbaselv(sd)`: strict, against the *victim's* max base level.
+	EXPECT_FALSE(pg::mob_level_after_kill({.mob_level = 99, .mob_hp = 1, .victim_max_base_level = 99}, cfg).levelled);
+	const auto r = pg::mob_level_after_kill({.mob_level = 98, .mob_hp = 1, .victim_max_base_level = 99}, cfg);
+	EXPECT_TRUE(r.levelled);
+	EXPECT_EQ(r.level, 99);
+	EXPECT_TRUE(pg::mob_level_after_kill({.mob_level = 99, .mob_hp = 1, .victim_max_base_level = 200}, cfg).levelled);
+	EXPECT_FALSE(pg::mob_level_after_kill({.mob_level = 10, .mob_hp = 0}, cfg).levelled); // md->status.hp == 0
+	EXPECT_FALSE(pg::mob_level_after_kill({.mob_level = 10, .mob_hp = 1, .guardian = true}, cfg).levelled);
+	const auto summon = pg::mob_level_after_kill({.mob_level = 10, .mob_hp = 1, .summoned_ai = true}, cfg);
+	EXPECT_FALSE(summon.levelled);
+	EXPECT_EQ(summon.level, 10);
 }
 
-TEST(Progression, BR_MAP_034_NightmareItemDrop) {
+TEST(Progression, BR_MAP_032_LevelUpHealIsTenPercentOfCurrentHp) {
+	// status_percent_heal(src, 10, 0) -> apply_rate(status->hp, 10): of current HP, not max HP.
+	EXPECT_EQ(pg::mob_level_up_heal(500, 1000), 50);
+	EXPECT_EQ(pg::mob_level_up_heal(5, 1000), 1);   // 0 -> at least 1
+	EXPECT_EQ(pg::mob_level_up_heal(995, 1000), 5); // status_heal caps at max HP
+	EXPECT_EQ(pg::mob_level_up_heal(1000, 1000), 0);
+	// apply_rate divides first above 100000: 123456 / 100 * 10 = 12340 (not 12345).
+	EXPECT_EQ(pg::mob_level_up_heal(123456, 500000), 12340);
+}
+
+TEST(Progression, BR_MAP_032_LevelledMobStatusAndExpBonus) {
+	const pg::MobBaseStatus db{10, 10, 10, 10, 10, 10, 1000, 100, 200};
+	// status_calc_mob_ flag&1, diff 3: stats 13; max_hp 1000 + 3 x 13 (the raised VIT) = 1039;
+	// max_sp 100 + 3 x 13 = 139; speed 200 - 3 = 197.
+	const auto s = pg::levelled_mob_status(db, 13, 10, mobs_level_up_on());
+	EXPECT_EQ(s.str, 13);
+	EXPECT_EQ(s.luk, 13);
+	EXPECT_EQ(s.max_hp, 1039);
+	EXPECT_EQ(s.max_sp, 139);
+	EXPECT_EQ(s.speed, 197);
+	// Speed never drops below 10: cap_value(3, 0, 12 - 10) = 2.
+	auto fast = db;
+	fast.speed = 12;
+	EXPECT_EQ(pg::levelled_mob_status(fast, 13, 10, mobs_level_up_on()).speed, 10);
+	// Disabled, or not above the db level: base status unchanged.
+	EXPECT_EQ(pg::levelled_mob_status(db, 13, 10, re()).max_hp, 1000);
+	EXPECT_EQ(pg::levelled_mob_status(db, 10, 10, mobs_level_up_on()).str, 10);
+	// mob_dead: bonus += (level - db level) x mobs_level_up_exp_rate (shipped 1).
+	EXPECT_EQ(pg::mob_level_up_exp_bonus(13, 10, mobs_level_up_on()), 3);
+	auto rate5 = mobs_level_up_on();
+	rate5.mobs_level_up_exp_rate = 5;
+	EXPECT_EQ(pg::mob_level_up_exp_bonus(13, 10, rate5), 15);
+	EXPECT_EQ(pg::mob_level_up_exp_bonus(13, 10, re()), 0);
+}
+
+// --- BR-MAP-033: pc.cpp pc_dead (bone_drop) ---------------------------------------------------
+
+TEST(Progression, BR_MAP_033_SkullDropFollowsBoneDrop) {
+	EXPECT_FALSE(pg::death_skull_drop({150000}, true, re()).has_value()); // shipped bone_drop: 0
+	auto pvp_only = re();
+	pvp_only.bone_drop = 1;
+	EXPECT_TRUE(pg::death_skull_drop({150000}, true, pvp_only).has_value());
+	EXPECT_FALSE(pg::death_skull_drop({150000}, false, pvp_only).has_value());
+	auto always = re();
+	always.bone_drop = 2;
+	EXPECT_TRUE(pg::death_skull_drop({150000}, false, always).has_value());
+}
+
+TEST(Progression, BR_MAP_033_SkullCarriesVictimCharIdAsCreator) {
+	auto cfg = re();
+	cfg.bone_drop = 2;
+	const auto skull = pg::death_skull_drop({150000}, false, cfg);
+	ASSERT_TRUE(skull.has_value());
+	EXPECT_EQ(skull->nameid, 7420); // ITEMID_SKULL_
+	EXPECT_EQ(skull->amount, 1);
+	EXPECT_TRUE(skull->identify);
+	// 150000 = 0x0002'49F0 -> GetWord(.., 0) = 0x49F0, GetWord(.., 1) = 0x0002.
+	const std::array<std::int32_t, 4> cards{0x00FE, 0, 0x49F0, 2};
+	EXPECT_EQ(skull->card, cards);
+}
+
+// --- BR-MAP-034: pc.cpp pc_dead (MF_PVP_NIGHTMAREDROP) ---------------------------------------
+
+namespace {
+std::vector<pg::NightmareSlot> nightmare_inventory() {
+	return {
+	    {},                                               // 0: empty
+	    {.nameid = 501, .amount = 10},                    // 1: potions
+	    {.nameid = 2301, .amount = 1, .equipped = true},  // 2: equipped armor
+	    {.nameid = 909, .amount = 5, .droppable = false}, // 3: pc_candrop fails
+	};
+}
+} // namespace
+
+TEST(Progression, BR_MAP_034_RandomDropRollsChanceThenPicksAnEligibleSlot) {
+	const pg::NightmareDropRule rule{-1, 5000, pg::kNightmareDropAll};
+	// Eligible slots are [1, 2]. rnd()%10000 = 4999 < 5000, then rnd() % 2 = 1 -> slot 2.
+	mr::SequenceRng hit{{4999, 1}};
+	EXPECT_EQ(pg::nightmare_drop_pick(rule, nightmare_inventory(), hit), std::optional<std::size_t>{2});
+	EXPECT_EQ(hit.calls(), 2u);
+	mr::SequenceRng miss{{5000}};
+	EXPECT_FALSE(pg::nightmare_drop_pick(rule, nightmare_inventory(), miss).has_value());
+	EXPECT_EQ(miss.calls(), 1u);
+	// "inventory" only takes unequipped items: eligible [1].
+	mr::SequenceRng inv{{0, 7}};
+	EXPECT_EQ(pg::nightmare_drop_pick({-1, 5000, pg::kNightmareDropInventory}, nightmare_inventory(), inv),
+	          std::optional<std::size_t>{1});
+	// "equip" only takes equipped items: eligible [2].
+	mr::SequenceRng eq{{0, 7}};
+	EXPECT_EQ(pg::nightmare_drop_pick({-1, 5000, pg::kNightmareDropEquip}, nightmare_inventory(), eq),
+	          std::optional<std::size_t>{2});
+	// Nothing eligible: no roll at all.
+	mr::SequenceRng none{{0}};
+	EXPECT_FALSE(pg::nightmare_drop_pick(rule, {{}, {.nameid = 909, .amount = 1, .droppable = false}}, none));
+	EXPECT_EQ(none.calls(), 0u);
+}
+
+TEST(Progression, BR_MAP_034_ItemDropRollsPerMatchingSlotBeforeTheTypeCheck) {
+	const std::vector<pg::NightmareSlot> slots{
+	    {.nameid = 501, .amount = 1},                   // unequipped
+	    {.nameid = 501, .amount = 1, .equipped = true}, // equipped
+	};
+	// Legacy condition order: nameid && pc_candrop && rnd()%10000 < per && type. Slot 0 passes
+	// its roll but is the wrong type, and the roll is still spent; slot 1 rolls again and drops.
+	mr::SequenceRng rng{{100, 200}};
+	EXPECT_EQ(pg::nightmare_drop_pick({501, 3000, pg::kNightmareDropEquip}, slots, rng),
+	          std::optional<std::size_t>{1});
+	EXPECT_EQ(rng.calls(), 2u);
+	// Each matching slot gets its own chance: the first roll fails, the second succeeds.
+	mr::SequenceRng second{{3000, 2999}};
+	EXPECT_EQ(pg::nightmare_drop_pick({501, 3000, pg::kNightmareDropAll}, slots, second),
+	          std::optional<std::size_t>{1});
+	// A 100% rule still consumes a roll (rnd()%10000 < 10000).
+	mr::SequenceRng sure{{9999}};
+	EXPECT_EQ(pg::nightmare_drop_pick({501, 10000, pg::kNightmareDropAll}, slots, sure),
+	          std::optional<std::size_t>{0});
+	EXPECT_EQ(sure.calls(), 1u);
+	// Slots without the item are skipped without a roll; drop id 0 is ignored.
+	mr::SequenceRng skip{{0}};
+	EXPECT_FALSE(pg::nightmare_drop_pick({607, 10000, pg::kNightmareDropAll}, slots, skip).has_value());
+	EXPECT_FALSE(pg::nightmare_drop_pick({0, 10000, pg::kNightmareDropAll}, slots, skip).has_value());
+	EXPECT_FALSE(pg::nightmare_drop_pick({909, 10000, pg::kNightmareDropAll}, nightmare_inventory(), skip));
+	EXPECT_EQ(skip.calls(), 0u);
+}
+
+TEST(Progression, BR_MAP_034_RulesApplyInOrderAndSeeEarlierDrops) {
 	mr::SequenceRng rng{{0}};
-	if (!pg::nightmare_drop_indices(10, rng).has_value()) {
-		GTEST_SKIP() << "PENDING BR-MAP-034: nightmare drop (pc.cpp:10059-10110) not extracted";
-	}
+	const std::vector<pg::NightmareDropRule> rules{{2301, 10000, pg::kNightmareDropAll},
+	                                               {2301, 10000, pg::kNightmareDropAll}};
+	// The only armor drops on the first rule (one unit, unequipped first); the second finds none.
+	EXPECT_EQ(pg::nightmare_drops(rules, nightmare_inventory(), rng), (std::vector<std::size_t>{2}));
+	// One unit per drop: a stack of 10 potions drops once per rule.
+	EXPECT_EQ(pg::nightmare_drops({{501, 10000, pg::kNightmareDropAll}, {501, 10000, pg::kNightmareDropAll}},
+	                              nightmare_inventory(), rng),
+	          (std::vector<std::size_t>{1, 1}));
+	// A dropped equip is unequipped, so a later "equip" rule no longer sees the rest of the stack.
+	const std::vector<pg::NightmareSlot> two{{.nameid = 2301, .amount = 2, .equipped = true}};
+	EXPECT_EQ(pg::nightmare_drops({{2301, 10000, pg::kNightmareDropAll}, {2301, 10000, pg::kNightmareDropEquip}},
+	                              two, rng),
+	          (std::vector<std::size_t>{0}));
 }
+
+TEST(Progression, BR_MAP_034_RandomDropAlwaysPicksAnEligibleSlotSeeded) {
+	mr::SeededRng rng{34};
+	const auto inv = nightmare_inventory();
+	int drops = 0;
+	for (int i = 0; i < 2000; ++i) {
+		const auto pick = pg::nightmare_drop_pick({-1, 2500, pg::kNightmareDropAll}, inv, rng);
+		if (pick) {
+			ASSERT_TRUE(*pick == 1 || *pick == 2);
+			++drops;
+		}
+		ASSERT_FALSE(pg::nightmare_drop_pick({-1, 0, pg::kNightmareDropAll}, inv, rng).has_value());
+	}
+	EXPECT_GT(drops, 400); // about 25% of 2000
+	EXPECT_LT(drops, 600);
+}
+

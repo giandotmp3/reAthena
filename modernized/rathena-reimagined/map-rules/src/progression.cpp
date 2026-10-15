@@ -179,10 +179,130 @@ bool super_novice_angel(std::int64_t exp, std::int64_t next, bool already_trigge
 	return exp * 1000 / next >= 990;
 }
 
-std::optional<std::int32_t> mob_level_after_kill(std::int32_t, bool) { return std::nullopt; }
+MobLevelUp mob_level_after_kill(const MobKillLevelUpInput& in, const BattleConfig& cfg) {
+	MobLevelUp r;
+	r.level = in.mob_level;
+	// pc_dead: mobs_level_up && md->status.hp && (uint32)md->level < pc_maxbaselv(sd)
+	//          && !md->guardian_data && !md->special_state.ai
+	if (!cfg.mobs_level_up || in.mob_hp == 0 || in.mob_level >= in.victim_max_base_level || in.guardian ||
+	    in.summoned_ai) {
+		return r;
+	}
+	r.levelled = true;
+	r.level = in.mob_level + 1;
+	r.refresh_name = (cfg.show_mob_info & 4) != 0;
+	return r;
+}
 
-std::optional<bool> drops_skull_on_pk(bool, bool) { return std::nullopt; }
+std::int32_t mob_level_up_heal(std::int32_t hp, std::int32_t max_hp) {
+	// status_percent_change(hp_rate = 10): apply_rate(status->hp, 10), at least 1.
+	std::int64_t heal = hp > 100000 ? hp / 100 * 10 : static_cast<std::int64_t>(hp) * 10 / 100;
+	if (heal == 0) {
+		heal = 1;
+	}
+	// status_heal never heals past max_hp.
+	return static_cast<std::int32_t>(std::clamp<std::int64_t>(heal, 0, std::max<std::int64_t>(
+	                                                                       static_cast<std::int64_t>(max_hp) - hp, 0)));
+}
 
-std::optional<std::vector<std::int32_t>> nightmare_drop_indices(std::int32_t, Rng&) { return std::nullopt; }
+MobBaseStatus levelled_mob_status(const MobBaseStatus& db, std::int32_t level, std::int32_t db_level,
+                                  const BattleConfig& cfg) {
+	MobBaseStatus s = db;
+	if (!cfg.mobs_level_up || level <= db_level) {
+		return s;
+	}
+	const std::int32_t diff = level - db_level;
+	s.str += diff;
+	s.agi += diff;
+	s.vit += diff;
+	s.int_ += diff;
+	s.dex += diff;
+	s.luk += diff;
+	s.max_hp += static_cast<std::int64_t>(diff) * s.vit;
+	s.max_sp += static_cast<std::int64_t>(diff) * s.int_;
+	// cap_value(diff, 0, speed - 10), in the macro's order (the max bound is tested first).
+	const std::int32_t hi = s.speed - 10;
+	s.speed -= diff >= hi ? hi : (diff <= 0 ? 0 : diff);
+	return s;
+}
+
+std::int32_t mob_level_up_exp_bonus(std::int32_t level, std::int32_t db_level, const BattleConfig& cfg) {
+	if (!cfg.mobs_level_up || level <= db_level) {
+		return 0;
+	}
+	return (level - db_level) * cfg.mobs_level_up_exp_rate;
+}
+
+std::optional<Item> death_skull_drop(CharId victim, bool pvp_map, const BattleConfig& cfg) {
+	if (!(cfg.bone_drop == 2 || (cfg.bone_drop == 1 && pvp_map))) {
+		return std::nullopt;
+	}
+	const auto id = static_cast<std::uint32_t>(victim.value);
+	Item skull;
+	skull.nameid = kItemIdSkull;
+	skull.amount = 1;
+	skull.identify = true;
+	// GetWord(char_id, 0) / GetWord(char_id, 1).
+	skull.card = {kCard0Create, 0, static_cast<std::int32_t>(id & 0xFFFFu), static_cast<std::int32_t>(id >> 16)};
+	return skull;
+}
+
+namespace {
+
+bool nightmare_type_matches(std::uint8_t type, const NightmareSlot& slot) {
+	return ((type & kNightmareDropInventory) != 0 && !slot.equipped) ||
+	       ((type & kNightmareDropEquip) != 0 && slot.equipped) || type == kNightmareDropAll;
+}
+
+// Legacy `rnd()%10000 < per` always consumes a roll, even when per >= 10000 (unlike Rng::chance).
+bool nightmare_roll(std::int32_t per, Rng& rng) { return static_cast<std::int64_t>(rng.below(10000)) < per; }
+
+} // namespace
+
+std::optional<std::size_t> nightmare_drop_pick(const NightmareDropRule& rule, const std::vector<NightmareSlot>& slots,
+                                               Rng& rng) {
+	if (rule.drop_id == -1) {
+		std::vector<std::size_t> eligible;
+		for (std::size_t i = 0; i < slots.size(); ++i) {
+			if (slots[i].nameid == 0 || !slots[i].droppable) {
+				continue;
+			}
+			if (nightmare_type_matches(rule.type, slots[i])) {
+				eligible.push_back(i);
+			}
+		}
+		if (eligible.empty() || !nightmare_roll(rule.drop_per, rng)) {
+			return std::nullopt;
+		}
+		return eligible[rng.below(static_cast<std::uint32_t>(eligible.size()))];
+	}
+	if (rule.drop_id > 0) {
+		for (std::size_t i = 0; i < slots.size(); ++i) {
+			if (slots[i].nameid == rule.drop_id && slots[i].droppable && nightmare_roll(rule.drop_per, rng) &&
+			    nightmare_type_matches(rule.type, slots[i])) {
+				return i;
+			}
+		}
+	}
+	return std::nullopt; // drop_id 0 (an invalid item id in the mapflag) is skipped
+}
+
+std::vector<std::size_t> nightmare_drops(const std::vector<NightmareDropRule>& rules, std::vector<NightmareSlot> slots,
+                                         Rng& rng) {
+	std::vector<std::size_t> dropped;
+	for (const auto& rule : rules) {
+		const auto pick = nightmare_drop_pick(rule, slots, rng);
+		if (!pick) {
+			continue;
+		}
+		dropped.push_back(*pick);
+		auto& slot = slots[*pick];
+		slot.equipped = false; // pc_unequipitem(sd, n, 3)
+		if (--slot.amount <= 0) {
+			slot = NightmareSlot{}; // pc_dropitem -> pc_delitem empties the slot
+		}
+	}
+	return dropped;
+}
 
 } // namespace rathena::map_rules::progression
