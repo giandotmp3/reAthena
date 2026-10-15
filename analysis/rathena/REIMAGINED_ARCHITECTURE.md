@@ -76,7 +76,7 @@ tests/           GoogleTest acceptance tests, one file per rule group, BR-ID in 
 
 **Scaffold staging area** (Phase E): new libraries and the rebuilt processes are scaffolded first under `modernized/rathena-reimagined/<unit>/` with their acceptance tests. Each moves into `src/` once its tests are green and it builds on all four CI toolchains.
 
-**Dependency rule** (enforced by CMake target visibility and a CI check): `rules → domain, core/{Rng, BattleConfig}` only. Rules never touch sockets, SQL or globals. `BattleConfig` is an immutable typed value covering the 581 `battle_config` knobs, generated from the conf schema, with the **shipped values as code defaults** (fixes spec §5.6 drift). It is passed explicitly to rules.
+**Dependency rule** (enforced by CMake target visibility and a CI check): `rules → domain, core/{Rng, BattleConfig}` only. Rules never touch sockets, SQL or globals. `BattleConfig` is an immutable typed value covering the `battle_config` knobs (627 entries in `battle_data[]`; first estimated at 581), generated from the conf schema, with the **shipped values as code defaults** (fixes spec §5.6 drift). It is passed explicitly to rules.
 
 ## 3. Service boundaries
 
