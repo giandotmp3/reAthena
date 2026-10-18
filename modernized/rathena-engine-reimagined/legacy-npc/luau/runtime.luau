@@ -139,6 +139,19 @@ end
 function Rt:dropPlayer(rid: number)
 	local p = self.players[rid]
 	if not p then return end
+	-- npc_timerevent_quit (npc.cpp:1594): a player-attached NPC timer that is still running is deleted and the NPC's OnTimerQuit runs once for the player
+	local qn = p.timerNpc
+	if qn then
+		local tm = qn.tm
+		if tm and tm.player == p and tm.pending then
+			tm.token += 1
+			tm.pending = false
+			tm.running = false
+			tm.player = nil
+			if self:hasEvent(qn, "ontimerquit") then self:runLabel(qn, "OnTimerQuit", p) end
+		end
+		p.timerNpc = nil
+	end
 	Vars.flush(p.perm, p.acc, p.acc2)
 	p.timerSeq += 1
 	p.timers = {}
@@ -502,7 +515,10 @@ function Rt:timerEvents(entry)
 end
 function Rt:timerStart(entry, player)
 	local tm = self:timerState(entry)
-	if player then tm.player = player end
+	if player then
+		tm.player = player
+		player.timerNpc = entry -- sd->npc_timer_id: one attached NPC timer per player
+	end
 	if tm.running then return end
 	local evs = self:timerEvents(entry)
 	local j

@@ -14,12 +14,14 @@
 local Declsplit = require("./declsplit")
 local Parser = require("./parser")
 local Lower = require("./lower")
+local Cache = require("./cache")
 
 local sub, find, lower, byte = string.sub, string.find, string.lower, string.byte
 
 local Loader = {}
 Loader.__index = Loader
 
+-- opts.cache = { get(key) -> blob?, put(key, blob) }: optional binary cache of lowered programs (cache.luau), checked before a parse and filled after
 -- opts.builtins: argument-spec table (data builtins.luau); opts.readText(path) -> string: optional provider used when a file was added
 -- without its text (the text is then re-read for every parse and never retained)
 function Loader.new(opts)
@@ -27,6 +29,7 @@ function Loader.new(opts)
 	return setmetatable({
 		builtins = opts.builtins or require("./builtins"),
 		readText = opts.readText,
+		cache = opts.cache,
 		files = {},      -- path -> { path, text|nil, order }
 		fileOrder = {},
 		npcs = {},       -- exname -> entry (scripts and duplicates, in load order via npcList)
@@ -36,7 +39,7 @@ function Loader.new(opts)
 		uf = {},         -- lower function name -> true (parser input: `Name(args)` call syntax)
 		byLabel = {},    -- lower label -> array of entries (event labels only)
 		stats = { files = 0, scripts = 0, duplicates = 0, functions = 0, warps = 0, shops = 0, monsters = 0, mapflags = 0, errors = 0,
-			parsed = 0, parseFailed = 0 },
+			parsed = 0, parseFailed = 0, cacheHits = 0, cacheStores = 0 },
 		diagnostics = {},
 	}, Loader)
 end
@@ -199,6 +202,21 @@ function Loader:program(entry)
 	end
 	local text = self:text(entry.file)
 	local body = sub(text, entry.pos + 1, entry.endpos - 1)
+	local cache, ckey, chash = self.cache, nil, nil
+	if cache then
+		-- the body decides validity; function scripts change the parse of every body that calls them, so a cached program also records
+		-- nothing about them: callers invalidate the whole cache when the function set changes (cache key space is per load set)
+		ckey = entry.path .. ":" .. entry.line .. ":" .. entry.name
+		chash = Cache.hash(body)
+		local blob = cache.get(ckey)
+		local cached = blob and Cache.decode(blob, chash)
+		if cached then
+			cached.baseLine = entry.line
+			entry.prog = cached
+			self.stats.cacheHits += 1
+			return cached
+		end
+	end
 	local ast, info = Parser.parse(body, self.builtins, self.uf)
 	if not ast then
 		self.stats.parseFailed += 1
@@ -214,6 +232,10 @@ function Loader:program(entry)
 	prog.baseLine = entry.line
 	entry.prog = prog
 	self.stats.parsed += 1
+	if cache then
+		cache.put(ckey, Cache.encode(prog, chash))
+		self.stats.cacheStores += 1
+	end
 	return prog
 end
 

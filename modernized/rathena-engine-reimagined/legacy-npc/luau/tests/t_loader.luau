@@ -123,6 +123,54 @@ OnReal:
 	H.eq(table.concat(rt.loader.npcs.C.events, ","), "OnReal")
 end)
 
+H.case("LNPC-PARSE-007", "flat-op cache: a cached program runs exactly like a parsed one; a changed body, version or damaged blob is a miss", function()
+	local Cache = require("../cache")
+	local src = [[
+		.@t = 0;
+		for (.@i = 1; .@i <= 4; .@i++) { .@t += .@i * 2; }
+		switch (.@t) { case 20: mes "twenty " + .@t; break; default: mes "other"; }
+		mes "r=" + callsub(L_Add, 3, 4);
+		@arr[2] = 9; mes "" + getarraysize(@arr);
+		close;
+	L_Add:
+		return getarg(0) + getarg(1);
+	]]
+	local text = U.npc("C", src)
+	local store = {}
+	local cache = { get = function(k) return store[k] end, put = function(k, b) store[k] = b end }
+	local function playOn(rt)
+		local _, api = U.play(rt, "C", {}, 1)
+		local seq = {}
+		for _, r in api.log do seq[#seq + 1] = tostring(r[2]) end
+		return table.concat(seq, "|")
+	end
+	local rt1 = U.rt1(text, { cache = cache })
+	rt1.loader.cache = cache
+	local first = playOn(rt1)
+	H.eq(rt1.loader.stats.parsed, 1); H.eq(rt1.loader.stats.cacheStores, 1); H.eq(rt1.loader.stats.cacheHits, 0)
+	-- a "restart": a new runtime over the same text and the same cache store
+	local rt2 = U.rt1(text)
+	rt2.loader.cache = cache
+	local second = playOn(rt2)
+	H.eq(rt2.loader.stats.parsed, 0, "no parse after a cache hit"); H.eq(rt2.loader.stats.cacheHits, 1)
+	H.eq(second, first)
+	H.truthy(string.find(first, "twenty 20", 1, true) and string.find(first, "r=7", 1, true))
+	-- invalidation: another body, another hash, a damaged blob
+	local rt3 = U.rt1((string.gsub(text, "twenty", "TWENTY")))
+	rt3.loader.cache = cache
+	playOn(rt3)
+	H.eq(rt3.loader.stats.parsed, 1, "changed body: miss")
+	local key = next(store)
+	store[key] = string.sub(store[key], 1, 40)
+	local rt4 = U.rt1(text)
+	rt4.loader.cache = cache
+	playOn(rt4)
+	H.eq(rt4.loader.stats.parsed, 1, "truncated blob: miss, not a crash")
+	H.eq(Cache.decode("garbage", 1), nil)
+	H.eq(Cache.hash("a"), 0xE40C292C, "FNV-1a 32 test vector")
+	H.eq(Cache.hash("foobar"), 0xBF9CF968, "FNV-1a 32 test vector")
+end)
+
 -- Size test on a synthetic corpus (the renewal set is measured by tests/memory_test.py): the lazy index holds a small fraction of what the
 -- eager prototype pipeline keeps. collectgarbage("count") is available in sandboxes and in the CLI.
 H.case("LNPC-LAZY-008", "memory: the lazy index of a corpus is a small fraction of the eagerly lowered programs", function()

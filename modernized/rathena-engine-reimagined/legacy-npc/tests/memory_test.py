@@ -47,6 +47,11 @@ try:
     if p.returncode != 0 or not line:
         print('labels failed:\n%s\n%s' % (p.stdout[-2000:], p.stderr[-2000:])); sys.exit(1)
     lab = {k: v for k, v in (kv.split('=', 1) for kv in line[0].split()[1:])}
+    p = subprocess.run([args.luau, 'corpus_bench.luau', '-a', 'cache'], cwd=work, capture_output=True, text=True, timeout=3600)
+    line = [l for l in p.stdout.splitlines() if l.startswith('@bench')]
+    if p.returncode != 0 or not line:
+        print('cache failed:\n%s\n%s' % (p.stdout[-2000:], p.stderr[-2000:])); sys.exit(1)
+    cac = {k: v for k, v in (kv.split('=', 1) for kv in line[0].split()[1:])}
     e, l, s = res['eager'], res['lazy'], res['session']
     print('set=%s text=%.1f MB (resident in every mode, not part of the deltas)' % (args.set, e['textMB']))
     print('%-24s %10s %10s' % ('mode', 'delta MB', 'time s'))
@@ -57,7 +62,10 @@ try:
     print('event labels: text scan vs lowered labels: %s script NPCs checked, %s mismatches' % (lab['checked'].split('.')[0], lab['mismatches'].split('.')[0]))
     for l2 in p.stdout.splitlines():
         if l2.startswith('@labels-sample') and l2.strip() != '@labels-sample': print('  ' + l2)
+    print('flat-op cache: %s programs, %.1f MB of blobs, encode %.2f s, decode %.2f s, %s mismatches after decode' % (
+        cac['programs'].split('.')[0], float(cac['blobMB']), float(cac['encodeTime']), float(cac['decodeTime']), cac['mismatches'].split('.')[0]))
     bad = []
+    if float(cac['mismatches']) != 0: bad.append('cache round trip changed %s programs' % cac['mismatches'])
     if float(lab['mismatches']) != 0: bad.append('the label scan disagrees with the parser for %s NPCs' % lab['mismatches'])
     if l['delta'] > 0.20 * e['delta']: bad.append('lazy index above 20%% of eager (%.1f vs %.1f MB)' % (l['delta'], e['delta']))
     if s['delta'] > 0.35 * e['delta']: bad.append('session above 35%% of eager (%.1f vs %.1f MB)' % (s['delta'], e['delta']))

@@ -88,6 +88,19 @@ ACCEPT_LUAU("LNPC-PKG-002", dialogue_runs_through_the_dialogue_manager_and_persi
   d.on_disconnect(42);
 }
 
+ACCEPT_LUAU("LNPC-PKG-007", sandbox_host_wires_storage_timers_events_and_dialogue_from_the_mod_globals) {
+  PackageHost host;
+  std::string src =
+      "local rt = LEGACY.new{ host = LEGACY.sandbox_host() }\n"
+      "rt:addFile('t.txt', '-\\tscript\\tG\\t-1,{\\n total += 1; mes \"hi\"; close;\\n}\\n')\n"
+      "LEGACY.emit_result(rt:run('G', 9))\n";
+  auto s = host.dialogue().start(9, kPackageId, src);
+  CHECK(std::holds_alternative<SayRequest>(s.pending) && std::get<SayRequest>(s.pending).text == "hi");
+  host.dialogue().resume(9, s.token, {});
+  auto v = host.storage().get(Scope::Character, "9", kPackageId, kPackageId, "legacy:char/total");
+  CHECK(v && std::get<std::int64_t>(*v) == 1);
+}
+
 ACCEPT_LUAU("LNPC-PKG-003", disconnect_cancels_and_keeps_writes_made_before_the_blocking_command) {
   PackageHost host;
   std::string npc = "-\tscript\tC\t-1,{\n step = 1; mes \"x\"; next; step = 2; end;\n}\n";
@@ -297,7 +310,7 @@ ACCEPT_LUAU("LNPC-EVT-013", renewal_set_registers_its_event_hooks_on_the_real_bu
 // ---- known gaps, kept as expected failures with the reason (they fail for real: the assertion is the behaviour, not a placeholder) ----------------------
 
 // npc.cpp npc_timerevent_quit (:1594-1650): when a player with an NPC timer attached logs out, the NPC's OnTimerQuit label runs once for that player.
-PENDING("LNPC-TIMER-005", on_timer_quit_runs_when_the_attached_player_logs_out, "OnTimerQuit is not implemented: dropPlayer cancels the player's timers without running the label") {
+ACCEPT_LUAU("LNPC-TIMER-005", on_timer_quit_runs_when_the_attached_player_logs_out) {
   auto& host = shared_host();
   host.clear_log();
   host.run_ok("quit", R"(
@@ -311,8 +324,8 @@ PENDING("LNPC-TIMER-005", on_timer_quit_runs_when_the_attached_player_logs_out, 
   CHECK(host.records("@quit").at(0)[1] == "1");
 }
 
-// the Luau flat ops could be cached across restarts like the C++ ParsedFile (architecture 7: "parse once, cache as binary, invalidate by file hash")
-PENDING("LNPC-PARSE-007", flat_op_cache_roundtrip_skips_the_parse, "no serialiser for the Luau flat ops yet: a restart parses every used NPC again") {
+// the Luau flat ops are cached across restarts like the C++ ParsedFile (architecture 7: "parse once, cache as binary, invalidate by file hash")
+ACCEPT_LUAU("LNPC-PARSE-007", flat_op_cache_roundtrip_skips_the_parse) {
   auto& host = shared_host();
   host.clear_log();
   host.run_ok("cache", R"(

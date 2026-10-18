@@ -129,8 +129,10 @@ variables count against the storage quota of the mod (default 1 MiB, `storage.de
 
 ## Not done
 
-* No serialised cache for the Luau flat ops (the C++ `serialize_ast` caches the facade's `ParsedFile`, keyed by the source hash); the lazy parse is the only mitigation.
-* `OnTimerQuit` (player-attached timer abort at logout), `attachrid`/`detachrid` and the other multi-player command families, instances (the `'` scope works once the instance layer sets `env.instanceId`; there is no instance
+* The flat-op cache (`cache.luau`, `Loader.new{ cache = {get, put} }`) is opt-in and nothing persists it yet: blobs are 8 KB per program on average (77 MB for the
+  renewal set) and decode about 2.5x faster than parse + lower, so it is a restart optimisation, not a memory one. The cache key space is per load set: invalidate it
+  when a `function script` changes, because a body's parse depends on the set of function names.
+* `attachrid`/`detachrid` and the other multi-player command families, instances (the `'` scope works once the instance layer sets `env.instanceId`; there is no instance
   lifecycle and the `instance_*` commands fail outside one), `OnTouch` area tests (engine geometry), `unloadnpc`, `sleep` precision beyond the timer tick.
 * Event handlers run by the bus or a timer are non-interactive (see above); an interactive run for them is started by the engine through `DialogueManager::start`.
   The engine must call `rt:endDialogue(rid)` when it cancels a dialogue (disconnect, idle timeout, reload drain): none of this package's code runs after a cancel.

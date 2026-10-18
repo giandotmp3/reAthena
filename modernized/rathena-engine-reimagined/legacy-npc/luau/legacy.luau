@@ -12,6 +12,7 @@ local M = {
 	vars = require("./vars"),
 	storage_mem = require("./storage_mem"),
 	loader = require("./loader"),
+	cache = require("./cache"),
 	events = require("./events"),
 	blocking = require("./blocking"),
 	report = require("./report"),
@@ -21,6 +22,15 @@ local M = {
 	dump = require("./dump"),
 	synth = require("./synth"),
 }
+
+-- The host seams as script-host injects them into a mod environment (nil fields where a global does not exist, e.g. in the Luau CLI):
+-- LEGACY.new{ host = LEGACY.sandbox_host() }.
+function M.sandbox_host()
+	return {
+		storage = (storage :: any), timers = (timers :: any), events = (events :: any),
+		dialogue = (say :: any) and { say = (say :: any), choose = (choose :: any), input = (input :: any), wait = (wait :: any) } or nil,
+	}
+end
 
 -- sorted names of every command of the runtime's table (the C++ CommandRegistry is generated from and checked against this list)
 function M.command_names()

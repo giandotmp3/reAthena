@@ -1,11 +1,12 @@
 --!nonstrict
 -- Memory/time benchmark of the corpus loaders over one load set. Copied next to the generated data modules by memory_test.py /
 -- unsupported_report.py (the Luau CLI has no io, and `pkg` there is a copy of this unit's luau/*.luau).
---   luau corpus_bench.luau -a <mode> [<sessionNpcs>]       mode: eager | lazy | session | report | labels
+--   luau corpus_bench.luau -a <mode> [<sessionNpcs>]       mode: eager | lazy | session | report | labels | cache
 -- eager   : the M0 prototype pipeline: split every file, parse + lower every body, keep every program
 -- lazy    : Loader:addFile for every file (index + event-label scan only)
 -- session : lazy, then `sessionNpcs` pseudo-random NPCs are run to their first use (parse + lower on demand)
 -- report  : lazy + the unsupported-command report over the whole set (every body is parsed once, programs are evicted as it goes)
+-- cache   : lazy index, then every script body is lowered, encoded with cache.luau, decoded again and compared deeply with the original
 -- labels  : lazy index, then every script body is lowered and its real `On*` labels are compared with the text scan the index used
 -- Memory is collectgarbage("count") after a full collection, as a delta over the state in which all file texts are already resident
 -- (the prototype's RESULTS.md measured the same way). Prints one "@bench" line.
@@ -82,6 +83,37 @@ else
 		result.sessionNpcs = ran
 		result.parsed = L.stats.parsed
 		result.delta = mem() - base
+	elseif mode == "cache" then
+		local Cache = require("./pkg/cache")
+		local function same(a, b, depth)
+			if type(a) ~= type(b) then return false end
+			if type(a) ~= "table" then return a == b end
+			if depth > 300 then return false end
+			for k, v in a do if not same(v, b[k], depth + 1) then return false end end
+			for k in b do if a[k] == nil and b[k] ~= nil then return false end end
+			return true
+		end
+		local n, bad, blobBytes, tEnc, tDec = 0, 0, 0, 0, 0
+		for _, e in L.npcList do
+			if e.kind == "script" then
+				local prog = L:program(e)
+				if prog then
+					local body = string.sub(L:text(e.file), e.pos + 1, e.endpos - 1)
+					local h = Cache.hash(body)
+					local t1 = os.clock()
+					local blob = Cache.encode(prog, h)
+					local t2 = os.clock()
+					local back = Cache.decode(blob, h)
+					local t3 = os.clock()
+					tEnc += t2 - t1; tDec += t3 - t2
+					blobBytes += #blob
+					n += 1
+					if not back or not same(prog.code, back.code, 0) or not same(prog.labels, back.labels, 0) then bad += 1 end
+					L:evict(e)
+				end
+			end
+		end
+		result.programs, result.mismatches, result.blobMB, result.encodeTime, result.decodeTime = n, bad, blobBytes / 1048576, tEnc, tDec
 	elseif mode == "labels" then
 		local mismatches, checked, sample = 0, 0, {}
 		for _, e in L.npcList do

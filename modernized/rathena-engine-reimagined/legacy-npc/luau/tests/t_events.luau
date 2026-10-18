@@ -218,6 +218,25 @@ H.case("LNPC-TIMER-003", "addtimer schedules a player event, deltimer cancels it
 	rt:advance(500); H.eq(U.worldGet(rt, "o$"), "AC")
 end)
 
+H.case("LNPC-TIMER-005", "OnTimerQuit runs once when the player an NPC timer is attached to logs out while the timer is pending", function()
+	local rt = U.rt1(U.npc("Tm", [[ initnpctimer 1; end;
+	OnTimer5000: $o$ = $o$ + "t"; end;
+	OnTimerQuit: $o$ = $o$ + "q" + getcharid(0); end; ]]))
+	rt:player(1, {})
+	U.play(rt, "Tm", {}, 1)
+	rt:advance(1000)
+	rt:dropPlayer(1)
+	H.eq(U.worldGet(rt, "o$"), "q1")
+	rt:advance(10000)
+	H.eq(U.worldGet(rt, "o$"), "q1", "the timer is gone")
+	-- an expired timer has nothing to abort
+	local rt2 = U.rt1(U.npc("Tm", [[ initnpctimer 1; end; OnTimer1000: $o$ = $o$ + "t"; end; OnTimerQuit: $o$ = $o$ + "q"; end; ]]))
+	U.play(rt2, "Tm", {}, 1)
+	rt2:advance(1000)
+	rt2:dropPlayer(1)
+	H.eq(U.worldGet(rt2, "o$"), "t")
+end)
+
 H.case("LNPC-TIMER-004", "a player may hold at most 32 event timers", function()
 	local rt = U.rt1(U.npc("Many", [[ for (.@i = 0; .@i < 40; .@i++) addtimer 1000 + .@i, "L::OnA"; ]]) .. U.npc("L", [[ OnA: $n += 1; end; ]]))
 	U.play(rt, "Many", {}, 1)
