@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Regenerates legacy-golden-hook.patch (for review; build.sh uses apply_edits.py, which is anchored instead of line-numbered)
+# from a build tree made by build.sh:   make_patch.sh <build-dir> [repo-root]
+set -euo pipefail
+B="$(cd "${1:?usage: make_patch.sh <build-dir> [repo]}" && pwd)"
+REPO="${2:-/home/user/reAthena}"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+{
+	for f in src/common/random.hpp src/common/random.cpp src/map/battle.cpp src/map/map.cpp; do
+		diff -u --label "a/$f" --label "b/$f" "$REPO/$f" "$B/rA/$f" || true
+	done
+	for f in golden_stage.hpp golden_hook.inc; do
+		diff -u --label /dev/null --label "b/src/map/$f" /dev/null "$HERE/$f" || true
+	done
+} > "$HERE/legacy-golden-hook.patch"
+wc -l "$HERE/legacy-golden-hook.patch"

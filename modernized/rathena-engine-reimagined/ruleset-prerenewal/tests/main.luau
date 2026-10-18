@@ -6,4 +6,5 @@ import("tests/smoke_test")
 for _, g in ipairs(import("conformance/index").GROUPS) do
 	import("tests/acceptance/" .. g .. "_test")
 end
+import("tests/acceptance/weapon_golden_test")
 return T.summary()

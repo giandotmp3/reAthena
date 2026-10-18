@@ -30,3 +30,25 @@ export type RuleCase = {
 	rule: string, fn: string, mode: "PRE" | "B", pri: string, title: string,
 	example: string?, given: { [string]: any }, expected: { [string]: any }?,
 }
+
+-- Weapon pipeline (scripts/damage/weapon.luau). The engine's native ctx implements this; tests use tests/support/fake_ctx.
+export type Rng = { rnd: () -> number, value: (lo: number, hi: number) -> number }
+export type Lane = {
+	get: (self: Lane) -> number, set: (self: Lane, v: number) -> (), add: (self: Lane, v: number) -> (),
+	mul_pct: (self: Lane, p: number) -> (), add_pct: (self: Lane, p: number) -> (), clamp_min: (self: Lane, lo: number) -> (),
+}
+export type Ctx = {
+	rng: Rng,
+	idiv: (a: number, b: number) -> number,        -- int64, truncates toward zero (C++), never `//`
+	mul_div: (v: number, m: number, d: number) -> number,
+	acc: (v: number) -> Lane,
+}
+export type Hand = { atk: number, atk2: number, ele: number, wlv: number }
+export type Unit = {
+	kind: "pc" | "mob", level: number, str: number, agi: number, vit: number, int: number, dex: number, luk: number,
+	batk: number, hit: number, cri: number, flee: number, flee2: number, def: number, def2: number,
+	size: number, race: number, element: number, ele_lv: number, boss: boolean, targeted: number,
+	rhw: Hand, lhw: Hand?, wtype1: number, wtype2: number, arrow: boolean, job: string?, no_sizefix: boolean?,
+	skills: { [string]: number }?, bonus: { [string]: any }?, sc: { [string]: { val1: number?, val2: number?, val3: number?, val4: number? } }?,
+}
+export type WeaponResult = { damage: number, damage2: number, type: number, div: number, flag: number, dmg_lv: number }

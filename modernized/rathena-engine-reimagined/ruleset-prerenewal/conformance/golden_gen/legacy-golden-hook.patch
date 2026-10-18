@@ -1,0 +1,541 @@
+--- a/src/common/random.hpp
++++ b/src/common/random.hpp
+@@ -14,6 +14,10 @@
+ inline std::random_device device;
+ inline std::mt19937 generator = std::mt19937(device());
+ 
++// golden generator: optional log of every draw (kind 0 = rnd(), kind 1 = rnd_value(lo, hi)); null = off
++struct GoldenRnd { int kind; long long lo, hi, val; };
++inline std::vector<GoldenRnd>* g_golden_rnd_log = nullptr;
++
+ int32 rnd(void);// [0, SINT32_MAX]
+ 
+ /*
+@@ -38,7 +42,9 @@
+ 		std::swap(min, max);
+ 	}
+ 	std::uniform_int_distribution<T> dist(min, max);
+-	return dist(generator);
++	T golden_val_ = dist(generator);
++	if (g_golden_rnd_log) g_golden_rnd_log->push_back({1, (long long)min, (long long)max, (long long)golden_val_});
++	return golden_val_;
+ }
+ 
+ /*
+--- a/src/common/random.cpp
++++ b/src/common/random.cpp
+@@ -10,7 +10,9 @@
+ 
+ /// Generates a random number in the interval [0, SINT32_MAX]
+ int32 rnd( void ){
+-	return int31_distribution( generator );
++	int32 golden_val_ = int31_distribution( generator );
++	if( g_golden_rnd_log ) g_golden_rnd_log->push_back( { 0, 0, 0, golden_val_ } );
++	return golden_val_;
+ }
+ 
+ /// Reseeds the global generator (and resets the distribution state) for reproducible runs
+--- a/src/map/battle.cpp
++++ b/src/map/battle.cpp
+@@ -2,6 +2,7 @@
+ // For more information, see LICENCE in the main folder
+ 
+ #include "battle.hpp"
++#include "golden_stage.hpp" // golden generator probe (copy only)
+ 
+ #include <cmath>
+ #include <cstdlib>
+@@ -2567,6 +2568,7 @@
+ 		}
+ 	}
+ 
++	GSTAGE("basemm", atkmin, atkmax);
+ 	if (sc && sc->getSCE(SC_MAXIMIZEPOWER))
+ 		atkmin = atkmax;
+ 
+@@ -3154,6 +3156,7 @@
+ 		}
+ 		if(tsd && tsd->bonus.critical_def)
+ 			cri = cri * ( 100 - tsd->bonus.critical_def ) / 100;
++		GSTAGE("cri", cri, 0);
+ 		// BR-MAP-010 (map-rules): rnd()%1000 < cri, drawn even when cri <= 0
+ 		return rules::combat::roll_critical( cri, rules_rng() );
+ 	}
+@@ -3319,6 +3322,7 @@
+ 	if(skill_id == PA_SHIELDCHAIN)
+ 		hitrate += 20; //Rapid Smiting gives a flat +20 hit after the hitrate was capped
+ 
++	GSTAGE("hitrate", hitrate, flee);
+ 	// BR-MAP-011 (map-rules): rnd()%100 < hitrate, drawn even when hitrate <= 0
+ 	return rules::combat::roll_hit( hitrate, rules_rng() );
+ }
+@@ -3656,6 +3660,7 @@
+ 	status_data* sstatus = status_get_status_data(*src);
+ 	status_data* tstatus = status_get_status_data(*target);
+ 	int32 right_element = battle_get_weapon_element(*wd, *src, *target, skill_id, skill_lv, EQI_HAND_R, true);
++	GSTAGE("ele", right_element, battle_get_weapon_element(*wd, *src, *target, skill_id, skill_lv, EQI_HAND_L, true));
+ 
+ 	// Elemental attribute fix
+ 	if(!nk[NK_IGNOREELEMENT] && (wd->damage > 0 || wd->damage2 > 0)) {
+@@ -3708,6 +3713,7 @@
+ 		}
+ 	}
+ 
++	GSTAGE("attr", wd->damage, wd->damage2);
+ #ifndef RENEWAL
+ 	// These mastery bonuses are non-elemental and should apply even if the attack misses
+ 	// They are still increased by the EDP/Magnum Break bonus damage (WATK_ELEMENT)
+@@ -4808,6 +4814,7 @@
+ 		def2 = 0; // Ignore only status defense.
+ #endif
+ 
++	GSTAGE("defs", def1, def2);
+ 	//Damage reduction based on vitality
+ 	if (tsd) {	//Sd vit-eq
+ 		int32 skill;
+@@ -4862,6 +4869,7 @@
+ #endif
+ 	}
+ 
++	GSTAGE("vitdef", vit_def, def1);
+ 	if (battle_config.weapon_defense_type) {
+ 		vit_def += def1*battle_config.weapon_defense_type;
+ 		def1 = 0;
+@@ -4928,6 +4936,7 @@
+ 	status_change *sc = status_get_sc(src);
+ 	status_data* sstatus = status_get_status_data(*src);
+ 
++	GSTAGE("defred", wd->damage, wd->damage2);
+ 	// Post skill/vit reduction damage increases
+ #ifndef RENEWAL
+ 	//Refine bonus
+@@ -5486,6 +5495,7 @@
+ 		// First call function with skill_id 0 to get base damage of a normal attack
+ 		battle_calc_skill_base_damage(&wd, src, target, 0, 0); // base damage
+ 		wd.basedamage = wd.damage;
++		GSTAGE("base", wd.damage, wd.damage2);
+ 		// Now get actual skill damage
+ 		if (skill_id != 0)
+ #endif
+@@ -5497,6 +5507,7 @@
+ 
+ 		// Additive damage bonus
+ 		ATK_ADD(wd.damage, wd.damage2, battle_calc_skill_constant_addition(&wd, src, target, skill_id, skill_lv));
++		GSTAGE("ratio", wd.damage, wd.damage2);
+ #endif
+ 
+ #ifdef RENEWAL
+@@ -5643,6 +5654,7 @@
+ #else
+ 		// final attack bonuses that aren't affected by cards
+ 		battle_attack_sc_bonus(&wd, src, target, skill_id, skill_lv);
++		GSTAGE("sc_bonus", wd.damage, wd.damage2);
+ #endif
+ 
+ 		if (wd.damage + wd.damage2) {
+@@ -5671,7 +5683,9 @@
+ #endif
+ 	}
+ 
++	GSTAGE("defense", wd.damage, wd.damage2);
+ 	battle_calc_element_damage(&wd, src, target, skill_id, skill_lv);
++	GSTAGE("element", wd.damage, wd.damage2);
+ 
+ #ifdef RENEWAL
+ 	if (is_attack_critical(&wd, src, target, skill_id, skill_lv, false)) {
+@@ -5747,6 +5761,7 @@
+ 			break;
+ 	}
+ 
++	GSTAGE("pre_card", wd.damage, wd.damage2);
+ 	if(sd) {
+ #ifndef RENEWAL
+ 		uint16 skill;
+@@ -5777,6 +5792,7 @@
+ #endif
+ 	}
+ 
++	GSTAGE("card_atk", wd.damage, wd.damage2);
+ #ifdef RENEWAL
+ 	// In renewal only do it for non player attacks
+ 	if( tsd && !sd ){
+@@ -5789,6 +5805,7 @@
+ 			wd.damage2 += battle_calc_cardfix(BF_WEAPON, src, target, nk, right_element, left_element, wd.damage2, 1, wd.flag);
+ 	}
+ 
++	GSTAGE("card_tgt", wd.damage, wd.damage2);
+ 	// only do 1 dmg to plant, no need to calculate rest
+ 	if(infdef){
+ 		battle_calc_attack_plant(&wd, src, target, skill_id, skill_lv);
+@@ -5797,8 +5814,10 @@
+ 
+ 	//Apply DAMAGE_DIV_FIX and check for min damage
+ 	battle_apply_div_fix(&wd, skill_id);
++	GSTAGE("div", wd.damage, wd.damage2);
+ 
+ 	battle_calc_attack_left_right_hands(&wd, src, target, skill_id, skill_lv);
++	GSTAGE("hands", wd.damage, wd.damage2);
+ 
+ #ifdef RENEWAL
+ 	switch (skill_id) {
+@@ -5813,7 +5832,9 @@
+ 	}
+ #endif
+ 
++	GSTAGE("map", wd.damage, wd.damage2);
+ 	battle_calc_weapon_final_atk_modifiers(&wd, src, target, skill_id, skill_lv);
++	GSTAGE("final", wd.damage, wd.damage2);
+ 
+ 	battle_absorb_damage(target, &wd);
+ 
+@@ -9259,3 +9280,5 @@
+ {
+ 	ers_destroy(delay_damage_ers);
+ }
++
++#include "golden_hook.inc" // golden generator (copy only): synthetic units + case runner
+--- a/src/map/map.cpp
++++ b/src/map/map.cpp
+@@ -52,6 +52,7 @@
+ #include "pet.hpp"
+ #include "quest.hpp"
+ #include "script_host.hpp"
++void golden_main(); // golden generator (copy only)
+ #include "storage.hpp"
+ #include "trade.hpp"
+ 
+@@ -5425,6 +5426,7 @@
+ 	do_init_buyingstore();
+ 
+ 	ScriptHost::run_oninit();	// Init npcs (OnInit)
++	::golden_main(); // golden generator (no-op unless RA_GOLDEN_CASES is set)
+ 
+ 	if (battle_config.pk_mode)
+ 		ShowNotice("Server is running on '" CL_WHITE "PK Mode" CL_RESET "'.\n");
+--- /dev/null
++++ b/src/map/golden_stage.hpp
+@@ -0,0 +1,9 @@
++// Golden generator probe (copied into src/map/ of the legacy COPY; never into the repository).
++#ifndef GOLDEN_STAGE_HPP
++#define GOLDEN_STAGE_HPP
++#include <vector>
++#include <cstdint>
++struct GoldenStage { const char* name; long long d1, d2; };
++inline std::vector<GoldenStage>* g_golden_stages = nullptr;
++#define GSTAGE(name, a, b) do { if (g_golden_stages) g_golden_stages->push_back({ name, (long long)(a), (long long)(b) }); } while (0)
++#endif
+--- /dev/null
++++ b/src/map/golden_hook.inc
+@@ -0,0 +1,312 @@
++// Golden generator hook (rAthena COPY only; included at the very end of src/map/battle.cpp by apply_edits.py).
++//
++// Reads synthetic attacker/target descriptions (RA_GOLDEN_CASES, one case per line, `key=value` tokens), builds
++// map_session_data / mob_data units with explicit status data (nothing is derived by status_calc_*), seeds the
++// legacy RNG, calls the REAL battle_calc_attack(BF_WEAPON, ...) -> battle_calc_weapon_attack() (pre-renewal build) and
++// writes inputs' ids, the result (damage, damage2, type, div, flag, dmg_lv) and every RNG draw plus the stage probes.
++// RA_GOLDEN_DUMP=<file> additionally dumps the element table, size table and the battle.conf values the pipeline reads.
++//
++// Case keys (all ints; missing = 0 unless noted):
++//   id seed map(0 normal, 1 pvp, 2 gvg)
++//   a.* attacker, t.* target:
++//     type(0 pc, 1 mob) str agi vit int dex luk level job(0 swordman, 1 thief, 2 kagerou) skill.as_right/as_left/ko_right/ko_left batk hit cri flee flee2 def def2 size race ele ele_lv boss
++//     rhw.atk rhw.atk2 rhw.ele rhw.wlv   lhw.atk lhw.atk2 lhw.ele lhw.wlv   wtype1 wtype2 bow(1: arrow attack)
++//     arrow_atk crit_atk_rate non_crit_atk_rate short_atk long_atk overrefine_r overrefine_l no_sizefix
++//     add.race.N add.ele.N add.size.N add.class.N  ladd.race.N ladd.ele.N ladd.size.N      (right/left weapon card bonuses)
++//     sub.race.N sub.ele.N sub.size.N sub.class.N sub.defele.N near_def long_def crit_def     (target-side card bonuses)
++//     sc.NAME=val1[,val2,val3,val4]  (status entries, NAME in the table below)
++#include <cstdio>
++#include <cstdlib>
++#include <cstring>
++#include <fstream>
++#include <map>
++#include <new>
++#include <sstream>
++#include <string>
++#include <vector>
++
++#include "mob.hpp"
++#include "pc.hpp"
++#include "unit.hpp"
++
++namespace {
++
++typedef std::map<std::string, long long> GKV;
++
++long long gkv( const GKV& kv, const std::string& k, long long def = 0 ){
++	auto it = kv.find( k );
++	return it == kv.end() ? def : it->second;
++}
++
++struct GSc { const char* name; sc_type type; };
++const GSc g_sc_table[] = {
++	{ "berserk", SC_BERSERK }, { "curse", SC_CURSE }, { "provoke", SC_PROVOKE }, { "edp", SC_EDP },
++	{ "maximize", SC_MAXIMIZEPOWER }, { "weaponperfection", SC_WEAPONPERFECTION }, { "overthrust", SC_OVERTHRUST },
++	{ "deluge", SC_DELUGE }, { "volcano", SC_VOLCANO }, { "violentgale", SC_VIOLENTGALE }, { "enchantarms", SC_ENCHANTARMS },
++	{ "assumptio", SC_ASSUMPTIO }, { "concentration", SC_CONCENTRATION }, { "soundofdestruction", SC_SOUNDOFDESTRUCTION },
++	{ "shadow_clock", SC_SHADOW_CLOCK }, { "defender", SC_DEFENDER }, { "adjustment", SC_ADJUSTMENT },
++	{ "smokepowder", SC_SMOKEPOWDER }, { "water_barrier", SC_WATER_BARRIER },
++};
++
++void g_add_sc( status_change& sc, const std::string& name, const std::string& vals ){
++	for( const GSc& e : g_sc_table ){
++		if( name != e.name ) continue;
++		status_change_entry* sce = sc.createSCE( e.type );
++		sce->timer = INVALID_TIMER;
++		int32* v[4] = { &sce->val1, &sce->val2, &sce->val3, &sce->val4 };
++		std::stringstream ss( vals );
++		std::string tok;
++		int i = 0;
++		while( i < 4 && std::getline( ss, tok, ',' ) ) *v[i++] = atoi( tok.c_str() );
++		return;
++	}
++	fprintf( stderr, "golden: unknown status '%s'\n", name.c_str() );
++	exit( 2 );
++}
++
++int16 g_map_m = -1;
++alignas( map_session_data ) char g_pc_buf[2][sizeof( map_session_data )];
++alignas( mob_data ) char g_mob_buf[2][sizeof( mob_data )];
++bool g_pc_live[2] = { false, false }, g_mob_live[2] = { false, false };
++item_data g_items[2][2]; // [unit][hand]
++
++void g_fill_status( status_data& st, const GKV& kv, const std::string& p ){
++	st = status_data(); // all zero
++	st.hp = st.max_hp = 100000;
++	st.sp = st.max_sp = 1000;
++	st.str = gkv( kv, p + "str" ); st.agi = gkv( kv, p + "agi" ); st.vit = gkv( kv, p + "vit" );
++	st.int_ = gkv( kv, p + "int" ); st.dex = gkv( kv, p + "dex" ); st.luk = gkv( kv, p + "luk" );
++	st.batk = gkv( kv, p + "batk" );
++	st.hit = gkv( kv, p + "hit" ); st.flee = gkv( kv, p + "flee" ); st.cri = gkv( kv, p + "cri" ); st.flee2 = gkv( kv, p + "flee2" );
++	st.def = gkv( kv, p + "def" ); st.def2 = gkv( kv, p + "def2" );
++	st.size = gkv( kv, p + "size" ); st.race = gkv( kv, p + "race" ); st.class_ = gkv( kv, p + "boss" ) ? CLASS_BOSS : CLASS_NORMAL;
++	st.def_ele = gkv( kv, p + "ele" ); st.ele_lv = gkv( kv, p + "ele_lv", 1 );
++	st.rhw.atk = gkv( kv, p + "rhw.atk" ); st.rhw.atk2 = gkv( kv, p + "rhw.atk2" ); st.rhw.ele = gkv( kv, p + "rhw.ele" ); st.rhw.range = 1;
++	st.lhw.atk = gkv( kv, p + "lhw.atk" ); st.lhw.atk2 = gkv( kv, p + "lhw.atk2" ); st.lhw.ele = gkv( kv, p + "lhw.ele" ); st.lhw.range = 1;
++	st.amotion = 500; st.adelay = 1000; st.dmotion = 400;
++	st.mode = MD_CANMOVE | MD_CANATTACK;
++}
++
++block_list* g_make_unit( int idx, const GKV& kv, const std::string& p, int32 level_default ){
++	const bool is_mob = gkv( kv, p + "type" ) == 1;
++	const int32 level = gkv( kv, p + "level", level_default );
++	if( !is_mob ){
++		if( g_pc_live[idx] ) ( (map_session_data*)g_pc_buf[idx] )->~map_session_data();
++		map_session_data* sd = new( g_pc_buf[idx] ) map_session_data();
++		g_pc_live[idx] = true;
++		sd->type = BL_PC; sd->id = 150000 + idx;
++		sd->m = g_map_m; sd->x = 150; sd->y = 150;
++		sd->state.active = 1;
++		sd->fd = 0;
++		sd->status.base_level = level; sd->status.job_level = 1;
++		const long long job = gkv( kv, p + "job" ); // 0 swordman, 1 thief (assassin-line dual wield), 2 kagerou/oboro
++		sd->status.class_ = job == 2 ? JOB_KAGEROU : ( job == 1 ? JOB_THIEF : JOB_SWORDMAN );
++		sd->class_ = job == 2 ? MAPID_KAGEROUOBORO : ( job == 1 ? MAPID_THIEF : MAPID_SWORDMAN );
++		for( int i = 0; i < EQI_MAX; i++ ) sd->equip_index[i] = -1;
++		unit_dataset( sd );
++
++		g_fill_status( sd->battle_status, kv, p );
++		sd->base_status = sd->battle_status;
++
++		const int wt1 = gkv( kv, p + "wtype1" ), wt2 = gkv( kv, p + "wtype2" );
++		sd->weapontype1 = (int16)wt1; sd->weapontype2 = (int16)wt2;
++		sd->status.weapon = (int16)wt1;
++		sd->state.arrow_atk = gkv( kv, p + "bow" ) ? 1 : 0;
++		sd->special_state.no_sizefix = gkv( kv, p + "no_sizefix" ) ? 1 : 0;
++
++		// weapon items (the weapon level is read from the inventory data in pre-renewal)
++		for( int h = 0; h < 2; h++ ){
++			item_data& it = g_items[idx][h];
++			it.type = IT_WEAPON;
++			it.weapon_level = gkv( kv, p + ( h ? "lhw.wlv" : "rhw.wlv" ), 0 );
++			sd->inventory_data[h] = &it;
++			sd->inventory.u.items_inventory[h].nameid = 1201;
++			sd->inventory.u.items_inventory[h].amount = 1;
++			if( it.weapon_level > 0 ) sd->equip_index[h ? EQI_HAND_L : EQI_HAND_R] = h; // wlv 0 = nothing equipped in that hand
++		}
++
++		// size modifiers: the server's size_fix table for the equipped weapon types (what status_calc_pc does)
++		for( int h = 0; h < 2; h++ ){
++			std::shared_ptr<s_sizefix_db> sf = size_fix_db.find( h ? wt2 : wt1 );
++			weapon_data& w = h ? sd->left_weapon : sd->right_weapon;
++			w.atkmods[SZ_SMALL] = sf ? sf->small : 100;
++			w.atkmods[SZ_MEDIUM] = sf ? sf->medium : 100;
++			w.atkmods[SZ_BIG] = sf ? sf->large : 100;
++		}
++
++		for( const auto& sk : { std::pair<const char*, uint16>{ "skill.as_right", AS_RIGHT }, { "skill.as_left", AS_LEFT },
++				{ "skill.ko_right", KO_RIGHT }, { "skill.ko_left", KO_LEFT } } ){
++			const long long lv = gkv( kv, p + sk.first );
++			const uint16 idx = skill_db.get_index( sk.second, false, __FUNCTION__, __FILE__, __LINE__ );
++			if( lv > 0 && idx != 0 ){ sd->status.skill[idx].id = sk.second; sd->status.skill[idx].lv = lv; }
++		}
++		sd->bonus.arrow_atk = gkv( kv, p + "arrow_atk" );
++		sd->bonus.crit_atk_rate = gkv( kv, p + "crit_atk_rate" );
++		sd->bonus.non_crit_atk_rate = gkv( kv, p + "non_crit_atk_rate" );
++		sd->bonus.short_attack_atk_rate = gkv( kv, p + "short_atk" );
++		sd->bonus.long_attack_atk_rate = gkv( kv, p + "long_atk" );
++		sd->bonus.near_attack_def_rate = gkv( kv, p + "near_def" );
++		sd->bonus.long_attack_def_rate = gkv( kv, p + "long_def" );
++		sd->bonus.critical_def = gkv( kv, p + "crit_def" );
++		sd->bonus.crit_def_rate = gkv( kv, p + "crit_def_rate" );
++		sd->bonus.perfect_hit = gkv( kv, p + "perfect_hit" );
++		sd->bonus.arrow_hit = gkv( kv, p + "arrow_hit" );
++		sd->bonus.arrow_cri = gkv( kv, p + "arrow_cri" );
++		sd->bonus.critical_rangeatk = gkv( kv, p + "crit_range" );
++		sd->bonus.skill_ratio = gkv( kv, p + "skill_ratio" );
++		sd->right_weapon.overrefine = gkv( kv, p + "overrefine_r" );
++		sd->left_weapon.overrefine = gkv( kv, p + "overrefine_l" );
++		for( int i = 0; i < RC_MAX; i++ ){
++			sd->right_weapon.addrace[i] = gkv( kv, p + "add.race." + std::to_string( i ) );
++			sd->left_weapon.addrace[i] = gkv( kv, p + "ladd.race." + std::to_string( i ) );
++			sd->indexed_bonus.subrace[i] = gkv( kv, p + "sub.race." + std::to_string( i ) );
++			sd->indexed_bonus.arrow_addrace[i] = gkv( kv, p + "aadd.race." + std::to_string( i ) );
++			sd->indexed_bonus.critaddrace[i] = gkv( kv, p + "critadd.race." + std::to_string( i ) );
++		}
++		for( int i = 0; i < ELE_MAX; i++ ){
++			sd->right_weapon.addele[i] = gkv( kv, p + "add.ele." + std::to_string( i ) );
++			sd->left_weapon.addele[i] = gkv( kv, p + "ladd.ele." + std::to_string( i ) );
++			sd->indexed_bonus.subele[i] = gkv( kv, p + "sub.ele." + std::to_string( i ) );
++			sd->indexed_bonus.subdefele[i] = gkv( kv, p + "sub.defele." + std::to_string( i ) );
++			sd->indexed_bonus.arrow_addele[i] = gkv( kv, p + "aadd.ele." + std::to_string( i ) );
++		}
++		for( int i = 0; i < SZ_MAX; i++ ){
++			sd->right_weapon.addsize[i] = gkv( kv, p + "add.size." + std::to_string( i ) );
++			sd->left_weapon.addsize[i] = gkv( kv, p + "ladd.size." + std::to_string( i ) );
++			sd->indexed_bonus.subsize[i] = gkv( kv, p + "sub.size." + std::to_string( i ) );
++			sd->indexed_bonus.arrow_addsize[i] = gkv( kv, p + "aadd.size." + std::to_string( i ) );
++		}
++		for( int i = 0; i < CLASS_MAX; i++ ){
++			sd->right_weapon.addclass[i] = gkv( kv, p + "add.class." + std::to_string( i ) );
++			sd->indexed_bonus.subclass[i] = gkv( kv, p + "sub.class." + std::to_string( i ) );
++			sd->indexed_bonus.arrow_addclass[i] = gkv( kv, p + "aadd.class." + std::to_string( i ) );
++		}
++		sd->ud.target_count = gkv( kv, p + "targeted" );
++		return sd;
++	}
++
++	if( g_mob_live[idx] ) ( (mob_data*)g_mob_buf[idx] )->~mob_data();
++	mob_data* md = new( g_mob_buf[idx] ) mob_data();
++	g_mob_live[idx] = true;
++	md->type = BL_MOB; md->id = 200000 + idx;
++	md->m = g_map_m; md->x = 150; md->y = 150;
++	md->mob_id = 1002; // Poring: only the view class / race2 list are read from the db entry
++	md->db = mob_db.find( md->mob_id );
++	md->level = level;
++	status_set_viewdata( md, md->mob_id );
++	unit_dataset( md );
++	md->spawn_timer = INVALID_TIMER; md->deletetimer = INVALID_TIMER; md->skill_idx = -1;
++	md->damagetaken = 100;
++	g_fill_status( md->status, kv, p );
++	md->base_status = &md->status;
++	md->ud.target_count = gkv( kv, p + "targeted" );
++	return md;
++}
++
++status_change* g_sc_of( block_list* bl ){ return status_get_sc( bl ); }
++
++// per-case battle.conf toggles (cfg.NAME=value); restored after every case
++struct GCfg { const char* name; int32* ref; int32 def; };
++GCfg g_cfg[] = {
++	{ "left_cardfix_to_right", &battle_config.left_cardfix_to_right, 0 }, { "attr_recover", &battle_config.attr_recover, 0 },
++	{ "attack_attr_none", &battle_config.attack_attr_none, 0 }, { "weapon_defense_type", &battle_config.weapon_defense_type, 0 },
++	{ "min_hitrate", &battle_config.min_hitrate, 0 }, { "max_hitrate", &battle_config.max_hitrate, 0 },
++	{ "gvg_short_damage_rate", &battle_config.gvg_short_damage_rate, 0 }, { "gvg_long_damage_rate", &battle_config.gvg_long_damage_rate, 0 },
++};
++
++void g_apply_sc( block_list* bl, const GKV& kv, const std::string& p, const std::map<std::string, std::string>& sv ){
++	status_change* sc = g_sc_of( bl );
++	const std::string pref = p + "sc.";
++	for( auto& e : sv ) if( e.first.compare( 0, pref.size(), pref ) == 0 ) g_add_sc( *sc, e.first.substr( pref.size() ), e.second );
++}
++
++void g_dump( const char* path ){
++	FILE* f = fopen( path, "wb" );
++	if( !f ) return;
++	for( int lv = 1; lv <= MAX_ELE_LEVEL; lv++ )
++		for( int a = 0; a < ELE_MAX; a++ )
++			for( int d = 0; d < ELE_MAX; d++ )
++				fprintf( f, "attr %d %d %d %d\n", lv, a, d, (int)elemental_attribute_db.getAttribute( lv, a, d ) );
++	for( int w = 0; w < MAX_WEAPON_TYPE; w++ ){
++		std::shared_ptr<s_sizefix_db> sf = size_fix_db.find( w );
++		fprintf( f, "size %d %d %d %d\n", w, sf ? sf->small : 100, sf ? sf->medium : 100, sf ? sf->large : 100 );
++	}
++#define GCFG( n ) fprintf( f, "cfg " #n " %d\n", (int)battle_config.n );
++	GCFG( min_hitrate ) GCFG( max_hitrate ) GCFG( attack_attr_none ) GCFG( left_cardfix_to_right ) GCFG( attr_recover )
++	GCFG( cardfix_monster_physical ) GCFG( skill_min_damage ) GCFG( weapon_defense_type ) GCFG( agi_penalty_type )
++	GCFG( agi_penalty_target ) GCFG( agi_penalty_count ) GCFG( vit_penalty_type ) GCFG( vit_penalty_target ) GCFG( vit_penalty_count )
++	GCFG( gvg_short_damage_rate ) GCFG( gvg_long_damage_rate ) GCFG( gvg_weapon_damage_rate ) GCFG( bg_short_damage_rate )
++	GCFG( bg_long_damage_rate ) GCFG( pk_mode ) GCFG( ksprotection ) GCFG( devotion_rdamage )
++#undef GCFG
++	fclose( f );
++}
++
++} // namespace
++
++void golden_main(){
++	const char* dump = getenv( "RA_GOLDEN_DUMP" );
++	if( dump && *dump ) g_dump( dump );
++	const char* cases = getenv( "RA_GOLDEN_CASES" );
++	const char* out = getenv( "RA_GOLDEN_OUT" );
++	if( !cases || !*cases || !out || !*out ){
++		if( dump && *dump ) exit( 0 );
++		return;
++	}
++	std::ifstream in( cases );
++	FILE* fo = fopen( out, "wb" );
++	if( !in || !fo ){ fprintf( stderr, "golden: cannot open files\n" ); exit( 2 ); }
++
++	g_map_m = map_mapname2mapid( "prontera" );
++	map_data* mapdata = map_getmapdata( g_map_m );
++	std::vector<GoldenRnd> rlog;
++	std::vector<GoldenStage> slog;
++	g_golden_rnd_log = &rlog;
++	g_golden_stages = &slog;
++
++	for( GCfg& c : g_cfg ) c.def = *c.ref;
++	std::string line;
++	long n = 0;
++	while( std::getline( in, line ) ){
++		if( line.empty() || line[0] == '#' ) continue;
++		GKV kv;
++		std::map<std::string, std::string> sv;
++		std::stringstream ss( line );
++		std::string tok;
++		while( ss >> tok ){
++			size_t eq = tok.find( '=' );
++			if( eq == std::string::npos ) continue;
++			std::string k = tok.substr( 0, eq ), v = tok.substr( eq + 1 );
++			if( k.find( "sc." ) != std::string::npos ) sv[k] = v;
++			else kv[k] = atoll( v.c_str() );
++		}
++		for( GCfg& c : g_cfg ) *c.ref = (int32)gkv( kv, std::string( "cfg." ) + c.name, c.def );
++		const long long id = gkv( kv, "id" );
++		const int mapmode = gkv( kv, "map" );
++		mapdata->setMapFlag( MF_PVP, mapmode == 1 );
++		mapdata->setMapFlag( MF_GVG, mapmode == 2 );
++
++		block_list* src = g_make_unit( 0, kv, "a.", 1 );
++		block_list* tgt = g_make_unit( 1, kv, "t.", 1 );
++		g_apply_sc( src, kv, "a.", sv );
++		g_apply_sc( tgt, kv, "t.", sv );
++
++		rnd_seed( (uint32)gkv( kv, "seed", 1 ) );
++		rlog.clear(); slog.clear();
++		Damage d = battle_calc_attack( BF_WEAPON, src, tgt, 0, 0, 0 );
++
++		fprintf( fo, "id=%lld dmg=%lld dmg2=%lld type=%d div=%d flag=%d dmglv=%d", id, (long long)d.damage, (long long)d.damage2,
++			(int)d.type, (int)d.div_, (int)d.flag, (int)d.dmg_lv );
++		fputs( " R", fo );
++		for( const GoldenRnd& r : rlog ){
++			if( r.kind == 0 ) fprintf( fo, " r:%lld", r.val );
++			else fprintf( fo, " v:%lld:%lld:%lld", r.lo, r.hi, r.val );
++		}
++		fputs( " S", fo );
++		for( const GoldenStage& s : slog ) fprintf( fo, " %s:%lld:%lld", s.name, s.d1, s.d2 );
++		fputc( '\n', fo );
++		n++;
++	}
++	fclose( fo );
++	fprintf( stderr, "golden: %ld cases written\n", n );
++	exit( 0 );
++}

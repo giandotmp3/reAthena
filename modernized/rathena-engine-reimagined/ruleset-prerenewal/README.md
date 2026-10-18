@@ -13,9 +13,17 @@ Stack: Luau package (`mod.toml`, `scripts/`, `data/`, `types/*.d.luau`), checked
 - `scripts/manifest.luau`: manifest and battle-config defaults (BR-RULESET-118). Implemented.
 - `scripts/domain.luau`: validators for status, skill, item definitions. Implemented.
 - `scripts/rules/*.luau`: one `rNNN` function per assigned rule. Stubs raise `NOT_IMPLEMENTED`.
+- `scripts/damage/`: the pre-renewal **basic weapon attack** (no skills), written against an explicit `ctx` interface
+  (documented in the header of `weapon.luau`: injected `rng`, truncating `idiv` / `mul_div`, int64 accumulators). `rules/damage.luau`
+  calls its stage functions.
 - `data/`: PROVISIONAL starter statuses, skills, items, resistance, tables. `rathena-migrate` overwrites them.
-- `conformance/`: cases keyed by BR-RULESET ID (`cases/*.luau`), `required.luau`, `pending.luau`, `golden/`.
-- `tests/`: harness, fake engine host, smoke tests, one acceptance test per rule.
+  `damage_tables.luau` (element matrix, size modifiers) is generated from `db/pre-re` and cross-checked against the legacy binary;
+  `damage_cfg.luau` holds the `conf/battle` tunables the weapon pipeline reads.
+- `conformance/`: cases keyed by BR-RULESET ID (`cases/*.luau`), `required.luau`, `pending.luau`, `golden/` (recorded legacy
+  data), `golden_gen/` (the generator: patch, build script, case generator; see its README).
+- `tests/`: harness, fake `ctx` (int64-truncating, integer-safe), scripted RNG with draw counting, golden runner, one acceptance
+  test per rule, the golden conformance test, `bench_weapon`.
+- `tools/`: `run_tests.py` (lupa or `--luau`), `build_golden.py`, `bundle_luau.py`.
 
 ## Assigned rules (109)
 

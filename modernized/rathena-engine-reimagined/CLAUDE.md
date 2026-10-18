@@ -34,7 +34,7 @@ The generic core (`engine-core`, `netproto`, `persistence`, `gateway`, `script-h
 | `persistence/` | C++20 + GoogleTest | Generic records and KV, write-behind, WAL, id_map, quotas | 7 / 34 skipped |
 | `gateway/` | C++20 | Login, tickets, char-select plumbing, seams, `--role` | 25 / 68 |
 | `mods/` | C++20 + `base/` Luau | Loader, manifest, permissions, ID registry, `rathena.base` | 10 / 36 |
-| `ruleset-prerenewal/` | Luau package | Pre-renewal pipeline, statuses, data, conformance (built first) | 7 / 106 |
+| `ruleset-prerenewal/` | Luau package | Pre-renewal basic-attack pipeline **matching the real legacy code on 5,424/5,424 golden cases** (+76,660 fuzz cases); statuses, data, conformance (built first) | 96 / 86 |
 | `ruleset-renewal/` | Luau package | Renewal package, the architecture proof (built second) | 18 / 19 |
 | `legacy-npc/` | C++20 + Luau | `.txt` parser, AST, Luau-hosted interpreter, `legacy.*` commands | 16 / 18 |
 | `tooling/` | C++20 | `rathena-sim`, `rathena-migrate`, `rathena-migrate-saves`, `rathena-pack`, M0 benchmarks | 17 / 21 |
@@ -51,7 +51,7 @@ cmake --build build/<unit> -j && ctest --test-dir build/<unit> --output-on-failu
 # the test executable prints "N passed, 0 failed, M expected-failures"
 ```
 
-`persistence` uses GoogleTest and skips backend tests until the SQLite/PostgreSQL connection layer is lifted. `ruleset-prerenewal`: `python3 -I tools/run_tests.py` in that directory (runs the Lua-subset sources under plain Lua). `ruleset-renewal`: `python3 -m unittest discover -s tests`. Luau, `luau-analyze` and a YAML library are **not installed** in this environment, so nothing has been type-checked as Luau yet.
+`persistence` uses GoogleTest and skips backend tests until the SQLite/PostgreSQL connection layer is lifted. `ruleset-prerenewal`: `python3 -I tools/run_tests.py` in that directory (runs the Lua-subset sources under plain Lua). `ruleset-renewal`: `python3 -m unittest discover -s tests`. Luau 0.690 was built from source in this environment (see `tooling/m0/README.md`); `ruleset-prerenewal` also runs under it: `python3 -I tools/run_tests.py --luau <path>/luau`. `luau-analyze` has no globals-definition option in this build.
 
 ## M0 is done (2026-10-18): the forks are unblocked
 
@@ -62,6 +62,7 @@ Real Luau 0.690; code in `tooling/m0/`, report `analysis/rathena/M0_RESULTS.md`.
 - **Legacy NPC layer = Luau-hosted interpreter** (0 parse failures on 13,850 bodies). Required changes: legacy-VM record/replay before calling it done, lazy per-file parsing with flat ops, call-by-reference, host-stack depth cap, long command tail. Prototype: `tooling/m0/legacy_interp/` (parser, lowering, interpreter, scripted-client driver).
 - **Numerics:** `ctx` int64/f32 methods reproduce 17/17 worked examples. Ruleset code must not use `//` or `/` on signed values (Luau floors, legacy truncates); add the lint when `ruleset-*` packages are implemented.
 - **Replay vs the real VM:** the interpreter matches the real rAthena VM on 2,482 / 2,485 strict runs (~1,000 NPCs, renewal and pre-renewal; 53,565 host calls). **The legacy VM does not short-circuit `&&`/`||`/`?:`**; the interpreter evaluates all operands and hoists calls. Not covered: events, timers, `sleep`, multiple players, 427 unimplemented builtins. Re-run with `tooling/m0/replay/smoke.py` (~1 min; needs the legacy build from `build_legacy.sh`). Details: `analysis/rathena/M0_RESULTS.md` addenda.
+- **PRE basic attack vs the real code:** 5,424/5,424 golden cases match (damage, flag, div, RNG draw sequence and count), plus 76,660 fresh-seed fuzz cases; mutation checks confirm the comparison bites. Correction found: in PRE the element table is applied **before** the card fixes (`BR_RULESET.md` 018 fixed). Not covered: skills, magic/misc, plants, katar, guns, PK/BG rates, reflect/side effects. Golden generator: `ruleset-prerenewal/conformance/golden_gen/`.
 - **Still unmeasured:** real PRE/RE pipelines against golden traces, cross-state call cost, reload with live coroutines, the compact AST cache.
 
 Done since M0: `engine-core` (all 30 pending tests; 2 test expectations corrected against legacy, see git log) and `script-host` (40 of 41; not done: per-tick degradation, slow-hook log, mod kill switch, cross-mod `exports`/`import`, lazy entity handles).

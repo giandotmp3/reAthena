@@ -33,13 +33,19 @@ function T.run(id, title, expect_fail, fn)
 	results[#results + 1] = { id = id, title = title, status = status, err = (not ok) and describe(err) or nil }
 end
 
--- Runs one conformance case; `pending` maps rule IDs to true for expected-failure.
-function T.case(case, rules, pending)
+-- Runs one conformance case; `pending` maps rule IDs to true for expected-failure. `env.make(draws)` (optional) returns
+-- the rule's injected ctx and its rng; a case that lists `given.draws` must consume exactly those draws.
+function T.case(case, rules, pending, env)
 	T.run(case.rule, case.mode .. ": " .. case.title, pending[case.rule] == true, function()
 		local fn = rules[case.fn]
 		if not fn then error({ code = "MISSING_RULE_FUNCTION", rule = case.rule }) end
-		local out = fn(case.given)
+		local ctx, rng
+		if env then ctx, rng = env.make(case.given.draws or {}) end
+		local out = fn(case.given, ctx)
 		if case.expected == nil then error({ code = "NO_GOLDEN_TRACE", rule = case.rule }) end
+		if rng and case.given.draws and rng.used ~= rng.total then
+			error({ code = "DRAW_COUNT", rule = case.rule, msg = "used " .. rng.used .. " of " .. rng.total .. " recorded draws" })
+		end
 		T.assert_deep_equal(out, case.expected, case.rule)
 	end)
 end
