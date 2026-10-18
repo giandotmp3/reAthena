@@ -117,7 +117,6 @@ end
 -- expression evaluation
 ---------------------------------------------------------------------------------------------
 local eval
-local invoke
 
 local BIN = {}
 BIN["+"] = function(a, b)
@@ -240,11 +239,14 @@ function eval(st, e)
 		return getvar(st, e[2], e[3], ie and eval(st, ie))
 	elseif k == E_BIN then
 		local op = e[2]
+		-- The legacy VM has no short-circuit: C_LAND / C_LOR are plain stack ops (script.cpp op_2) and BOTH operands are evaluated.
 		if op == "&&" then
-			if truthy(eval(st, e[3])) and truthy(eval(st, e[4])) then return 1 end
+			local a, b = eval(st, e[3]), eval(st, e[4])
+			if truthy(a) and truthy(b) then return 1 end
 			return 0
 		elseif op == "||" then
-			if truthy(eval(st, e[3])) or truthy(eval(st, e[4])) then return 1 end
+			local a, b = eval(st, e[3]), eval(st, e[4])
+			if truthy(a) or truthy(b) then return 1 end
 			return 0
 		end
 		local a, b = eval(st, e[3]), eval(st, e[4])
@@ -266,18 +268,9 @@ function eval(st, e)
 		local name, args = e[2], e[3]
 		local n = #args
 		if name == "callsub" or name == "callfunc" then
-			-- nested call in expression position (not hoistable): recursion on the host stack
-			local av, arefs = {}, nil
-			for i = 2, n do
-				local node = args[i]
-				av[i - 1] = eval(st, node)
-				if node[1] == E_VAR then arefs = arefs or {}; arefs[i - 1] = mkref(st, node) end
-			end
-			st.nestedCalls += 1
-			if name == "callsub" then
-				return invoke(st, st.frame.prog, eval(st, args[1]), av, arefs)
-			end
-			return invoke(st, M.findFunc(st, eval(st, args[1])), 1, av, arefs)
+			-- lower.luau hoists every callsub/callfunc/user-function call out of expressions (all operands of && || ?: are
+			-- evaluated, so hoisting is exact); reaching this means an un-lowered AST was handed to the interpreter.
+			terr(st, "NESTED_CALL", { cmd = name })
 		end
 		local h = st.commands[name]
 		if not h then
@@ -318,8 +311,10 @@ function eval(st, e)
 		elseif op == "!" then return truthy(v) and 0 or 1
 		else return bit32.bnot(v) end
 	elseif k == E_TERN then
-		if truthy(eval(st, e[2])) then return eval(st, e[3]) end
-		return eval(st, e[4])
+		-- legacy C_OP3: condition and both branches are evaluated (stack op), then one is selected
+		local c, a, b = eval(st, e[2]), eval(st, e[3]), eval(st, e[4])
+		if truthy(c) then return a end
+		return b
 	elseif k == E_INCDEC then
 		local tgt = e[4]
 		if tgt[1] == E_PARAM then
@@ -399,15 +394,7 @@ M.yield = yield
 
 local runFrames
 
--- run a nested call to completion, returning its return value
-function invoke(st, prog, pc, args, arefs)
-	if type(pc) ~= "number" then terr(st, "BAD_LABEL", { value = tostring(pc) }) end
-	local base = st.depth
-	pushFrame(st, prog, pc, args, nil).argrefs = arefs
-	return runFrames(st, base)
-end
-
-function runFrames(st, stopDepth)
+function runFrames(st)
 	local stack = st.stack
 	local commands = st.commands
 	while true do
@@ -506,10 +493,6 @@ function runFrames(st, stopDepth)
 				stack[st.depth] = nil
 				st.depth -= 1
 				if st.depth == 0 then return v end -- returned from the entry frame: script ends
-				if st.depth == stopDepth then
-					st.frame = stack[st.depth]
-					return v
-				end
 				local caller = stack[st.depth]
 				st.frame = caller
 				if dst then setvar(st, ".@", dst, nil, v) end
@@ -587,7 +570,7 @@ function M.spawn(st, prog, entryPc, args)
 				return { type = "HOST_STACK_OVERFLOW", msg = tostring(err), depth = st.depth }
 			end
 			return { type = "INTERNAL", msg = tostring(err), trace = debug.traceback("", 2) }
-		end, st, 0)
+		end, st)
 		if ok then return "end", e end
 		if e == END then return "end" end
 		return "error", e

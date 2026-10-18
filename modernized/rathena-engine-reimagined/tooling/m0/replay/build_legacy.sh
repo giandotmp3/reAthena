@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build the legacy map-server with the record/replay hook, entirely outside the repository.
-#   build_legacy.sh <build-dir> [repo-root]
+#   [RA_PRERENEWAL=1] build_legacy.sh <build-dir> [repo-root]   (RA_PRERENEWAL=1 builds the pre-renewal server mode)
 # Copies the legacy source to <build-dir>/rA (the repo tree is never touched), applies
 # patch/legacy-replay-hook.patch to the COPY, configures with CMake+Ninja (SQLite backend, no MySQL/PostgreSQL needed)
 # and builds map-server into <build-dir>/rA/map-server. Needs: cmake >= 3.13, ninja or make, g++ with C++20, zlib, patch, tar.
@@ -13,6 +13,9 @@ if [ ! -d "$B/rA/src" ]; then
 	(cd "$REPO" && tar --exclude=.git --exclude=./modernized --exclude=./analysis -cf - .) | tar -xf - -C "$B/rA"
 	mkdir -p "$B/rA/modernized"
 	cp -r "$REPO/modernized/rathena-reimagined" "$B/rA/modernized/"   # map-rules library the legacy CMake build links
+fi
+if [ "${RA_PRERENEWAL:-0}" = 1 ]; then   # pre-renewal server mode: comment out "#define RENEWAL" in the COPY (loads npc/pre-re/scripts_main.conf)
+	sed -i 's|^#define RENEWAL$|//#define RENEWAL|' "$B/rA/src/config/renewal.hpp"
 fi
 if [ ! -e "$B/rA/src/map/replay_hook.inc" ]; then
 	patch -p1 -d "$B/rA" < "$HERE/patch/legacy-replay-hook.patch"

@@ -133,7 +133,7 @@
  	if (!sd.state.using_fake_npc && (npcid == fake_nd->id || ((bl = map_id2bl(npcid)) && (bl->m!=sd.m ||
 --- /dev/null
 +++ b/src/map/replay_hook.inc
-@@ -0,0 +1,348 @@
+@@ -0,0 +1,349 @@
 +// Record/replay conformance hook for the legacy script VM (tooling/m0/replay).
 +// NOT part of the legacy build: applied only to a COPY of the source tree by replay/build_legacy.sh.
 +// Included at the very end of script.cpp so it can see the file-static VM state (str_data, buildin_func, st_db).
@@ -394,6 +394,7 @@
 +	sd->status.sex = SEX_MALE; sd->status.base_level = 1; sd->status.job_level = 1; sd->status.zeny = 0;
 +	sd->weight = 0; sd->max_weight = 20000;
 +	sd->inventory.max_amount = MAX_INVENTORY; sd->inventory.type = TABLE_INVENTORY;
++	for( int i = 0; i < EQI_MAX; i++ ) sd->equip_index[i] = -1; // as pc_authok(): nothing equipped (zero would mean inventory slot 0)
 +	sd->vars_ok = true;
 +	sd->regs.vars = i64db_alloc( DB_OPT_BASE ); sd->regs.arrays = nullptr; // as pc_authok() does
 +	sd->group_id = 0;

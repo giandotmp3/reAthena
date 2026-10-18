@@ -6,7 +6,7 @@
 Needs (see build_legacy.sh): <build>/rA/map-server built with patch/legacy-replay-hook.patch, and <build>/lua
 (created here from ../legacy_interp + prep.py data modules). Output: <build>/out/{legacy,luau}/<case>.trace and report files.
 """
-import os, re, sys, json, shutil, subprocess, argparse, time, concurrent.futures as cf
+import os, re, sys, json, glob, shutil, subprocess, argparse, time, concurrent.futures as cf
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ap = argparse.ArgumentParser()
@@ -19,6 +19,11 @@ ap.add_argument('--skip-legacy', action='store_true')
 ap.add_argument('--skip-luau', action='store_true')
 ap.add_argument('--corpus', default=os.path.join(HERE, 'corpus', 'corpus.json'))
 ap.add_argument('--timeout', type=int, default=180)
+ap.add_argument('--set', default='re', choices=['re', 'pre'], help='load set: run only the corpus entries of this set (renewal / pre-renewal server build in --build)')
+ap.add_argument('--prefix', default='', help='case id prefix (default: n for corpus.json, w for corpus_wide.json)')
+ap.add_argument('--report-name', default='report', help='base name of the report files in <build>/out')
+ap.add_argument('--interp', default='', help='directory with the legacy_interp sources to test (default: ../legacy_interp)')
+ap.add_argument('--no-world', action='store_true', help='do not feed dumped legacy-VM world data (item names) to the Luau side')
 ap.add_argument('--no-seed', action='store_true', help='do not seed the Luau start state from the legacy VM (run OnInit on the Luau side instead)')
 ap.add_argument('--no-real-constants', action='store_true', help='keep the synthetic constant ids of prep.py (baseline)')
 args = ap.parse_args()
@@ -27,10 +32,11 @@ B = os.path.abspath(args.build)
 RA = os.path.join(B, 'rA')
 LUA = os.path.join(B, 'lua')
 OUT = os.path.join(B, 'out')
-LI = os.path.join(HERE, '..', 'legacy_interp')
+LI = os.path.abspath(args.interp) if args.interp else os.path.join(HERE, '..', 'legacy_interp')
 
 # ---- case list ---------------------------------------------------------------------------------------
 corpus = json.load(open(args.corpus))['chosen']
+PREFIX = args.prefix or ('w' if 'wide' in os.path.basename(args.corpus) else 'n')
 RICH = dict(zeny=1000000, baselevel=99, joblevel=50)
 POOR = dict(zeny=0, baselevel=1, joblevel=1)
 VARIANTS = [  # (suffix, player profile, answer list)
@@ -38,16 +44,28 @@ VARIANTS = [  # (suffix, player profile, answer list)
     ('b', RICH, ['99'] * 60),                          # every menu = last option (clamped)
     ('c', RICH, ['2', '1', '3', '2', '2', '1'] * 10),  # mixed
 ]
+def header_pos(path, line):
+    """x,y of the NPC header at <path>:<line> (the legacy hook puts the synthetic player on the NPC)"""
+    try:
+        text = open(os.path.join(args.repo, path), 'rb').read().decode('latin-1').replace('\r\n', '\n').split('\n')
+        m = re.match(r'^([\w@.\-]+),(\d+),(\d+),\d+\t', text[line - 1])
+        if m: return m.group(1), int(m.group(2)), int(m.group(3))
+    except Exception:
+        pass
+    return None, 150, 150
 cases = []
 for i, n in enumerate(corpus, 1):
+    if n.get('set', 're') != args.set: continue
+    mp, x, y = header_pos(n['file'], n['line'])
     for suf, prof, ans in VARIANTS:
-        cases.append(dict(id='n%02d%s' % (i, suf), npc=n['name'], path=n['file'], category=n['category'], line=n['line'],
+        cases.append(dict(id='%s%03d%s' % (PREFIX, i, suf) if PREFIX == 'w' else '%s%02d%s' % (PREFIX, i, suf), npc=n['name'], path=n['file'],
+                          category=n['category'], line=n['line'], set=args.set, x=x, y=y,
                           player=prof, answers=ans, cap=60, label=n.get('label')))
 if args.only:
     want = set(args.only.split(','))
-    cases = [c for c in cases if c['id'] in want or c['id'][:3] in want]
+    cases = [c for c in cases if c['id'] in want or c['id'][:-1] in want]
 
-for d in ('legacy', 'luau', 'luau-nosc'):
+for d in ('legacy', 'luau'):
     os.makedirs(os.path.join(OUT, d), exist_ok=True)
 json.dump(cases, open(os.path.join(OUT, 'cases.json'), 'w'), indent=1)
 
@@ -56,9 +74,9 @@ def lua_val(v):
     if isinstance(v, bool): return 'true' if v else 'false'
     if isinstance(v, (int, float)): return str(v)
     if v is None: return 'nil'
-    if isinstance(v, str): return json.dumps(v)
+    if isinstance(v, str): return lua_str(v.encode('latin-1', 'replace'))
     if isinstance(v, list): return '{' + ','.join(lua_val(x) for x in v) + '}'
-    if isinstance(v, dict): return '{' + ','.join('[%s]=%s' % (json.dumps(k), lua_val(x)) for k, x in v.items()) + '}'
+    if isinstance(v, dict): return '{' + ','.join('[%s]=%s' % (lua_val(k), lua_val(x)) for k, x in v.items()) + '}'
     raise TypeError(v)
 
 def lua_str(b):
@@ -125,14 +143,122 @@ def merge_constants(tsv):
         f.write('return {consts={\n' + ''.join('["%s"]=%d,\n' % (k, v) for k, v in sorted(cons.items())) + '},params={' + tail)
     print('constants: %d from the real VM; %d synthetic ids replaced, %d added' % (sum(1 for _ in open(tsv, encoding='latin-1')), changed, added))
 
-def run_luau(mode):
+def dump_world():
+    """Feed the Luau side REAL data from the legacy VM: a probe NPC (generated, installed only in the build COPY for this one run) calls
+    getitemname() for every item id / AegisName of the load set's item DB; the hook records each call and return like any other trace."""
+    out = os.path.join(OUT, 'world_itemnames.trace')
+    if os.path.exists(out) and os.path.getsize(out) > 0: return out
+    db = os.path.join(args.repo, 'db', 're' if args.set == 're' else 'pre-re')
+    calls = []
+    for fn in sorted(os.listdir(db)):
+        if not (fn.startswith('item_db') and fn.endswith('.yml')): continue
+        cur = None
+        for line in open(os.path.join(db, fn), 'rb').read().decode('latin-1').splitlines():
+            m = re.match(r'^  - Id: (\d+)\s*$', line)
+            if m: cur = int(m.group(1)); calls.append('getitemname(%d);' % cur); continue
+            m = re.match(r'^    AegisName: (\S+)\s*$', line)
+            if m and cur is not None: calls.append('getitemname("%s");' % m.group(1))
+    for fn in sorted(glob.glob(os.path.join(args.repo, 'conf', 'battle', '*.conf'))):   # battle config names (getbattleflag)
+        for line in open(fn, 'rb').read().decode('latin-1').splitlines():
+            m = re.match(r'^([A-Za-z_0-9.]+)\s*:', line)
+            if m: calls.append('getbattleflag("%s");' % m.group(1))
+    cdb = os.path.join(db, 'castle_db.yml')
+    if os.path.exists(cdb):                                                              # castle maps (getcastledata)
+        for line in open(cdb, 'rb').read().decode('latin-1').splitlines():
+            m = re.match(r'^\s+Map: (\S+)', line)
+            if m: calls.append('getcastledata("%s",1);' % m.group(1))
+    calls.append('getcastledata("replay_no_such_map",1);')
+    seen_maps = []
+    for fn in ('maps_athena.conf',):                                                     # maps the server loads (warp, mobcount)
+        for line in open(os.path.join(args.repo, 'conf', fn), 'rb').read().decode('latin-1').splitlines():
+            m = re.match(r'^map:\s*(\S+)', line)
+            if m: seen_maps.append(m.group(1))
+    for mp in list(dict.fromkeys(seen_maps)) + ['replay_no_such_map']:
+        calls.append('mobcount("%s","replay_probe::x");' % mp)
+    probe = os.path.join(RA, 'npc', 'replay_probe.txt')
+    conf = os.path.join(RA, 'npc', 're' if args.set == 're' else 'pre-re', 'scripts_main.conf')
+    conf_txt = open(conf, 'rb').read()
+    open(probe, 'w').write('-\tscript\treplay_probe\t-1,{\n' + '\n'.join(calls) + '\nend;\n}\n')
+    open(conf, 'ab').write(b'\nnpc: npc/replay_probe.txt\n')
+    run = os.path.join(OUT, 'run', 'probe'); shutil.rmtree(run, ignore_errors=True); os.makedirs(os.path.join(run, 'save'))
+    open(os.path.join(run, 'inter.conf'), 'w').write('import: conf/inter_athena.conf\ndb_backend: sqlite\nsqlite_directory: %s\n' % os.path.join(run, 'save'))
+    open(os.path.join(run, 'map.conf'), 'w').write('import: conf/map_athena.conf\nmap_port: 5399\n')
+    open(os.path.join(run, 'answers.txt'), 'w').write('')
+    open(os.path.join(run, 'player.cfg'), 'w').write('name=Tester\n')
+    try:
+        subprocess.run(['bash', '-c', 'exec -a "%s/replay-map-server" ./map-server --run-once --map-config %s --inter-config %s' % (
+            RA, os.path.join(run, 'map.conf'), os.path.join(run, 'inter.conf'))], cwd=RA, capture_output=True, timeout=args.timeout * 4,
+            env=dict(os.environ, RA_REPLAY_NPC='replay_probe', RA_REPLAY_ANSWERS=os.path.join(run, 'answers.txt'),
+                     RA_REPLAY_PLAYER=os.path.join(run, 'player.cfg'), RA_REPLAY_TRACE=out, RA_REPLAY_CAP='5'))
+    finally:
+        open(conf, 'wb').write(conf_txt)
+        if os.path.exists(probe): os.remove(probe)
+        shutil.rmtree(run, ignore_errors=True)
+    return out
+
+def shop_names():
+    """names of the shop-type NPCs of the load set (callshop): declaration headers of the files in the conf import graph"""
+    files = []
+    def walk(conf):
+        for raw in open(os.path.join(args.repo, conf), 'rb').read().decode('latin-1').splitlines():
+            m = re.match(r'^(npc|import)\s*:\s*(\S.*)$', raw.split('//', 1)[0].strip())
+            if not m: continue
+            if m.group(1) == 'npc': files.append(m.group(2).strip())
+            else: walk(m.group(2).strip())
+    walk('npc/re/scripts_main.conf' if args.set == 're' else 'npc/pre-re/scripts_main.conf')
+    out = set()
+    for f in dict.fromkeys(files):
+        p = os.path.join(args.repo, f)
+        if not os.path.exists(p): continue
+        text = open(p, 'rb').read().decode('latin-1').replace('\r\n', '\n')
+        text = re.sub(r'/\*.*?\*/', lambda m: re.sub(r'[^\n]', ' ', m.group(0)), text, flags=re.S)
+        for m in re.finditer(r'^[^\t\n/][^\t\n]*\t(?:shop|cashshop|itemshop|pointshop|marketshop|barter)\t([^\t\n]+)\t', text, re.M):
+            out.add(m.group(1))
+    return out
+
+def write_world(path):
+    """world_data.luau: data recorded from the legacy VM (item names, battle config, castle maps) + shop NPC names of the load set"""
+    names, bflag, castle, maps = {}, {}, {}, {}
+    for line in open(path, 'rb').read().decode('latin-1').split('\n'):
+        m = re.match(r'^getitemname\((\d+|"[^"]*")\) -> ("(?:[^"\\]|\\.)*")$', line)
+        if m:
+            k = m.group(1); v = unq(m.group(2))
+            if v is not None: names[int(k) if k[0] != '"' else k[1:-1]] = v
+            continue
+        m = re.match(r'^getbattleflag\("([^"]*)"\) -> (-?\d+)$', line)
+        if m: bflag[m.group(1).lower()] = int(m.group(2)); continue
+        m = re.match(r'^getcastledata\("([^"]*)",1\)( -> -?\d+)?( !F)?$', line)
+        if m: castle[m.group(1)] = not m.group(3); continue
+        m = re.match(r'^mobcount\("([^"]*)","replay_probe::x"\) -> (-?\d+)$', line)
+        if m: maps[m.group(1)] = m.group(2) != '-1'
+    shops = shop_names()
+    with open(os.path.join(LUA, 'world_data.luau'), 'wb') as f:
+        f.write(b'return {itemname={\n')
+        for k, v in names.items():
+            f.write(((('[%d]=' % k) if isinstance(k, int) else ('[%s]=' % json.dumps(k))) + lua_str(v) + ',\n').encode('latin-1'))
+        f.write(b'},battleflag={\n')
+        for k, v in bflag.items(): f.write(('[%s]=%d,\n' % (json.dumps(k), v)).encode('latin-1'))
+        f.write(b'},castle={\n')
+        for k, v in castle.items(): f.write(('[%s]=%s,\n' % (json.dumps(k), 'true' if v else 'false')).encode('latin-1'))
+        f.write(b'},map={\n')
+        for k, v in maps.items(): f.write(('[%s]=%s,\n' % (json.dumps(k), 'true' if v else 'false')).encode('latin-1'))
+        f.write(b'},shop={\n')
+        for k in sorted(shops): f.write(('[%s]=true,\n' % lua_str(k.encode('latin-1', 'replace'))).encode('latin-1'))
+        f.write(b'}}\n')
+    return len(names), len(bflag), sum(1 for v in castle.values() if v), sum(1 for v in maps.values() if v), len(shops)
+
+def run_luau():
     if not os.path.isdir(os.path.join(LUA, 'data')):
         os.makedirs(LUA, exist_ok=True)
-        for f in os.listdir(LI):
-            if f.endswith('.luau') or f == 'prep.py':
-                shutil.copy(os.path.join(LI, f), LUA)
+        shutil.copy(os.path.join(LI, 'prep.py'), LUA)
+        for f in ('consts.luau', 'manifest.luau', 'builtins.luau'):
+            if os.path.exists(os.path.join(LI, f)): shutil.copy(os.path.join(LI, f), LUA)
         subprocess.run([sys.executable, '-I', 'prep.py'], cwd=LUA, check=True, stdout=subprocess.DEVNULL,
                        env=dict(os.environ, RATHENA_REPO=args.repo))
+    # always re-sync the interpreter sources under test (the data modules, consts, manifest, builtins are generated by prep.py)
+    for f in os.listdir(LI):
+        if f.endswith('.luau') and f not in ('consts.luau', 'manifest.luau', 'builtins.luau'):
+            shutil.copy(os.path.join(LI, f), LUA)
     if not args.no_real_constants and os.path.isdir(RA):
         merge_constants(dump_legacy_constants())
     elif os.path.exists(os.path.join(LUA, 'consts.synthetic.luau')):
@@ -140,9 +266,12 @@ def run_luau(mode):
     for f in os.listdir(os.path.join(HERE, 'luau')):
         if f.endswith('.luau') and f != 'cases.luau':
             shutil.copy(os.path.join(HERE, 'luau', f), LUA)
+    if os.path.exists(os.path.join(LUA, 'world_data.luau')): os.remove(os.path.join(LUA, 'world_data.luau'))
+    if not args.no_world and os.path.isdir(RA):
+        print('world data: %d item names, %d battle flags, %d castles, %d maps (from the legacy VM), %d shop NPC names (from the NPC files)' % write_world(dump_world()))
     with open(os.path.join(LUA, 'cases.luau'), 'w') as f:
-        f.write('return {\n' + ',\n'.join('{id=%s,path=%s,npc=%s,answers=%s,player=%s,cap=%d,mode=%s%s%s}' % (
-            lua_val(c['id']), lua_val(c['path']), lua_val(c['npc']), lua_val(c['answers']), lua_val(c['player']), c['cap'], lua_val(mode),
+        f.write('return {\n' + ',\n'.join('{id=%s,path=%s,npc=%s,answers=%s,player=%s,cap=%d,set=%s,x=%d,y=%d%s%s}' % (
+            lua_val(c['id']), lua_val(c['path']), lua_val(c['npc']), lua_val(c['answers']), lua_val(c['player']), c['cap'], lua_val(c['set']), c['x'], c['y'],
             (',label=%s' % lua_val(c['label'])) if c.get('label') else '',
             (lambda i: (',init=%s' % i) if i and not args.no_seed else '')(load_init(c['id']))) for c in cases) + '\n}\n')
     t = time.time()
@@ -153,12 +282,12 @@ def run_luau(mode):
         if line.startswith('=== CASE '):
             cur, buf = line[9:].strip(), []
         elif line.startswith('=== END ') and cur:
-            open(os.path.join(OUT, 'luau' if mode == 'asis' else 'luau-' + mode, cur + '.trace'), 'wb').write(('\n'.join(buf) + '\n').encode('latin-1'))
+            open(os.path.join(OUT, 'luau', cur + '.trace'), 'wb').write(('\n'.join(buf) + '\n').encode('latin-1'))
             cur = None
         elif cur is not None:
             buf.append(line)
-    open(os.path.join(OUT, 'luau-%s.stderr' % mode), 'wb').write(p.stderr)
-    print('luau side [%s]: %d cases in %.1fs (rc=%d)' % (mode, len(cases), time.time() - t, p.returncode))
+    open(os.path.join(OUT, 'luau.stderr'), 'wb').write(p.stderr)
+    print('luau side: %d cases in %.1fs (rc=%d)' % (len(cases), time.time() - t, p.returncode))
 
 # ---- legacy side -------------------------------------------------------------------------------------
 def run_legacy_case(args_):
@@ -206,11 +335,7 @@ def run_legacy():
     print('legacy side: %d cases in %.1fs, non-zero exits: %s' % (len(cases), time.time() - t, bad))
 
 if not args.skip_legacy: run_legacy()
-rc = 0
-for mode in ('asis', 'nosc'):
-    if not args.skip_luau: run_luau(mode)
-    tag = '' if mode == 'asis' else '-nosc'
-    print('\n######## legacy_interp mode: %s ########' % ('as is' if mode == 'asis' else 'operands of && || ?: all evaluated (legacy semantics)'))
-    rc |= subprocess.run([sys.executable, '-I', os.path.join(HERE, 'compare_traces.py'), '--cases', os.path.join(OUT, 'cases.json'),
-                          '--legacy', os.path.join(OUT, 'legacy'), '--luau', os.path.join(OUT, 'luau' + tag), '--out', OUT, '--tag=' + tag]).returncode
+if not args.skip_luau: run_luau()
+rc = subprocess.run([sys.executable, '-I', os.path.join(HERE, 'compare_traces.py'), '--cases', os.path.join(OUT, 'cases.json'),
+                     '--legacy', os.path.join(OUT, 'legacy'), '--luau', os.path.join(OUT, 'luau'), '--out', OUT, '--tag=' + ('' if args.report_name == 'report' else '-' + args.report_name)]).returncode
 sys.exit(rc)

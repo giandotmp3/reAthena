@@ -14,7 +14,8 @@ Mismatch classes (per aligned record):
   missing_in_luau  legacy executed a command that legacy_interp never reached/emitted (not an unsupported stub)
   extra_in_luau    legacy_interp emitted a command the legacy VM did not
   luau_stopped     legacy_interp ended early with an error (tail of legacy trace lost)
-  legacy_failure   legacy buildin returned SCRIPT_CMD_FAILURE (`!F`)
+  legacy_failure   legacy buildin returned SCRIPT_CMD_FAILURE (`!F`) and legacy_interp did not report the same failure
+  luau_failure     legacy_interp reported a failure (`!F`) the legacy buildin did not
   end_reason       the two runs ended for different reasons
   state_value / state_missing / state_extra   final variable / param / item state
 """
@@ -117,8 +118,10 @@ def classify_pair(L, U):
     if U['U']:
         out.append(('missing_command', 'no implementation in legacy_interp (soft stub)'))
         return out
-    if L['F']:
-        out.append(('legacy_failure', 'legacy buildin returned failure'))
+    if L['F'] and not U['F']:
+        out.append(('legacy_failure', 'legacy buildin returned failure, legacy_interp did not'))
+    elif U['F'] and not L['F']:
+        out.append(('luau_failure', 'legacy_interp reported failure, legacy buildin did not'))
     la, ua = L['args'], U['args']
     if la != ua:
         if len(la) != len(ua):

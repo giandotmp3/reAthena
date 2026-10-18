@@ -13,6 +13,26 @@ local lower = require("./lower")
 local R = require("./npcrun")
 local K = parser.K
 
+-- world data recorded from the REAL legacy VM by the harness (run_replay.py writes world_data.luau next to this file), exposed to
+-- legacy_interp through its data-provider interface (world.luau: env.data). Absent file = default provider (unknown data).
+local WORLD = nil
+do
+	local ok, wd = pcall(require, "./world_data")
+	if ok and type(wd) == "table" then
+		local names, bflag, castle, shop, maps = wd.itemname or {}, wd.battleflag or {}, wd.castle or {}, wd.shop or {}, wd.map or {}
+		WORLD = {
+			itemname = function(key)
+				if type(key) == "string" then return names[key] or names[string.upper(key)] end
+				return names[key]
+			end,
+			battleflag = function(name) return bflag[name] end,
+			castle = function(map) return castle[map] == true end,
+			shop = function(name) return shop[name] == true end,
+			mapexists = function(map) return maps[map] == true end,
+		}
+	end
+end
+
 local T = {}
 
 -- core VM operations that the legacy side does not record either (they are compiled to jumps / locals there)
@@ -120,6 +140,7 @@ local function traced(cmdTable)
 				for i = 1, n do parts[i] = fmtVal(args[i]) end
 				local line = name .. "(" .. table.concat(parts, ",") .. ")"
 				if ok and r ~= nil and type(r) ~= "table" then line ..= " -> " .. fmtVal(r) end
+				if st.cmdFailed then line ..= " !F"; st.cmdFailed = false end -- legacy SCRIPT_CMD_FAILURE
 				if not lineIdx then st.replayOut[#st.replayOut + 1] = line end
 				if not ok then error(r, 0) end
 				return r
@@ -172,9 +193,10 @@ end
 
 local PARAMS = { "zeny", "baselevel", "joblevel", "class", "statuspoint", "skillpoint", "baseexp", "jobexp", "karma", "manner" }
 
-local function newPlayer(cfg, map)
+local function newPlayer(cfg, map, x, y)
 	local p = W.newPlayer("poor")
 	p.name = cfg.name or "Tester"; p.party = ""; p.guild = ""; p.map = (map == "-") and "prontera" or map
+	p.x, p.y = x or 150, y or 150
 	for k in p.params do p.params[k] = 0 end
 	p.params.baselevel = 1; p.params.joblevel = 1; p.params.sex = 1; p.params.maxweight = 20000 -- as the legacy synthetic player
 	for _, k in PARAMS do if cfg[k] then p.params[k] = cfg[k] end end
@@ -183,50 +205,11 @@ local function newPlayer(cfg, map)
 	return p
 end
 
--- ---- "nosc" mode: the legacy VM's operators && || ?: evaluate ALL operands (they are plain stack ops, parse_subexpr()/op_2()/op_3()
--- in script.cpp); legacy_interp short-circuits. This post-lowering rewrite makes the interpreter evaluate every operand, so that the
--- effect of that single difference can be measured. It touches only the lowered program, never legacy_interp's files.
-local OP = lower.OP
-local E_BIN, E_TERN = K.E_BIN, K.E_TERN
-local BIN = I.BIN
-local function truthy(v) return v ~= 0 and v ~= "" and v ~= nil end
-BIN["&&*"] = function(a, b) return (truthy(a) and truthy(b)) and 1 or 0 end
-BIN["||*"] = function(a, b) return (truthy(a) or truthy(b)) and 1 or 0 end
-BIN[",*"] = function(a, b) return { a, b } end
-BIN["?:*"] = function(c, pair) if truthy(c) then return pair[1] end return pair[2] end
-local function rewrite(e, seen)
-	if type(e) ~= "table" or seen[e] then return end
-	seen[e] = true
-	local k = e[1]
-	if type(k) == "table" then for _, x in e do rewrite(x, seen) end return end
-	if k == E_BIN then
-		if e[2] == "&&" then e[2] = "&&*" elseif e[2] == "||" then e[2] = "||*" end
-		rewrite(e[3], seen); rewrite(e[4], seen)
-	elseif k == E_TERN then
-		local c, a, b = e[2], e[3], e[4]
-		rewrite(c, seen); rewrite(a, seen); rewrite(b, seen)
-		e[1] = E_BIN; e[2] = "?:*"; e[3] = c; e[4] = { E_BIN, ",*", a, b }
-	else
-		for i = 2, #e do if type(e[i]) == "table" then rewrite(e[i], seen) end end
-	end
-end
-local function rewriteProg(prog)
-	local seen = {}
-	for _, ins in prog.code do
-		local op = ins[1]
-		if op == OP.CALLSUB or op == OP.CALLFUNC then
-			rewrite(ins[2], seen); rewrite(ins[3], seen)
-		else
-			rewrite(ins[2], seen)
-		end
-	end
-end
-
--- registries of function scripts (shared by all cases of a process), one per mode
+-- registries of function scripts (shared by all cases of a process), one per load set
 local registries = {}
-local function loadFuncs(uf, mode)
+local function loadFuncs(uf, setname)
 	local funcs, n, failed = {}, 0, 0
-	for _, fi in C.setfiles("re") do
+	for _, fi in C.setfiles(setname) do
 		local text = C.text(fi)
 		if string.find(text, "function\tscript", 1, true) then
 			local r = C.ds.split(text)
@@ -234,34 +217,31 @@ local function loadFuncs(uf, mode)
 				if d.kind == "function" then
 					local ast = parser.parse(d.body, C.builtins, uf)
 					local prog = ast and lower.lower(ast, { name = d.name, builtins = C.builtins, userfuncs = uf })
-					if prog then
-						if mode == "nosc" then rewriteProg(prog) end
-						funcs[string.lower(d.name)] = prog; n += 1
-					else failed += 1 end
+					if prog then funcs[string.lower(d.name)] = prog; n += 1 else failed += 1 end
 				end
 			end
 		end
 	end
 	return funcs, n, failed
 end
-local function registry(mode)
-	local r = registries[mode]
+local function registry(setname)
+	local r = registries[setname]
 	if not r then
 		local uf = C.userfuncs()
-		local funcs, n, failed = loadFuncs(uf, mode)
+		local funcs, n, failed = loadFuncs(uf, setname)
 		r = { uf = uf, funcs = funcs, n = n, failed = failed }
-		registries[mode] = r
+		registries[setname] = r
 	end
 	return r
 end
-function T.setup(mode)
-	local r = registry(mode or "asis")
+function T.setup(setname)
+	local r = registry(setname or "re")
 	return r.n, r.failed
 end
 
 -- find and lower one NPC. returns prog, mapname, line or nil, err
-function T.loadNpc(path: string, npcName: string, mode: string)
-	local registry = registry(mode or "asis")
+function T.loadNpc(path: string, npcName: string, setname: string)
+	local registry = registry(setname or "re")
 	local fi = R.fileIndex(path)
 	if not fi then return nil, "file-not-in-manifest" end
 	local text = C.text(fi)
@@ -273,7 +253,6 @@ function T.loadNpc(path: string, npcName: string, mode: string)
 			local prog, lerr = lower.lower(ast, { name = d.name, file = path, builtins = C.builtins, userfuncs = registry.uf })
 			if not prog then return nil, "lower:" .. tostring(lerr.cause) end
 			prog.baseLine = C.ds.lineof(text, d.pos)
-			if mode == "nosc" then rewriteProg(prog) end
 			local map = string.match(d.w1 or "", "^([^,]*)") or "prontera"
 			
 			return prog, map
@@ -291,10 +270,10 @@ end
 -- Run one case; returns array of trace lines (same format as the legacy hook writes).
 -- case: { path, npc, answers = {string}, player = {..}, cap = 60 }
 function T.runCase(case)
-	local mode = case.mode or "asis"
-	local prog, map = T.loadNpc(case.path, case.npc, mode)
+	local setname = case.set or "re"
+	local prog, map = T.loadNpc(case.path, case.npc, setname)
 	if not prog then return { "#end npc-not-found" }, nil, map end
-	local env = W.newEnv(registry(mode).funcs, 12345)
+	local env = W.newEnv(registry(setname).funcs, 12345, WORLD)
 	local npcVars = {}
 	env.npcvars[prog.name] = npcVars
 	local npc = { vars = npcVars, name = prog.name, map = (map == "-") and "" or map }
@@ -316,7 +295,7 @@ function T.runCase(case)
 		end
 	end
 	if initLabel then
-		local scratch = mkState(newPlayer({}, map), {})
+		local scratch = mkState(newPlayer({}, map, case.x, case.y), {})
 		local co = I.spawn(scratch, prog, initLabel, {})
 		local guard = 0
 		while true do
@@ -326,7 +305,7 @@ function T.runCase(case)
 			if guard > 50 then break end
 		end
 	end
-	local player = newPlayer(case.player or {}, map)
+	local player = newPlayer(case.player or {}, map, case.x, case.y)
 	local before = snapshot(player, npcVars, env)
 	local lines = {}
 	local st = mkState(player, lines)

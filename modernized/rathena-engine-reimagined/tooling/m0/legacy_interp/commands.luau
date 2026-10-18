@@ -152,6 +152,10 @@ C.setd = function(st, str, val)
 end
 C.getarg = function(st, i, default)
 	local v = st.frame.args[i + 1]
+	-- a variable passed to callsub/callfunc is a reference in the legacy VM: its value is read when getarg runs, not when the call was made
+	local refs = st.frame.argrefs
+	local r = refs and refs[i + 1]
+	if r and v ~= nil then v = refget(st, r) end
 	if v == nil then
 		if default ~= nil then return default end
 		terr(st, "GETARG_OUT_OF_RANGE", { index = i })
@@ -245,6 +249,8 @@ C.areamonster = function(st, map, x1, y1, x2, y2, name, id, amount, event)
 end
 C.mobcount = function(st, map, event)
 	rec(st, "mobcount", map, event)
+	local d = st.env.data
+	if d and d.mapexists and not d.mapexists(map) then return -1 end -- legacy: unknown map -> -1
 	return st.env.mobs[string.lower(tostring(event or ""))] or 0
 end
 C.killmonster = function(st, map, event)
@@ -257,10 +263,25 @@ stub("donpcevent", 0)
 stub("doevent", 0)
 stub("playerattached", 1)
 stub("getnpcid", 1)
-stub("getcharid", 1)
+-- getcharid(type): 0 char id, 1 party id, 2 guild id, 3 account id, 4 battleground id, 5 clan id (script.cpp BUILDIN_FUNC(getcharid));
+-- the ids of the scripted player live in world.luau (W.newPlayer); the replay harness uses the legacy hook's synthetic player ids
+C.getcharid = function(st, t, name)
+	rec(st, "getcharid", t, name)
+	local p = st.player
+	if t == 0 then return p.charid or 0 elseif t == 1 then return p.partyid or 0 elseif t == 2 then return p.guildid or 0
+	elseif t == 3 then return p.accountid or 0 end
+	return 0
+end
 stub("is_party_leader", 0)
 stub("getmonsterinfo", 0)
-stub("getitemname", function(st, id) return "Item#" .. tostring(id) end)
+-- item_db name through the data provider (world.luau); unknown id -> "null" exactly like the legacy VM (BUILDIN_FUNC(getitemname))
+C.getitemname = function(st, id)
+	rec(st, "getitemname", id)
+	local data = st.env.data
+	local n = data and data.itemname and data.itemname(id)
+	if n == nil then return "null" end
+	return n
+end
 stub("instance_npcname", function(st, name) return tostring(name) end)
 stub("instance_mapname", function(st, name) return tostring(name) end)
 stub("instance_id", 0)

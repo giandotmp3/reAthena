@@ -7,11 +7,12 @@ local want = { ... }
 local only = nil
 if #want > 0 then only = {}; for _, id in want do only[id] = true end end
 local t0 = os.clock()
-local modes = {}
-for _, c in cases do modes[c.mode or "asis"] = true end
-local n, failed = 0, 0
-for m in modes do n, failed = T.setup(m) end
-print(string.format("### registry %d function scripts (%d failed) %.2fs", n, failed, os.clock() - t0))
+local sets = {}
+for _, c in cases do sets[c.set or "re"] = true end
+for m in sets do
+	local n, failed = T.setup(m)
+	print(string.format("### registry [%s] %d function scripts (%d failed) %.2fs", m, n, failed, os.clock() - t0))
+end
 for _, c in cases do
 	if not only or only[c.id] then
 		local t1 = os.clock()

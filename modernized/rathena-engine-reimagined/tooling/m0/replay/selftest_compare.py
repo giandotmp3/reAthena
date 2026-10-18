@@ -15,6 +15,8 @@ CASES = {
  'extra':   ('mes("a")\n#end end\n', 'mes("a")\nmes("z")\n#end end\n', {'extra_in_luau'}),
  'legacyonly': ('mes("a")\nclose()\n#end end\n', 'mes("a")\n#end end\n', {'missing_in_luau'}),
  'fail':    ('getcastledata("",1) -> 0 !F\n#end end\n', 'getcastledata("",1) -> 0\n#end end\n', {'legacy_failure'}),
+ 'failboth': ('getcastledata("",1) -> 0 !F\n#end end\n', 'getcastledata("",1) -> 0 !F\n#end end\n', set()),
+ 'luaufail': ('warp("x",1,1)\n#end end\n', 'warp("x",1,1) !F\n#end end\n', {'luau_failure'}),
  'state':   ('#end end\n=$x=1\n=$y=2\n%zeny=5\n', '#end end\n=$x=2\n=$z=1\n', {'state_value', 'state_missing', 'state_extra'}),
  'end':     ('mes("a")\n#end cap\n', 'mes("a")\n#end end\n', {'end_reason'}),
 }

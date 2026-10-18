@@ -1,0 +1,237 @@
+// Synthetic conformance NPCs for the legacy-VM replay harness (tooling/m0/replay).
+// Each NPC pins ONE interpreter semantic that the real NPC corpus exercises rarely or never. They run on BOTH sides exactly like the
+// corpus NPCs: installed temporarily into the build COPY of the legacy tree for the legacy side, parsed from this file for legacy_interp.
+// Written for the legacy dialect; every value printed with mes is compared (arguments are part of the trace).
+
+-	script	Syn_switch	-1,{
+	// 1. matched switch: $@__SW0_VAL is reset to 0 by the case; 2. no match: the switch value is left behind; 3. pre-case statements run
+	switch (2) { case 1: mes "one"; break; case 2: mes "two"; break; }
+	switch (7) { case 1: mes "no"; break; }
+	switch (9) { mes "pre"; case 1: break; default: mes "dflt"; break; }
+	// 4. fallthrough into a middle 'default': the compare chain continues with VAL=0 (case 0 matches)
+	switch (1) { case 1: mes "one"; default: mes "dflt"; case 0: mes "zero"; break; }
+	// 5. nested switch inside a case, leftovers of the inner one
+	switch (5) { case 5: switch (6) { case 1: break; } mes "inner"; break; }
+	// 6. loop + continue inside a switch inside a loop
+	.@i = 0;
+	while (.@i < 4) {
+		.@i++;
+		switch (.@i) { case 1: mes "a"; case 2: mes "b"; break; case 3: continue; default: mes "c"; }
+		mes "after" + .@i;
+	}
+	// 7. switch on a string-returned number and on constants
+	switch (getarraysize(.@none)) { case 0: mes "empty"; break; default: mes "nonempty"; }
+	switch (3) { case 1: case 2: case 3: mes "123"; break; }
+	// 8. leftovers by name (indexes count if/while/do/for/function/switch in source order)
+	mes "left=" + $@__sw1_val + "," + $@__sw2_val + "," + $@__sw5_val;
+	close;
+}
+
+-	script	Syn_expr	-1,{
+	// no short-circuit: both operands of && || and all three of ?: are evaluated, including calls with effects
+	.@a = (0 && getitemname(501) == "x");
+	.@b = (1 || getitemname(502) == "x");
+	.@c$ = (1 ? getitemname(503) : getitemname(504));
+	mes .@a + "|" + .@b + "|" + .@c$;
+	.@d = (0 && callsub(L_S, 1)) + (1 || callsub(L_S, 2)) + (callsub(L_S, 3) ? callsub(L_S, 4) : callsub(L_S, 5));
+	mes "d=" + .@d + " cnt=" + $@cnt;
+	// order of effects: commands left of a hoisted callsub still run first
+	if (countitem(501) == 0 && callsub(L_S, 6) > 0) mes "yes"; else mes "no";
+	.@e = countitem(502) + callsub(L_S, 7) + countitem(503);
+	mes "e=" + .@e;
+	// string results of callsub / callfunc-free expressions
+	mes "s=" + callsub(L_STR, 1) + callsub(L_STR, 2);
+	.@f$ = callsub(L_STR, 3);
+	mes .@f$ + "|" + (callsub(L_STR, 4) + "y");
+	// variables are read at the operator, after the calls to their right ran
+	$@v = 1;
+	.@g = $@v + callsub(L_SETV, 5);
+	mes "g=" + .@g;
+	close;
+L_S:
+	$@cnt += 1;
+	return getarg(0);
+L_STR:
+	return "x" + getarg(0);
+L_SETV:
+	$@v = getarg(0);
+	return 10;
+}
+
+-	script	Syn_args	-1,{
+	// call-by-reference: a variable argument is read when getarg runs
+	$@g = 1;
+	callsub L_A, $@g;
+	mes "g after=" + $@g;
+	.@x = 10;
+	callsub L_B, .@x;
+	mes "x=" + .@x;
+	setarray .@arr[0], 3, 4, 5;
+	callsub L_C, .@arr[1];
+	mes "arr=" + .@arr[0] + "," + .@arr[1] + "," + .@arr[2];
+	// the index expression of a variable argument is evaluated once
+	.@k = 0;
+	callsub L_D, .@arr[.@k++];
+	mes "k=" + .@k;
+	// getargcount, default, string arg
+	callsub L_E, "s", 2;
+	callsub L_E;
+	close;
+L_A:
+	$@g = 5;
+	mes "arg=" + getarg(0);
+	return;
+L_B:
+	set getarg(0), getarg(0) + 1;
+	return;
+L_C:
+	set getarg(0), 99;
+	return;
+L_D:
+	mes "d=" + getarg(0);
+	return;
+L_E:
+	mes "argc=" + getargcount() + " a0=" + getarg(0, -1);
+	return;
+}
+
+-	script	Syn_num	-1,{
+	mes (7 / 2) + "|" + (-7 / 2) + "|" + (7 / -2) + "|" + (-7 % 3) + "|" + (7 % -3);
+	mes (1 << 40) + "|" + (3 << 2) + "|" + (1024 >> 3) + "|" + (-16 >> 2);
+	mes (5 & 3) + "|" + (5 | 3) + "|" + (5 ^ 3) + "|" + (~5) + "|" + (~0);
+	mes (-1 & 255) + "|" + (4294967296 | 1) + "|" + (4294967297 & 4294967295) + "|" + (-4294967296 ^ 1);
+	mes (3 > 2) + "|" + (3 == 3) + "|" + (3 != 3) + "|" + (!0) + "|" + (!5) + "|" + (-(-4));
+	mes ("a" < "b") + "|" + ("b" < "a") + "|" + ("abc" == "abc") + "|" + ("abc" != "abd") + "|" + ("Z" < "a");
+	mes 1 + 2 + "x" + 3 + 4;
+	mes "x" + 1 + 2;
+	.@a = 10; .@a += 5; .@a -= 3; .@a *= 2; .@a /= 5; .@a %= 3; .@a <<= 4; .@a >>= 1; .@a |= 1; .@a &= 15; .@a ^= 6;
+	mes "a=" + .@a;
+	.@i = 5; .@j = .@i++ + ++.@i; mes .@i + "," + .@j;
+	.@s$ = "ab"; .@s$ += "cd"; mes .@s$;
+	mes 2147483647 + 1;
+	mes 100000 * 100000;
+	close;
+}
+
+-	script	Syn_str	-1,{
+	mes strcmp("a", "c") + "|" + strcmp("b", "a") + "|" + strcmp("x", "x") + "|" + strcmp("ab", "abc") + "|" + strcmp("", "z");
+	mes strtoupper("aBc1") + strtolower("AbC1") + "|" + strtol("ff", 16) + "|" + strtol("-0x10", 0) + "|" + strtol("077", 0) + "|" + axtoi("1F");
+	mes sprintf("%05d|%-4s|%x|%.2s|%%|%c|%3d|%+d", 42, "ab", 255, "xyz", 65, 7, 5);
+	mes sprintf("no args %d");
+	.@n = sscanf("Yellow Mage Hat", "%s Mage Hat", .@c$);
+	mes .@n + .@c$;
+	.@m = sscanf("12 abc 7", "%d %s %d", .@a, .@s$, .@b);
+	mes .@m + ":" + .@a + .@s$ + .@b;
+	.@m = sscanf("zzz", "%d", .@a);
+	mes "bad=" + .@m;
+	.@m = sscanf("", "%d", .@a);
+	mes "empty=" + .@m;
+	mes strlen("héllo") + "|" + substr("abcdef", 1, 3) + "|" + charat("abc", 1) + "|" + charat("abc", 9) + "|" + strpos("hello", "l") + "|" + strpos("hello", "z");
+	mes replacestr("a-b-c", "-", "+") + "|" + countstr("a-b-c", "-") + "|" + compare("Hello", "ELL") + "|" + atoi("42x") + "|" + atoi("x");
+	.@n = explode(.@p$, "a:b:c", ":");
+	mes .@n + "," + .@p$[0] + .@p$[1] + .@p$[2] + "," + implode(.@p$, "/");
+	mes charisalpha("a1", 0) + "" + charisalpha("a1", 1) + charislower("aB", 0) + charisupper("aB", 1);
+	close;
+}
+
+-	script	Syn_arr	-1,{
+	setarray .@a[0], 10, 20, 30;
+	mes getarraysize(.@a);
+	.@a[5] = 7;
+	mes getarraysize(.@a) + ":" + .@a[1] + ":" + .@a[4];
+	.@a[5] = 0;
+	mes getarraysize(.@a);
+	copyarray .@b[0], .@a[0], 3;
+	mes .@b[0] + "," + .@b[1] + "," + .@b[2] + "," + getarraysize(.@b);
+	deletearray .@a[1], 1;
+	mes .@a[0] + "," + .@a[1] + "," + .@a[2] + "," + getarraysize(.@a);
+	cleararray .@b[0], 7, 2;
+	mes .@b[0] + "," + .@b[1] + "," + .@b[2];
+	setarray .@s$[0], "x", "y", "z";
+	mes inarray(.@s$, "z") + "," + inarray(.@s$, "q") + "," + countinarray(.@s$, .@s$);
+	.@i = 2;
+	mes .@s$[.@i - 1] + .@s$[.@i];
+	setarray $@garr[0], 1, 2;
+	setarray #pacc[0], 3, 4;
+	mes getarraysize($@garr) + "," + getarraysize(#pacc) + "," + $@garr[1] + #pacc[1];
+	.@neg = -1;
+	mes "before-negative";
+	mes .@a[.@neg];
+	mes "after-negative (must not run)";
+	close;
+}
+
+-	script	Syn_scope	-1,{
+	// variable scopes, instance variables outside an instance, '$' vs '$@', character vars
+	.local = 1; $glob = 2; $@gtmp = 3; @tmp = 4; #acc = 5; ##acc2 = 6; perm = 7; 'inst = 8;
+	mes .local + "|" + $glob + "|" + $@gtmp + "|" + @tmp + "|" + #acc + "|" + ##acc2 + "|" + perm + "|" + 'inst + "|" + instance_id();
+	.@s$ = "x"; $gs$ = "y"; @ts$ = "z"; 'is$ = "w";
+	mes .@s$ + $gs$ + @ts$ + 'is$ + "|";
+	set .@r, 5;
+	mes "zeny=" + Zeny + " lvl=" + BaseLevel + " jlv=" + JobLevel;
+	Zeny += 10; mes "zeny=" + Zeny;
+	getitem 501, 3;
+	mes "have=" + countitem(501);
+	delitem 501, 1;
+	mes "have=" + countitem(501);
+	mes strcharinfo(0) + "|" + strcharinfo(1) + "|" + strcharinfo(2) + "|" + strcharinfo(3) + "|" + strnpcinfo(0) + "|" + strnpcinfo(1);
+	close;
+}
+
+-	script	Syn_flow	-1,{
+	// goto into the middle of blocks, nested labels, menu forms, select with empty pieces, prompt, input
+	.@n = 0;
+	goto L_MID;
+	mes "skipped";
+	while (.@n < 3) {
+		mes "loop " + .@n;
+L_MID:
+		.@n++;
+		if (.@n == 2) goto L_OUT;
+	}
+L_OUT:
+	mes "out n=" + .@n;
+	menu "A::B", L_AB, "", L_NO, "C", -;
+	mes "fell through " + @menu;
+	goto L_NEXT;
+L_AB:
+	mes "ab " + @menu;
+L_NO:
+L_NEXT:
+	.@r = select("one::three:four");
+	mes "r=" + .@r + " menu=" + @menu;
+	.@p = prompt("p1:p2");
+	mes "p=" + .@p;
+	input .@num;
+	input .@str$;
+	mes "in=" + .@num + "," + .@str$;
+	callsub L_REC, 3;
+	mes "rec=" + $@rec;
+	close;
+L_REC:
+	if (getarg(0) <= 0) return;
+	$@rec += getarg(0);
+	callsub L_REC, getarg(0) - 1;
+	return;
+}
+
+-	script	Syn_misc	-1,{
+	// a grab bag of cheap commands: min/max/abs/rand, time constants, string/number mixing in mes, equipment and look queries
+	mes max(3, 9, 4) + "|" + min(3, 9, 4) + "|" + abs(-5);
+	mes gettime(1) + ":" + gettime(2) + ":" + gettime(3) + " " + gettime(5) + "/" + gettime(6) + "/" + gettime(7) + " wd" + gettime(4);
+	mes rand(5) + "," + rand(1, 3) + "," + rand(10, 20);
+	mes getequipid(2) + "," + getequipisequiped(2) + "," + getequipname(2) + "," + getequiprefinerycnt(2) + "," + getlook(1) + "," + getlook(9);
+	mes getpartnerid() + "," + getgmlevel() + "," + getcharid(0) + "," + getcharid(1) + "," + getcharid(2) + "," + getcharid(3);
+	mes getitemname(501) + "|" + getitemname(99999999) + "|" + getitemname("Red_Potion");
+	mes isday() + "," + isnight() + "," + distance(1, 1, 4, 3);
+	mes getbattleflag("base_exp_rate");
+	mes mobcount("prontera", "x") + "," + mobcount("no_such_map", "x");
+	.@m$ = "?"; getmapxy(.@m$, .@x, .@y, 0);
+	mes .@m$ + "," + .@x + "," + .@y;
+	warp "prontera", 100, 100;
+	getmapxy(.@m$, .@x, .@y, 0);
+	mes .@m$ + "," + .@x + "," + .@y + "," + strcharinfo(3);
+	callshop "no_such_shop";
+	mes getcastledata("no_such_castle", 1);
+	close;
+}

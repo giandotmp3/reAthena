@@ -108,7 +108,7 @@ L_W:
 	set getarg(1), 99;
 	set getarg(0), getarg(0) + 1;
 	return;
-]], "3|6:20:0|b=99 a2=31|60|xz3")
+]], "3|6:20:0|b=99 a2=31|52|xz3") -- 52: 'inst cannot be written outside an instance (legacy), so 60 - 8
 
 check("menu with '-' and select, @menu numbering with empties", [[
 	menu "A::B", L_AB, "", L_NO, "C", -;
@@ -173,9 +173,9 @@ L_D:
 	return;
 ]], " <ERR CALL_DEPTH>", { limit = 1e9, glimit = 1e9 })
 
--- expression-position (non-hoistable) recursion depth on the host stack
+-- callsub under && / || / ?: is hoisted and recursion stays on heap frames (no host-stack recursion path any more)
 I.MAX_DEPTH = 1000000
-for _, depth in { 100, 190, 250, 1000, 1500, 2000, 2500, 3000, 4000, 5000 } do
+for _, depth in { 100, 1000, 2500, 5000, 20000 } do
 	local src = ([[
 	mes "" + (1 && callsub(L_R, 0));
 	end;
@@ -183,9 +183,93 @@ L_R:
 	if (getarg(0) >= %d) return 1;
 	return (1 && callsub(L_R, getarg(0) + 1));
 ]]):format(depth)
-	local r, err = run(src, { limit = 1e9, glimit = 1e9 })
-	local res = r and (mes(r) .. (r.status == "error" and (" ERR " .. tostring(r.err.type) .. " " .. tostring(r.err.msg)) or "")) or err
-	print(string.format("host-recursive nested callsub (under &&) depth=%d -> %s", depth, string.sub(res, 1, 100)))
+	check("callsub under && recursion depth " .. depth .. " (heap frames)", src, "1", { limit = 1e9, glimit = 1e9 })
 end
+I.MAX_DEPTH = 2048
+
+-- legacy has no short-circuit: every operand of && || ?: is evaluated (script.cpp C_LAND/C_LOR/C_OP3 are stack ops)
+check("no short-circuit: && || ?: evaluate all operands (incl. hoisted callsub)", [[
+	.@a = (0 && callsub(L_S));
+	.@b = (1 || callsub(L_S));
+	.@c = (1 ? callsub(L_S) : callsub(L_S));
+	.@d = (0 && (.@x = 5));
+	mes "cnt=" + $cnt + " a=" + .@a + " b=" + .@b + " c=" + .@c + " x=" + .@x + " d=" + .@d;
+	end;
+L_S:
+	$cnt += 1;
+	return 7;
+]], "cnt=4 a=0 b=1 c=7 x=5 d=0")
+
+check("callsub returning a string keeps the type when hoisted", [[
+	mes "x" + callsub(L_S, 1);
+	.@a$ = callsub(L_S, 2);
+	mes .@a$;
+	end;
+L_S:
+	return "str" + getarg(0);
+]], "xstr1|str2")
+do
+	local r = run([[
+	if (countitem(501) != 0 && callsub(L_S) == 7) mes "yes";
+	.@x = countitem(502) + callsub(L_S) + countitem(503);
+	end;
+L_S:
+	mes "in-sub";
+	return 7;
+]])
+	local got = table.concat(r.log, ",")
+	local want = "countitem(501),mes(in-sub),mes(yes),countitem(502),mes(in-sub),countitem(503)"
+	if got == want then pass += 1 else fail += 1; print("FAIL effect order\n   expected: " .. want .. "\n   got:      " .. got) end
+end
+
+-- statements between 'switch (...) {' and the first 'case' execute (legacy compiles to a compare chain)
+check("switch: statements before the first case execute", [[
+	switch (2) {
+		mes "pre";
+		case 1: mes "one"; break;
+		case 2: mes "two"; break;
+	}
+	mes "done";
+]], "pre|two|done")
+check("switch compat: $@__swN_val left behind (non-zero when no case matched, 0 when matched)", [[
+	switch (2) { case 1: break; case 2: break; }
+	switch (7) { case 1: mes "no"; break; }
+	switch (9) { case 1: break; default: mes "dflt"; break; }
+	mes "v0=" + $@__sw0_val + " v1=" + $@__sw1_val + " v2=" + $@__sw2_val;
+]], "dflt|v0=0 v1=7 v2=9")
+check("switch compat: index counter shared with if/while/for/do/function{}", [[
+	if (1) { .@a = 1; }
+	for (.@i = 0; .@i < 1; .@i++) { .@a++; }
+	switch (5) { case 1: break; }
+	mes "" + $@__sw2_val;
+]], "5")
+check("switch: body falling into mid-switch default jumps on to the next compare with VAL=0 (case 0 matches, default body skipped)", [[
+	switch (1) {
+		case 1: mes "one";
+		default: mes "dflt";
+		case 0: mes "zero"; break;
+	}
+]], "one|zero")
+check("bit operators are int64-correct (bit32 is not)", [[
+	mes "" + (1 << 40) + "|" + (-1 & 255) + "|" + (4294967296 | 1) + "|" + (-8 >> 1) + "|" + (~5) + "|" + (6 ^ 3) + "|" + (-1 ^ 1);
+]], "1099511627776|255|4294967297|-4|-6|5|-2")
+check("strcmp/strtol/sprintf/sscanf/inarray", [[
+	mes "" + strcmp("a", "c") + "|" + strcmp("b", "a") + "|" + strcmp("x", "x");
+	mes strtoupper("aBc") + strtolower("AbC") + "|" + strtol("ff", 16) + "|" + strtol("-0x10", 0) + "|" + axtoi("1F");
+	mes sprintf("%05d|%-4s|%x|%.2s|%%|%c", 42, "ab", 255, "xyz", 65);
+	.@n = sscanf("Yellow Mage Hat", "%s Mage Hat", .@c$);
+	mes .@n + .@c$;
+	.@m = sscanf("12 abc 7", "%d %s %d", .@a, .@s$, .@b);
+	mes .@m + ":" + .@a + .@s$ + .@b;
+	setarray .@arr$[0], "x", "y", "z";
+	mes inarray(.@arr$, "z") + "," + inarray(.@arr$, "q");
+]], "-2|1|0|ABCabc|255|-16|31|00042|ab  |ff|xy|%|A|1Yellow|3:12abc7|2,-1")
+lower.switchCompat = false
+check("switch compat OFF: table dispatch, pre-case statements run, no global left behind", [[
+	switch (2) { mes "pre"; case 1: mes "one"; break; case 2: mes "two"; default: mes "d"; }
+	switch (7) { case 1: break; }
+	mes "[" + $@__sw0_val + "][" + $@__sw1_val + "]";
+]], "pre|two|d|[0][0]")
+lower.switchCompat = true
 
 print(string.format("semantics tests: %d passed, %d failed", pass, fail))

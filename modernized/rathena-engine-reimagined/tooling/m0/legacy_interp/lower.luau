@@ -14,6 +14,8 @@ local M = {}
 -- extra expression kind produced here
 local E_PARAM = 11
 local E_LABELREF = 12 -- patched to E_NUM after all labels are known
+local E_TMPSET = 13 -- {E_TMPSET, name, expr}: raw store of a hoisted command result into a frame temp (keeps its type)
+M.E_TMPSET = E_TMPSET
 M.E_PARAM = E_PARAM
 -- opcodes
 local OP_EXPR, OP_JZ, OP_JMP, OP_JNZ, OP_SWITCH, OP_GOTO, OP_CALLSUB, OP_CALLFUNC, OP_RETURN, OP_END, OP_MENU =
@@ -34,7 +36,9 @@ local function lerr(msg: string, line: number?): never
 end
 
 -- state for the current lowering
-local code, labels, labelSet, loops, sw, pendingRefs, tmpN, BUILTINS, userfuncs, nest
+local code, labels, labelSet, loops, sw, pendingRefs, tmpN, BUILTINS, userfuncs, nest, synIdx
+M.switchCompat = true -- compat flag (default ON): reproduce the legacy compare-chain switch incl. the $@__swN_val global it leaves behind
+local function nextIdx() local i = synIdx; synIdx += 1; return i end
 M.ctx = nil
 M.nestedLabels, M.nestedCallSites, M.dynamicTargets, M.funcDefs = {}, {}, {}, {}
 
@@ -102,10 +106,12 @@ local function resolve(e)
 	end
 end
 
--- hoist callsub/callfunc/user-function calls out of an expression into preceding ops
--- (not under ?:, && or || right-hand sides, where evaluation is conditional)
+-- hoist callsub/callfunc/user-function calls out of an expression into preceding ops.
+-- The legacy VM evaluates EVERY operand of && || ?: (they are stack ops, script.cpp C_LAND/C_LOR/C_OP3 via op_2/op_3), so a call
+-- under them is unconditionally executed and hoisting is semantically exact: there is no "conditional" context any more and no
+-- host-stack recursion path for callsub/callfunc in the interpreter.
 local hoist
-local nHoisted, nNested = 0, 0
+local nHoisted = 0
 local function callToOp(e, dst)
 	local name, args = e[2], e[3]
 	if name == "callsub" then
@@ -124,46 +130,89 @@ local function callToOp(e, dst)
 	end
 end
 
-function hoist(e, conditional)
+-- Order of effects. The legacy VM runs a command the moment the expression walk reaches it (operands left to right, calls included),
+-- while variables are read lazily at the operator. So hoisting a callsub/callfunc out of an expression must keep every command
+-- call that is evaluated BEFORE it ahead of it as well: all E_CALL nodes up to and including the last callsub-like one (post-order =
+-- evaluation order) are hoisted into temporaries, the rest of the expression stays inline.
+local hoistCur, hoistLast = 0, 0
+
+local function countCalls(x)
+	-- same traversal order as hoist(); returns (#E_CALL nodes in post-order, post-order index of the last call-like one)
+	local n, last = 0, 0
+	local function walk(e)
+		local k = e[1]
+		if k == E_CALL then
+			for i = 1, #e[3] do walk(e[3][i]) end
+			n += 1
+			if isCallLike(e[2]) then last = n end
+		elseif k == E_BIN then walk(e[3]); walk(e[4])
+		elseif k == E_UN then walk(e[3])
+		elseif k == E_TERN then walk(e[2]); walk(e[3]); walk(e[4])
+		elseif k == E_ASSIGN then
+			if e[3][4] then walk(e[3][4]) end
+			walk(e[4])
+		elseif k == E_INCDEC then
+			if e[4][4] then walk(e[4][4]) end
+		elseif k == E_VAR then
+			if e[4] then walk(e[4]) end
+		end
+	end
+	walk(x)
+	return n, last
+end
+
+function hoist(e)
 	local k = e[1]
 	if k == E_CALL then
 		local name, args = e[2], e[3]
-		for i = 1, #args do args[i] = hoist(args[i], conditional) end
+		for i = 1, #args do args[i] = hoist(args[i]) end
+		hoistCur += 1
+		if hoistCur > hoistLast then return e end
+		tmpN += 1
+		local tn = "\0t" .. tmpN
 		if isCallLike(name) then
-			if conditional then
-				nNested += 1
-				M.nestedCallSites[#M.nestedCallSites + 1] = { ctx = M.ctx, line = e[4], name = name }
-				return e
-			end
-			tmpN += 1
-			local tn = "\0t" .. tmpN
 			callToOp(e, tn)
 			nHoisted += 1
-			return { E_VAR, ".@", tn }
+		else
+			emit(OP_EXPR, { E_TMPSET, tn, e }, nil, nil, e[4])
 		end
-		return e
+		return { E_VAR, ".@", tn }
 	elseif k == E_BIN then
-		e[3] = hoist(e[3], conditional)
-		local op = e[2]
-		e[4] = hoist(e[4], conditional or op == "&&" or op == "||")
-	elseif k == E_UN then e[3] = hoist(e[3], conditional)
+		e[3] = hoist(e[3]); e[4] = hoist(e[4])
+	elseif k == E_UN then e[3] = hoist(e[3])
 	elseif k == E_TERN then
-		e[2] = hoist(e[2], conditional)
-		e[3] = hoist(e[3], true); e[4] = hoist(e[4], true)
+		e[2] = hoist(e[2]); e[3] = hoist(e[3]); e[4] = hoist(e[4])
 	elseif k == E_ASSIGN then
-		if e[3][4] then e[3][4] = hoist(e[3][4], conditional) end
-		e[4] = hoist(e[4], conditional)
+		if e[3][4] then e[3][4] = hoist(e[3][4]) end
+		e[4] = hoist(e[4])
 	elseif k == E_INCDEC then
-		if e[4][4] then e[4][4] = hoist(e[4][4], conditional) end
+		if e[4][4] then e[4][4] = hoist(e[4][4]) end
 	elseif k == E_VAR then
-		if e[4] then e[4] = hoist(e[4], conditional) end
+		if e[4] then e[4] = hoist(e[4]) end
 	end
 	return e
 end
 
+local function prepList(args)
+	-- a statement-level call: its arguments are one left-to-right evaluation sequence
+	for i = 1, #args do resolve(args[i]) end
+	local total, lastAll = 0, 0
+	for i = 1, #args do
+		local n, l = countCalls(args[i])
+		if l > 0 then lastAll = total + l end
+		total += n
+	end
+	if lastAll == 0 then return end
+	hoistCur, hoistLast = 0, lastAll
+	for i = 1, #args do args[i] = hoist(args[i]) end
+end
+
 local function prep(e)
 	resolve(e)
-	return hoist(e, false)
+	local _, last = countCalls(e)
+	if last == 0 then return e end
+	hoistCur, hoistLast = 0, last
+	return hoist(e)
 end
 
 local lowerStmt
@@ -196,12 +245,11 @@ function lowerStmt(s)
 				if v then v = prep(v) end
 				emit(OP_RETURN, v, nil, nil, line); return
 			elseif name == "menu" then
-				for i = 1, #args do resolve(args[i]); args[i] = hoist(args[i], false) end
+				prepList(args)
 				emit(OP_MENU, args, nil, nil, line); return
 			elseif name == "callsub" or name == "callfunc" or (labelSet[name] and not BUILTINS[name]) or (userfuncs[name] and not BUILTINS[name]) then
 				if name == "callsub" and (args[1][1] ~= E_VAR or args[1][4] or not labelSet[args[1][3]]) then M.dynamicTargets[#M.dynamicTargets + 1] = { ctx = M.ctx, line = line, name = name } end
-				for i = 1, #args do resolve(args[i]) end
-				for i = 1, #args do args[i] = hoist(args[i], false) end
+				prepList(args)
 				callToOp(e, nil)
 				return
 			end
@@ -209,6 +257,7 @@ function lowerStmt(s)
 		local e2 = prep(e)
 		emit(OP_EXPR, e2, nil, nil, line)
 	elseif k == S_IF then
+		nextIdx()
 		local cond = prep(s[2])
 		local jz = emit(OP_JZ, cond, 0, nil, s[5])
 		nest += 1
@@ -224,6 +273,7 @@ function lowerStmt(s)
 			code[jz][3] = #code + 1
 		end
 	elseif k == S_WHILE then
+		nextIdx()
 		local top = #code + 1
 		local cond = prep(s[2])
 		local jz = emit(OP_JZ, cond, 0, nil, s[4])
@@ -238,6 +288,7 @@ function lowerStmt(s)
 		code[jz][3] = fin
 		patch(L.breaks, fin); patch(L.conts, top)
 	elseif k == S_DO then
+		nextIdx()
 		local top = #code + 1
 		local L = { breaks = {}, conts = {} }
 		loops[#loops + 1] = L
@@ -250,6 +301,7 @@ function lowerStmt(s)
 		emit(OP_JNZ, cond, top, nil, s[4])
 		patch(L.breaks, #code + 1); patch(L.conts, contpc)
 	elseif k == S_FOR then
+		nextIdx()
 		if s[2] then
 			local e = prep(s[2]); emit(OP_EXPR, e, nil, nil, s[6])
 		end
@@ -274,37 +326,102 @@ function lowerStmt(s)
 		if jz then code[jz][3] = fin end
 		patch(L.breaks, fin); patch(L.conts, contpc)
 	elseif k == S_SWITCH then
+		local idx = nextIdx()
 		local val = prep(s[2])
-		local ins = emit(OP_SWITCH, val, {}, 0, s[4])
-		local S = { breaks = {}, cases = code[ins][3], default = nil, isSwitch = true }
+		local S = { breaks = {}, isSwitch = true }
 		sw[#sw + 1] = S
 		loops[#loops + 1] = S
 		S.conts = nil
 		nest += 1
-		for _, st in s[3] do
-			local sk = st[1]
-			if sk == S_CASE then
-				local key = st[2]
-				if type(key) == "string" then
-					local v = consts[key]
-					if v == nil then lerr("unknown case constant '" .. key .. "'", st[3]) end
-					key = v
-				end
-				if S.cases[key] then lerr("duplicate case " .. tostring(key), st[3]) end
-				S.cases[key] = #code + 1
-			elseif sk == S_DEFAULT then
-				if S.default then lerr("duplicate default") end
-				S.default = #code + 1
-			else
-				lowerStmt(st)
+		local function lookupKey(st)
+			local key = st[2]
+			if type(key) == "string" then
+				local v = consts[key]
+				if v == nil then lerr("unknown case constant '" .. key .. "'", st[3]) end
+				key = v
 			end
+			return key
+		end
+		if M.switchCompat then
+			-- Exact image of the legacy compare chain (script.cpp parse_syntax 'switch'/'case'/'default', parse_curly_close):
+			--   set $@__SWn_VAL, expr;  <statements before the first case run here>
+			--   case v:   [goto SWn_cJ;]  SWn_c: if (v != $@__SWn_VAL) goto SWn_(c+1);  SWn_cJ: set $@__SWn_VAL,0;  <body>
+			--   default:  SWn_c: goto SWn_(c+1);  SWn_DEF: <body>
+			--   close:    set $@__SWn_VAL,0; goto SWn_FIN; SWn_last: [goto SWn_DEF]; SWn_FIN:
+			-- so the global $@__SWn_VAL is left behind exactly as the real VM leaves it (non-zero when no case matched), a body that falls
+			-- into 'default' continues through the remaining compares with VAL=0, and 'break' jumps straight to SWn_FIN.
+			-- n = the parse-order index of the construct (if/while/do/for/function{}/switch share one counter, printed in hex).
+			local vname = string.format("__sw%x_val", idx)
+			local function setVal(e, line) return emit(OP_EXPR, { E_ASSIGN, "=", { E_VAR, "$@", vname }, e }, nil, nil, line) end
+			setVal(val, s[4])
+			local count, pending, defaultPc, seen = 1, {}, nil, {}
+			for _, st in s[3] do
+				local sk = st[1]
+				if sk == S_CASE then
+					local key = lookupKey(st)
+					if seen[key] then lerr("duplicate case " .. tostring(key), st[3]) end
+					seen[key] = true
+					local jj
+					if count ~= 1 then
+						jj = emit(OP_JMP, 0)
+						patch(pending, #code + 1); pending = {}
+					end
+					pending = { emit(OP_JZ, { E_BIN, "==", { E_NUM, key }, { E_VAR, "$@", vname } }, 0, nil, st[3]) }
+					if jj then code[jj][2] = #code + 1 end
+					setVal({ E_NUM, 0 }, st[3])
+					count += 1
+				elseif sk == S_DEFAULT then
+					if defaultPc then lerr("duplicate default") end
+					patch(pending, #code + 1)
+					pending = { emit(OP_JMP, 0) }
+					defaultPc = #code + 1
+					count += 1
+				else
+					lowerStmt(st)
+				end
+			end
+			setVal({ E_NUM, 0 }, s[4])
+			local jfin = emit(OP_JMP, 0)
+			patch(pending, #code + 1)
+			if defaultPc then emit(OP_JMP, defaultPc) end
+			local fin = #code + 1
+			code[jfin][2] = fin
+			patch(S.breaks, fin)
+		else
+			-- compat off: table dispatch, no global left behind. Statements before the first case still run (the value is
+			-- evaluated first into a hidden frame local, then the statements, then the dispatch).
+			tmpN += 1
+			local tn = "\0sw" .. tmpN
+			emit(OP_EXPR, { E_ASSIGN, "=", { E_VAR, ".@", tn }, val }, nil, nil, s[4])
+			local ins
+			local function dispatch()
+				if not ins then
+					ins = emit(OP_SWITCH, { E_VAR, ".@", tn }, {}, 0, s[4])
+					S.cases = code[ins][3]
+				end
+			end
+			for _, st in s[3] do
+				local sk = st[1]
+				if sk == S_CASE then
+					dispatch()
+					local key = lookupKey(st)
+					if S.cases[key] then lerr("duplicate case " .. tostring(key), st[3]) end
+					S.cases[key] = #code + 1
+				elseif sk == S_DEFAULT then
+					dispatch()
+					if S.default then lerr("duplicate default") end
+					S.default = #code + 1
+				else
+					lowerStmt(st)
+				end
+			end
+			local fin = #code + 1
+			if ins then code[ins][4] = S.default or fin end
+			patch(S.breaks, fin)
 		end
 		nest -= 1
 		loops[#loops] = nil
 		sw[#sw] = nil
-		local fin = #code + 1
-		code[ins][4] = S.default or fin
-		patch(S.breaks, fin)
 	elseif k == S_BLOCK then
 		nest += 1
 		lowerList(s[2])
@@ -324,6 +441,7 @@ function lowerStmt(s)
 		if not L then lerr("unexpected continue") end
 		L.conts[#L.conts + 1] = emit(OP_JMP, 0)
 	elseif k == S_FUNCDEF then
+		nextIdx()
 		local skip = emit(OP_JMP, 0)
 		if labels[s[2]] then lerr("duplicate label/function " .. s[2]) end
 		labels[s[2]] = #code + 1
@@ -344,10 +462,10 @@ M.stats = { hoisted = 0, nested = 0, scripts = 0, ops = 0 }
 -- lower(ast, opts{builtins=, userfuncs=, name=, file=}) -> prog | nil, err
 function M.lower(ast, opts)
 	loadconsts()
-	code, labels, labelSet, loops, sw, pendingRefs, tmpN, nest = {}, {}, {}, {}, {}, {}, 0, 0
+	code, labels, labelSet, loops, sw, pendingRefs, tmpN, nest, synIdx = {}, {}, {}, {}, {}, {}, 0, 0, 0
 	BUILTINS = opts.builtins or require("./builtins")
 	userfuncs = opts.userfuncs or {}
-	nHoisted, nNested = 0, 0
+	nHoisted = 0
 	local ok, err = pcall(function()
 		collectLabels(ast)
 		lowerList(ast)
@@ -363,7 +481,7 @@ function M.lower(ast, opts)
 		return nil, { lower = true, cause = "internal: " .. tostring(err) }
 	end
 	local st = M.stats
-	st.hoisted += nHoisted; st.nested += nNested; st.scripts += 1; st.ops += #code
+	st.hoisted += nHoisted; st.scripts += 1; st.ops += #code
 	return { code = code, labels = labels, name = opts.name, file = opts.file }
 end
 
