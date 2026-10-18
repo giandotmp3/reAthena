@@ -17,5 +17,7 @@ autoreset_ms = 600000
 
 [codecs]
 proto_dir = "proto"
-# Client versions the server accepts. The first milestone generates one.
-supported = ["main/20211103"]
+# Client versions the server accepts. re/20211103 is what a stock legacy build selects for the
+# default PACKETVER (src/config/packets.hpp defines PACKETVER_RE for 20200902..20211118);
+# main/20211103 is a hypothetical target kept from the first scaffold (see README, version model).
+supported = ["re/20211103", "main/20211103"]

@@ -29,7 +29,7 @@ The generic core (`engine-core`, `netproto`, `persistence`, `gateway`, `script-h
 |---|---|---|---|
 | `engine-core/` | C++20, CMake | ECS, attrs, grid, A* (differentially tested vs legacy), tick/timers, movement hooks, instances. **Implemented** | 72 / 0 |
 | `native-defaults/` | C++20 + Luau refs | Opt-in named native stages, default mob AI, differential tests | 16 / 26 |
-| `netproto/` | C++20 + YAML spec + codegen | Packet spec, generated codecs, gating, obfuscation, fuzz targets | 40 / 12 |
+| `netproto/` | C++20 + YAML spec + codegen | Packet spec extracted from legacy, `--verify-legacy`, codecs, gating, fuzz targets | 51 / 12 (+28 Python) |
 | `script-host/` | C++20 + Luau 0.690 (`RATHENA_LUAU_ROOT`) | Per-mod states, bus, coroutines, budgets, reload generations, storage, numerics, `.d.luau` generation. **Implemented** (54 tests skip without Luau) | 136 / 1 |
 | `persistence/` | C++20 + GoogleTest | Generic records and KV, write-behind, WAL, id_map, quotas | 7 / 34 skipped |
 | `gateway/` | C++20 | Login, tickets, char-select plumbing, seams, `--role` | 25 / 68 |
@@ -81,7 +81,7 @@ Next work, in order: (1) fix the 11 interpreter bugs found by replay (full opera
 ## Open items found by the scaffolding agents (need an owner)
 
 1. **Rule-to-unit assignment is not in the spec.** Each agent chose its own mapping and invented local IDs (`EC-*`, `PERSIST-*`, `MOD-*`, `LNPC-*`, `TL-*`, `ARCH-1.1`). Ratify them or assign canonical IDs; each unit has `rules/rule_manifest.tsv` or equivalent.
-2. **Opcodes in `netproto/proto/client_packets.yaml` are an illustrative starter set,** not extracted from the legacy packet DB; the codegen has no `--verify-legacy` check yet. Do not rely on them.
+2. **`netproto` spec is now extracted from the legacy headers** (`proto/legacy_20211103.yaml`: 1390 live definitions, 948 opcodes; `--verify-legacy` fails on drift; cross-checked against `g++ -E` with 0 disagreements). Default build 20211103 is the **RE flavour** (WantToConnection is 0x0436, 23 bytes; 0x0085 is ChangeDir). Deliberate divergence: one canonical opcode per name; other legacy-accepted opcodes disconnect. Not captured yet: opcode obfuscation and the other 154 shuffle blocks, field layouts for the 786 handler-parsed packets, packed sub-encodings, phase gates. Build now needs Python 3 + PyYAML. Two legacy structs disagree with their table length (`PACKET_ZC_FEED_PET`/`_MER`, 7 vs 5); reported, not reconciled.
 3. **Ruleset starter data is hand-authored and provisional;** conformance vectors come from spec text, not captured legacy golden traces (`RATHENA_GOLDEN_TRACE`). BR-RULESET-025 (RES) and 034 (float32 crit) readings need confirmation against golden traces.
 4. **`persistence`:** `open_connection()` throws `NotImplementedError` for real URLs until the SQLite and PostgreSQL connections are lifted from `modernized/rathena-reimagined/persistence`. BR-CHAR-054 is implemented as a generic per-kind cap, which needs confirmation.
 5. **Spec contradiction:** architecture §6.1 lists `sql.read` as a permission while §5 says no general `sql.read` exists. `mods` followed §5 and tests assert it is rejected. Fix §6.1.

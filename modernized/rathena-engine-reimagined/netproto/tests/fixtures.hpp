@@ -1,6 +1,9 @@
 #pragma once
-// Test fixtures. All values are FAKE. Opcodes mirror proto/client_packets.yaml
-// but are built by hand so the tests do not depend on the YAML loader.
+// Test fixtures. All values are FAKE and SYNTHETIC: this hand-built catalog exercises the
+// framing/gating/negotiation logic with made-up layouts (e.g. CZ_ENTER_OLD and CZ_USE_ITEM_OLD
+// share 0x0072, CZ_VAR_EXAMPLE is invented) and is NOT the legacy data. The real, verified
+// opcodes/lengths live in proto/client_packets.yaml; tests over them are in test_legacy_spec.cpp
+// (generated catalog, see generated/catalog_client_packets.hpp).
 #include "netproto/codec_set.hpp"
 #include "netproto/connect_check.hpp"
 #include "netproto/flood_guard.hpp"

@@ -83,6 +83,11 @@ struct PacketVersion {
   std::uint16_t opcode = 0;
   LengthRule length;
   std::vector<FieldSpec> fields;
+  /// false: the layout lives in a legacy handler (clif_parse_*), not in a typed struct, so
+  /// `fields` is empty by design and no field type is guessed. `handler_offsets` then
+  /// carries the legacy pos[] list (offsets the handler reads), whose types are unknown.
+  bool fields_known = true;
+  std::vector<std::uint16_t> handler_offsets;
 };
 
 struct PacketDef {
