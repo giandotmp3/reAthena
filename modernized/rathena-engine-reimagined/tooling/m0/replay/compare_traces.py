@@ -214,6 +214,12 @@ def main():
     root_examples = collections.defaultdict(list)
     for c in cases:
         L, U, mm = compare_case(c)
+        if L['end'] == 'npc-not-found':
+            # the REAL server did not instantiate this NPC (its map is not in the build's map cache): nothing to compare. Reported separately,
+            # never counted as pass or fail.
+            res.append(dict(id=c['id'], npc=c['npc'], file=c['path'], line=c.get('line'), interactions=0, category=c['category'], strict_pass=False, fmt_pass=False,
+                            skipped=True, legacy_calls=0, luau_calls=0, legacy_end=L['end'], luau_end=U['end'], mismatches=0, root=None))
+            continue
         call_mm = [m for m in mm if m['kind'] not in STATE_KINDS]
         strict_pass = not mm
         fmt_pass = all(m['kind'] in FORMAT_ONLY for m in mm)
@@ -232,13 +238,16 @@ def main():
                         legacy_calls=len(L['calls']), luau_calls=len(U['calls']), legacy_end=L['end'], luau_end=U['end'],
                         mismatches=len(mm), root=root and dict(kind=root['kind'], cmd=root['cmd'], detail=root['detail'], attr=root.get('attr'),
                         legacy=root['legacy'], luau=root['luau'])))
-    json.dump(dict(cases=res, by_kind=by_kind, root_kind=root_kind), open(os.path.join(args.out, 'results%s.json' % args.tag), 'w'), indent=1, default=dict)
+    json.dump(dict(cases=res, by_kind=by_kind, root_kind=root_kind), open(os.path.join(args.out, 'results%s.json' % args.tag), 'w'), indent=1, default=dict)  # includes the skipped cases (flag 'skipped')
     # ---- report ----
     out = []
     P = out.append
+    skipped = [r for r in res if r.get('skipped')]
+    res = [r for r in res if not r.get('skipped')]
     n = len(res)
     sp = sum(r['strict_pass'] for r in res); fp = sum(r['fmt_pass'] for r in res)
     P('CASES (NPC x answer-script x player profile): %d    NPCs: %d' % (n, len(set(r['npc'] for r in res))))
+    if skipped: P('excluded: %d cases (%d NPCs) that the real server does not instantiate (NPC not found by the legacy hook); not counted below' % (len(skipped), len(set(r['npc'] for r in skipped))))
     P('strict pass (traces + end state identical): %d / %d = %.1f%%' % (sp, n, 100 * sp / max(1, n)))
     P('pass modulo formatting-only differences:    %d / %d = %.1f%%' % (fp, n, 100 * fp / max(1, n)))
     calls_l = sum(r['legacy_calls'] for r in res)

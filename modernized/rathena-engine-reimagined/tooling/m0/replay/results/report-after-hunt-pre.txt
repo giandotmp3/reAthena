@@ -1,0 +1,28 @@
+CASES (NPC x answer-script x player profile): 879    NPCs: 293
+excluded: 21 cases (7 NPCs) that the real server does not instantiate (NPC not found by the legacy hook); not counted below
+strict pass (traces + end state identical): 876 / 879 = 99.7%
+pass modulo formatting-only differences:    876 / 879 = 99.7%
+legacy host calls recorded: 13253   legacy_interp: 13253
+cases with >= 1 blocking interaction (next/select/menu/input/...): 583; ended by the interaction cap: 3; median legacy calls per case: 11
+strict passes that are non-trivial (>= 5 legacy calls and >= 1 interaction): 570
+NPCs with all variants passing strictly: 292 / 293
+
+per category (cases strictly passing / total):
+  hunt                         876 / 879
+
+mismatch classes (all aligned records, cascades included):  count
+  state_missing           3
+
+ROOT (first) divergence per failing case, by class:
+  state_missing           3
+ROOT divergence attribution (class, cause):
+  state_missing    unattributed                                                                             3
+
+LEGACY END REASONS: {'end': 876, 'cap': 3}
+LUAU   END REASONS: {'end': 876, 'cap': 3}
+
+=== examples per class (all mismatches; case id -> file:line of the NPC) ===
+
+## state_missing (3)
+  [h448a] npc/quests/kiel_hyre_quest.txt:6282  (NPC "Robots#kh1"; legacy trace line None, luau trace line None)
+      $@mobid=110013151 only in legacy

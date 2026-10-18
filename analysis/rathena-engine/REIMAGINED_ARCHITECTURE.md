@@ -341,3 +341,7 @@ Autonomous continuation under the user's "continue with your own recommendations
 ## 18. Replay outcome (recorded 2026-10-18)
 
 The legacy script VM runs headless here, and a 138-run comparison against `legacy_interp` gave 68.1% strict equality (73.9% once operands are fully evaluated). The 11 interpreter bugs found are listed in `M0_RESULTS.md`; the compatibility layer's acceptance bar is: replay on the full corpus with every mismatch classed as interpreter bug, missing world state, or documented deviation, and zero unclassified.
+
+## 19. Replay result after interpreter fixes (recorded 2026-10-18)
+
+`legacy_interp` now matches the real VM on 2,482 of 2,485 replay runs (99.9%) over about 1,000 NPCs in both load sets (`M0_RESULTS.md`, addendum 2). The acceptance bar from §18 is met for entry flows in the empty-world model. It remains open for events, timers, multi-player flows and the unimplemented builtins. The prototype lives under `tooling/m0/legacy_interp/`; porting it into the `legacy-npc` unit (with the lazy flat-op cache) is the next implementation step for that unit.

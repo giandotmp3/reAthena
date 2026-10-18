@@ -350,7 +350,7 @@ function lowerStmt(s)
 			--   close:    set $@__SWn_VAL,0; goto SWn_FIN; SWn_last: [goto SWn_DEF]; SWn_FIN:
 			-- so the global $@__SWn_VAL is left behind exactly as the real VM leaves it (non-zero when no case matched), a body that falls
 			-- into 'default' continues through the remaining compares with VAL=0, and 'break' jumps straight to SWn_FIN.
-			-- n = the parse-order index of the construct (if/while/do/for/function{}/switch share one counter, printed in hex).
+			-- n = the parse-order index of the construct: if/while/do/for/function{}/switch AND every `case` (its generated `if`) share one counter, printed in hex.
 			local vname = string.format("__sw%x_val", idx)
 			local function setVal(e, line) return emit(OP_EXPR, { E_ASSIGN, "=", { E_VAR, "$@", vname }, e }, nil, nil, line) end
 			setVal(val, s[4])
@@ -358,6 +358,7 @@ function lowerStmt(s)
 			for _, st in s[3] do
 				local sk = st[1]
 				if sk == S_CASE then
+					nextIdx() -- the compare the legacy compiler emits for a case is an `if (...) goto` statement: it takes a construct index
 					local key = lookupKey(st)
 					if seen[key] then lerr("duplicate case " .. tostring(key), st[3]) end
 					seen[key] = true
@@ -403,6 +404,7 @@ function lowerStmt(s)
 			for _, st in s[3] do
 				local sk = st[1]
 				if sk == S_CASE then
+					nextIdx()
 					dispatch()
 					local key = lookupKey(st)
 					if S.cases[key] then lerr("duplicate case " .. tostring(key), st[3]) end

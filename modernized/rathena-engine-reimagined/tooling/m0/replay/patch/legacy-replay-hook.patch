@@ -133,7 +133,7 @@
  	if (!sd.state.using_fake_npc && (npcid == fake_nd->id || ((bl = map_id2bl(npcid)) && (bl->m!=sd.m ||
 --- /dev/null
 +++ b/src/map/replay_hook.inc
-@@ -0,0 +1,349 @@
+@@ -0,0 +1,354 @@
 +// Record/replay conformance hook for the legacy script VM (tooling/m0/replay).
 +// NOT part of the legacy build: applied only to a COPY of the source tree by replay/build_legacy.sh.
 +// Included at the very end of script.cpp so it can see the file-static VM state (str_data, buildin_func, st_db).
@@ -297,6 +297,7 @@
 +		int64 uid = key.i64;
 +		const char* name = get_str( script_getvarid( uid ) );
 +		uint32 idx = script_getvaridx( uid );
++		if( kind == 0 && strncasecmp( name, "ARG", 3 ) == 0 && name[3] >= '0' && name[3] <= '9' && name[4] == ' ' ) continue; // ARGn: scratch registers of achievement.cpp condition evaluation (written by getitem & co), not script state
 +		std::string nm = replay_lower( name );
 +		if( idx != 0 ){ char b[24]; snprintf( b, sizeof(b), "[%u]", idx ); nm += b; }
 +		std::string val;
@@ -475,9 +476,13 @@
 +		{ "baseexp", (int64)sd->status.base_exp }, { "jobexp", (int64)sd->status.job_exp }, { "karma", sd->status.karma }, { "manner", sd->status.manner },
 +	};
 +	for( auto& p : params ) if( p.v != 0 ) state.push_back( std::string( "%" ) + p.n + "=" + std::to_string( (long long)p.v ) );
-+	for( int i = 0; i < MAX_INVENTORY; i++ )
-+		if( sd->inventory.u.items_inventory[i].nameid && sd->inventory.u.items_inventory[i].amount )
-+			state.push_back( "+item " + std::to_string( (unsigned long long)sd->inventory.u.items_inventory[i].nameid ) + "=" + std::to_string( sd->inventory.u.items_inventory[i].amount ) );
++	{ // inventory, aggregated per item id (a non-stackable item taken in bulk occupies one slot per piece)
++		std::map<unsigned long long, long long> inv;
++		for( int i = 0; i < MAX_INVENTORY; i++ )
++			if( sd->inventory.u.items_inventory[i].nameid && sd->inventory.u.items_inventory[i].amount )
++				inv[(unsigned long long)sd->inventory.u.items_inventory[i].nameid] += sd->inventory.u.items_inventory[i].amount;
++		for( auto& kv : inv ) state.push_back( "+item " + std::to_string( kv.first ) + "=" + std::to_string( kv.second ) );
++	}
 +	std::sort( state.begin(), state.end() );
 +	fprintf( g_replay_fp, "#end %s\n", reason.c_str() );
 +	for( const std::string& s : state ) fprintf( g_replay_fp, "%s\n", s.c_str() );

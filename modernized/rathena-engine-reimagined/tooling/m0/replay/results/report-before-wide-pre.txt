@@ -1,0 +1,174 @@
+CASES (NPC x answer-script x player profile): 240    NPCs: 80
+strict pass (traces + end state identical): 190 / 240 = 79.2%
+pass modulo formatting-only differences:    190 / 240 = 79.2%
+legacy host calls recorded: 4746   legacy_interp: 4716
+cases with >= 1 blocking interaction (next/select/menu/input/...): 170; ended by the interaction cap: 4; median legacy calls per case: 12
+strict passes that are non-trivial (>= 5 legacy calls and >= 1 interaction): 141
+NPCs with all variants passing strictly: 58 / 80
+
+per category (cases strictly passing / total):
+  array-string                  45 /  54
+  dense-flow                    59 /  72
+  simple-dialogue               30 /  36
+  spread                        23 /  42
+  switch-menu                   33 /  36
+
+mismatch classes (all aligned records, cascades included):  count
+  missing_in_luau        90
+  arg_value              88
+  extra_in_luau          60
+  ret_value              52
+  missing_command        15
+  legacy_failure          4
+  state_missing           3
+  state_extra             3
+  state_value             2
+  ordering                1
+
+ROOT (first) divergence per failing case, by class:
+  ret_value              24
+  missing_command        12
+  arg_value               9
+  missing_in_luau         4
+  legacy_failure          1
+ROOT divergence attribution (class, cause):
+  ret_value        world (value comes from game data / clock / player the harness does not model)          24
+  missing_command  coverage (command not implemented in legacy_interp)                                     12
+  arg_value        unattributed                                                                             9
+  missing_in_luau  unattributed                                                                             4
+  legacy_failure   world (legacy buildin failed: needs real world state)                                    1
+
+LEGACY END REASONS: {'end': 236, 'cap': 4}
+LUAU   END REASONS: {'end': 236, 'cap': 4}
+
+=== examples per class (all mismatches; case id -> file:line of the NPC) ===
+
+## missing_in_luau (90)
+  [w094a] npc/jobs/valkyrie.txt:355  (NPC "Teleporter"; legacy trace line 5, luau trace line None)
+      legacy-only call
+      legacy: mes("of the exhibitions.")
+  [w116a] npc/guild2/agit_main_se.txt:1823  (NPC "Sunflower#template"; legacy trace line 4, luau trace line None)
+      legacy-only call
+      legacy: mes("- It's an amazingly huge sunflower; as big as a human! ... You feel something mysterious emanating from the flower. -")
+  [w116a] npc/guild2/agit_main_se.txt:1823  (NPC "Sunflower#template"; legacy trace line 5, luau trace line None)
+      legacy-only call
+      legacy: next()
+  [w116a] npc/guild2/agit_main_se.txt:1823  (NPC "Sunflower#template"; legacy trace line 6, luau trace line None)
+      legacy-only call
+      legacy: select("Hold the stem.:Do nothing.") -> 1
+  [w116a] npc/guild2/agit_main_se.txt:1823  (NPC "Sunflower#template"; legacy trace line 7, luau trace line None)
+      legacy-only call
+      legacy: strnpcinfo(4) -> ""
+
+## arg_value (88)
+  [w084c] npc/cities/jawaii.txt:834  (NPC "Bartender#jaw"; legacy trace line 155, luau trace line 155)
+      arguments differ
+      legacy: mes("So...")
+      luau  : mes("Hmm...")
+  [w084c] npc/cities/jawaii.txt:834  (NPC "Bartender#jaw"; legacy trace line 173, luau trace line 176)
+      arguments differ
+      legacy: specialeffect2(38)
+      luau  : specialeffect2(124) -> 0
+  [w086a] npc/quests/seals/god_global.txt:18  (NPC "Golbal var"; legacy trace line 5, luau trace line 5)
+      arguments differ
+      legacy: logmes("Tester attempted to access GM NPC Golbal var (sec_in02,15,170).")
+      luau  : logmes("Tester attempted to access GM NPC Golbal var (prontera,150,150).") -> 0
+  [w094a] npc/jobs/valkyrie.txt:355  (NPC "Teleporter"; legacy trace line 3, luau trace line 3)
+      arguments differ
+      legacy: mes("Please refrain")
+      luau  : mes("Congratulations.")
+  [w096c] npc/merchants/alchemist.txt:23  (NPC "Guild Dealer"; legacy trace line 15, luau trace line 15)
+      arguments differ
+      legacy: mes("Potion Creation Guide?")
+      luau  : mes("Item#7144?")
+
+## extra_in_luau (60)
+  [w084c] npc/cities/jawaii.txt:834  (NPC "Bartender#jaw"; legacy trace line None, luau trace line 165)
+      legacy_interp-only call
+      luau  : mes("containing a glossy")
+  [w118c] npc/merchants/enchan_arm.txt:20  (NPC "Apprentice Craftsman"; legacy trace line None, luau trace line 59)
+      legacy_interp-only call
+      luau  : select("Item#2311 [1]:Item#2318 [1]:Item#2319 [1]:Item#2320 [1]:Item#2308 [1]:Item#2310 [1]:Item#2315 [1]:Item#2317 [1]:Item#2322 [1]:Item#2324 [1]:Item#2326 [1]:Item#2331 [1]:Item#2333 [1]:Item#2336 [1]:Item#2342 [1]:Item#2345 [1]:Item#2347 [1]:Item#2349 [1]:Item#2351 [1]:") -> 3
+  [w148a] npc/battleground/kvm/kvm_enter.txt:17  (NPC "KVM Mercenary Officer#1"; legacy trace line None, luau trace line 2)
+      legacy_interp-only call
+      luau  : checkquest(6025,1) -> -1
+  [w148a] npc/battleground/kvm/kvm_enter.txt:17  (NPC "KVM Mercenary Officer#1"; legacy trace line None, luau trace line 3)
+      legacy_interp-only call
+      luau  : mes("[Guillaume Mercenary Officer]")
+  [w148a] npc/battleground/kvm/kvm_enter.txt:17  (NPC "KVM Mercenary Officer#1"; legacy trace line None, luau trace line 5)
+      legacy_interp-only call
+      luau  : next()
+
+## ret_value (52)
+  [w084a] npc/cities/jawaii.txt:834  (NPC "Bartender#jaw"; legacy trace line 8, luau trace line 8)
+      return differs
+      legacy: rand(1,100) -> 91
+      luau  : rand(1,100) -> 66
+  [w094a] npc/jobs/valkyrie.txt:355  (NPC "Teleporter"; legacy trace line 1, luau trace line 1)
+      return differs
+      legacy: rand(1,10) -> 1
+      luau  : rand(1,10) -> 7
+  [w096c] npc/merchants/alchemist.txt:23  (NPC "Guild Dealer"; legacy trace line 14, luau trace line 14)
+      return differs
+      legacy: getitemname(7144) -> "Potion Creation Guide"
+      luau  : getitemname(7144) -> "Item#7144"
+  [w097a] npc/pre-re/merchants/hair_dyer.txt:21  (NPC "Jovovich"; legacy trace line 17, luau trace line 17)
+      return differs
+      legacy: getitemname(975) -> "Scarlet Dyestuffs"
+      luau  : getitemname(975) -> "Item#975"
+  [w107a] npc/battleground/bg_common.txt:386  (NPC "Erundek"; legacy trace line 23, luau trace line 23)
+      return differs
+      legacy: getitemname(13036) -> "Brave Assassin's Damascus"
+      luau  : getitemname(13036) -> "Item#13036"
+
+## missing_command (15)
+  [w085a] npc/cities/jawaii.txt:438  (NPC "Employee#jaw1"; legacy trace line 3, luau trace line 3)
+      no implementation in legacy_interp (soft stub)
+      legacy: getpartnerid() -> 0
+      luau  : getpartnerid() !U
+  [w097a] npc/pre-re/merchants/hair_dyer.txt:21  (NPC "Jovovich"; legacy trace line 14, luau trace line 14)
+      no implementation in legacy_interp (soft stub)
+      legacy: getlook(6) -> 0
+      luau  : getlook(6) !U
+  [w114a] npc/other/mercenary_rent.txt:24  (NPC "Mercenary Manager#main"; legacy trace line 9, luau trace line 9)
+      no implementation in legacy_interp (soft stub)
+      legacy: mercenary_get_faith(0) -> 0
+      luau  : mercenary_get_faith(0) !U
+  [w127a] npc/merchants/hair_dyer.txt:22  (NPC "Hair Dyer#lich"; legacy trace line 17, luau trace line 17)
+      no implementation in legacy_interp (soft stub)
+      legacy: getlook(6) -> 0
+      luau  : getlook(6) !U
+  [w148a] npc/battleground/kvm/kvm_enter.txt:17  (NPC "KVM Mercenary Officer#1"; legacy trace line 1, luau trace line 1)
+      no implementation in legacy_interp (soft stub)
+      legacy: getbattleflag("feature.bgqueue") -> 1
+      luau  : getbattleflag("feature.bgqueue") !U
+
+## legacy_failure (4)
+  [w115a] npc/guild2/agit_main_se.txt:1801  (NPC "Switch#template"; legacy trace line 12, luau trace line 12)
+      legacy buildin returned failure, legacy_interp did not
+      legacy: warp("",275,244) !F
+      luau  : warp("",275,244) -> 0
+  [w116a] npc/guild2/agit_main_se.txt:1823  (NPC "Sunflower#template"; legacy trace line 3, luau trace line 3)
+      legacy buildin returned failure, legacy_interp did not
+      legacy: getcastledata("",1) -> 0 !F
+      luau  : getcastledata("",1) -> 0
+
+## state_missing (3)
+  [w116a] npc/guild2/agit_main_se.txt:1823  (NPC "Sunflower#template"; legacy trace line None, luau trace line None)
+      @menu=1 only in legacy
+
+## state_extra (3)
+  [w148a] npc/battleground/kvm/kvm_enter.txt:17  (NPC "KVM Mercenary Officer#1"; legacy trace line None, luau trace line None)
+      @menu=1 only in legacy_interp
+
+## state_value (2)
+  [w118c] npc/merchants/enchan_arm.txt:20  (NPC "Apprentice Craftsman"; legacy trace line None, luau trace line None)
+      @menu legacy=1 luau=3
+  [w160a] npc/pre-re/jobs/1-1/acolyte.txt:33  (NPC "Cleric#aco"; legacy trace line None, luau trace line None)
+      job_acolyte_q legacy=2 luau=3
+
+## ordering (1)
+  [w084c] npc/cities/jawaii.txt:834  (NPC "Bartender#jaw"; legacy trace line 168, luau trace line 167)
+      call moved: legacy line 168, luau line 167
+      legacy: next()
+      luau  : next()

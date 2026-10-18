@@ -18,12 +18,16 @@ import os, re, sys, json, argparse, collections
 ap = argparse.ArgumentParser()
 ap.add_argument('--repo', default=os.environ.get('RATHENA_REPO', '/home/user/reAthena'))
 ap.add_argument('--per-set', type=int, default=80)
+ap.add_argument('--random', type=int, default=0, help='instead of the stratified pick: N seeded-random eligible NPCs per load set (bug-hunt corpus), disjoint from corpus.json and corpus_wide.json')
+ap.add_argument('--seed', type=int, default=20261018)
 ap.add_argument('--out', default=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'corpus', 'corpus_wide.json'))
 args = ap.parse_args()
 REPO = args.repo
 HERE = os.path.dirname(os.path.abspath(__file__))
 first = json.load(open(os.path.join(HERE, 'corpus', 'corpus.json')))['chosen']
 first_names = {(n['name']) for n in first}
+if args.random and os.path.exists(os.path.join(HERE, 'corpus', 'corpus_wide.json')):
+    first_names |= {n['name'] for n in json.load(open(os.path.join(HERE, 'corpus', 'corpus_wide.json')))['chosen']}
 
 def walk(conf, out):
     with open(os.path.join(REPO, conf), 'rb') as f:
@@ -96,6 +100,15 @@ for setname, conf in (('re', 'npc/re/scripts_main.conf'), ('pre', 'npc/pre-re/sc
     ok = [n for n in npcs if n['excl'] == 0 and n['other'] <= 5 and n['inter'] >= 2 and n['mes'] >= 1 and n['lines'] <= 700
           and n['name'] not in first_names and n['onlabels'] <= 2]
     dens = lambda n: n['callsub'] * 3 + n['goto'] * 3 + n['labels'] * 2 + n['callfunc']
+    if args.random:
+        import random
+        rnd = random.Random(args.seed)
+        pool = sorted(ok, key=lambda n: (n['file'], n['line']))
+        picked = rnd.sample(pool, min(args.random, len(pool)))
+        chosen_all += [dict(n, category='hunt') for n in sorted(picked, key=lambda n: (n['file'], n['line']))]
+        summary[setname] = dict(files_in_set=len(files), npcs=len(npcs), eligible=len(ok), chosen=len(picked),
+                                dirs=len(set(os.path.dirname(n['file']) for n in picked)), files=len(set(n['file'] for n in picked)))
+        continue
     chosen, perfile, perdir = [], collections.Counter(), collections.Counter()
     def take(cat, cands, k, per_file=2):
         got = 0

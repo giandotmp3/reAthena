@@ -1,0 +1,147 @@
+CASES (NPC x answer-script x player profile): 138    NPCs: 46
+strict pass (traces + end state identical): 95 / 138 = 68.8%
+pass modulo formatting-only differences:    95 / 138 = 68.8%
+legacy host calls recorded: 3314   legacy_interp: 3301
+cases with >= 1 blocking interaction (next/select/menu/input/...): 95; ended by the interaction cap: 5; median legacy calls per case: 13
+strict passes that are non-trivial (>= 5 legacy calls and >= 1 interaction): 68
+NPCs with all variants passing strictly: 28 / 46
+
+per category (cases strictly passing / total):
+  array-string                  17 /  30
+  callsub-goto                  21 /  30
+  simple-dialogue               21 /  30
+  switch-menu                   24 /  30
+  worst:agit_main_se.txt         0 /   3
+  worst:enchan_mal.txt           3 /   3
+  worst:invest_main.txt          3 /   3
+  worst:prontera.txt             6 /   6
+  worst:quests_16_1.txt          0 /   3
+
+mismatch classes (all aligned records, cascades included):  count
+  missing_in_luau       309
+  extra_in_luau         284
+  ret_value              73
+  arg_value              61
+  legacy_failure          9
+  state_extra             3
+  missing_command         3
+  state_missing           1
+
+ROOT (first) divergence per failing case, by class:
+  ret_value              18
+  missing_in_luau        10
+  legacy_failure          6
+  arg_value               3
+  state_extra             3
+  missing_command         3
+ROOT divergence attribution (class, cause):
+  ret_value        world (value comes from game data / clock / player the harness does not model)          15
+  missing_in_luau  unattributed                                                                            10
+  legacy_failure   world (legacy buildin failed: needs real world state)                                    6
+  arg_value        unattributed                                                                             3
+  ret_value        unattributed                                                                             3
+  state_extra      unattributed                                                                             3
+  missing_command  coverage (command not implemented in legacy_interp)                                      3
+
+LEGACY END REASONS: {'end': 133, 'cap': 5}
+LUAU   END REASONS: {'end': 133, 'cap': 5}
+
+=== examples per class (all mismatches; case id -> file:line of the NPC) ===
+
+## missing_in_luau (309)
+  [n12a] npc/quests/first_class/tu_ma_th01.txt:477  (NPC "Trace of Battle#12"; legacy trace line 1, luau trace line None)
+      legacy-only call
+      legacy: eaclass() -> 0
+  [n20a] npc/re/quests/eden/eden_quests.txt:1772  (NPC "Administrator Michael"; legacy trace line 5, luau trace line None)
+      legacy-only call
+      legacy: mes("[Michael]")
+  [n23b] npc/re/merchants/bio4_reward.txt:11  (NPC "Weird old man#Bio4Reward"; legacy trace line 71, luau trace line 106)
+      legacy ran countitem where legacy_interp ran select
+      legacy: countitem(6471) -> 0
+      luau  : select("Show me other items.","^FF0000Agent Katar^000000","^FF0000Guillotine Katar^000000","^FF0000Ygnus Stale^000000","^FF0000End Sektura^000000","^FF0000Cannon Spear^000000","^FF0000Giant Lance^000000","^FF0000Chilly Spell Book^000000","^FF0000Recovery Light^000000","^FF0000Aztoe Nail^000000","^FF
+
+## extra_in_luau (284)
+  [n23b] npc/re/merchants/bio4_reward.txt:11  (NPC "Weird old man#Bio4Reward"; legacy trace line None, luau trace line 14)
+      legacy_interp-only call
+      luau  : mes("[Weird old man]")
+  [n23b] npc/re/merchants/bio4_reward.txt:11  (NPC "Weird old man#Bio4Reward"; legacy trace line None, luau trace line 16)
+      legacy_interp-only call
+      luau  : next()
+  [n23b] npc/re/merchants/bio4_reward.txt:11  (NPC "Weird old man#Bio4Reward"; legacy trace line None, luau trace line 35)
+      legacy_interp-only call
+      luau  : rand(1,2) -> 1
+  [n23b] npc/re/merchants/bio4_reward.txt:11  (NPC "Weird old man#Bio4Reward"; legacy trace line None, luau trace line 128)
+      legacy_interp-only call
+      luau  : setarray(&.@amount,50,100,35) -> 0
+
+## ret_value (73)
+  [n14a] npc/re/merchants/eden_market.txt:1469  (NPC "Dye the Alchemist#alc01"; legacy trace line 12, luau trace line 12)
+      return differs
+      legacy: callshop("para_alc10") -> 1
+      luau  : callshop("para_alc10") -> 0
+  [n17c] npc/battleground/kvm/kvm_item_pay.txt:15  (NPC "KVM Logistic Officer#a"; legacy trace line 39, luau trace line 39)
+      return differs
+      legacy: getitemname(1282) -> "Glorious Jamadhar"
+      luau  : getitemname(1282) -> "Item#1282"
+  [n23b] npc/re/merchants/bio4_reward.txt:11  (NPC "Weird old man#Bio4Reward"; legacy trace line 13, luau trace line 13)
+      return differs
+      legacy: rand(1,2) -> 1
+      luau  : rand(1,2) -> 2
+  [n31a] npc/re/quests/juno_monster_society.txt:1106  (NPC "Map Examiner Mother One#yma"; legacy trace line 2, luau trace line 2)
+      return differs
+      legacy: getitemname(1000374) -> "Ultra-Low Carbonated Soda"
+      luau  : getitemname(1000374) -> "Item#1000374"
+  [n37a] npc/re/instances/FacewormsNest.txt:2574  (NPC "Merchant Prince's Box#1"; legacy trace line 3, luau trace line 3)
+      return differs
+      legacy: instance_npcname("Merchant Prince's Box#1") !F
+      luau  : instance_npcname("Merchant Prince's Box#1") -> "Merchant Prince's Box#1"
+
+## arg_value (61)
+  [n03a] npc/re/quests/quests_16_1.txt:18580  (NPC "Underground Dungeon Helper#EP161D"; legacy trace line 5, luau trace line 5)
+      arguments differ
+      legacy: logmes("Tester attempted to access GM NPC Underground Dungeon Helper#EP161D (prt_prison,20,20).")
+      luau  : logmes("Tester attempted to access GM NPC Underground Dungeon Helper#EP161D (prontera,150,150).") -> 0
+  [n17c] npc/battleground/kvm/kvm_item_pay.txt:15  (NPC "KVM Logistic Officer#a"; legacy trace line 40, luau trace line 40)
+      arguments differ
+      legacy: mes("You have selected ^ff0000Glorious Jamadhar^000000.")
+      luau  : mes("You have selected ^ff0000Item#1282^000000.")
+  [n23b] npc/re/merchants/bio4_reward.txt:11  (NPC "Weird old man#Bio4Reward"; legacy trace line 15, luau trace line 50)
+      arguments differ
+      legacy: mes("I was on the way to visit my son who lives in Rune-Midgarts. It's really far away, so I took the airplane, and..")
+      luau  : mes("Lately young people are not so patient!!!!")
+  [n23b] npc/re/merchants/bio4_reward.txt:11  (NPC "Weird old man#Bio4Reward"; legacy trace line 58, luau trace line 93)
+      arguments differ
+      legacy: countitem(6470) -> 0
+      luau  : countitem(6469) -> 0
+  [n29a] npc/quests/quests_comodo.txt:36  (NPC "Hair Ornament Girl"; legacy trace line 10, luau trace line 9)
+      arguments differ
+      legacy: countitem(7069) -> 0
+      luau  : countitem(2608) -> 0
+
+## legacy_failure (9)
+  [n04a] npc/guild2/agit_main_se.txt:207  (NPC "Steward#template"; legacy trace line 2, luau trace line 2)
+      legacy buildin returned failure, legacy_interp did not
+      legacy: getcastledata("",1) -> 0 !F
+      luau  : getcastledata("",1) -> 0
+  [n37a] npc/re/instances/FacewormsNest.txt:2574  (NPC "Merchant Prince's Box#1"; legacy trace line 3, luau trace line 3)
+      legacy buildin returned failure, legacy_interp did not
+      legacy: instance_npcname("Merchant Prince's Box#1") !F
+      luau  : instance_npcname("Merchant Prince's Box#1") -> "Merchant Prince's Box#1"
+  [n39a] npc/re/quests/woe_te/te_mission_main.txt:45  (NPC "pop_mission_TE"; legacy trace line 8, luau trace line 8)
+      legacy buildin returned failure, legacy_interp did not
+      legacy: rand(0,0) !F
+      luau  : rand(0,0) -> 0
+
+## state_extra (3)
+  [n16a] npc/re/instances/Regenschirm.txt:296  (NPC "Detained Researcher#rgsr_q01"; legacy trace line None, luau trace line None)
+      'rescued=1 only in legacy_interp
+
+## missing_command (3)
+  [n24a] npc/other/marriage.txt:591  (NPC "Bishop#w"; legacy trace line 2, luau trace line 2)
+      no implementation in legacy_interp (soft stub)
+      legacy: getpartnerid() -> 0
+      luau  : getpartnerid() !U
+
+## state_missing (1)
+  [n44b] npc/re/merchants/enchan_illusion_17_1.txt:407  (NPC "RS26#illusion_enchant"; legacy trace line None, luau trace line None)
+      $@__swf_val=7 only in legacy

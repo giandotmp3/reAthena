@@ -16,14 +16,34 @@ local K = parser.K
 -- world data recorded from the REAL legacy VM by the harness (run_replay.py writes world_data.luau next to this file), exposed to
 -- legacy_interp through its data-provider interface (world.luau: env.data). Absent file = default provider (unknown data).
 local WORLD = nil
+local LOOKUP = {}
+local MISSES = {}
+local T_FMT
 do
 	local ok, wd = pcall(require, "./world_data")
 	if ok and type(wd) == "table" then
-		local names, bflag, castle, shop, maps = wd.itemname or {}, wd.battleflag or {}, wd.castle or {}, wd.shop or {}, wd.map or {}
+		LOOKUP = wd.lookup or {}
+		local names, bflag, castle, shop, maps, aegis = wd.itemname or {}, wd.battleflag or {}, wd.castle or {}, wd.shop or {}, wd.map or {}, wd.aegis or {}
 		WORLD = {
 			itemname = function(key)
 				if type(key) == "string" then return names[key] or names[string.upper(key)] end
 				return names[key]
+			end,
+			itemid = function(key)
+				if type(key) == "string" then return aegis[key] end
+				if names[key] ~= nil then return key end
+				return nil
+			end,
+			-- static game-data answers recorded from the real VM for exactly the queries this run made (demand-driven probe, see
+			-- run_replay.py); a query without a recorded answer is logged as a miss and answered "unknown"
+			lookup = function(cmd, ...)
+				local n = select("#", ...)
+				local parts = table.create(n)
+				for i = 1, n do parts[i] = T_FMT(select(i, ...)) end
+				local key = cmd .. "(" .. table.concat(parts, ",") .. ")"
+				local v = LOOKUP[key]
+				if v == nil then MISSES[key] = true end
+				return v
 			end,
 			battleflag = function(name) return bflag[name] end,
 			castle = function(map) return castle[map] == true end,
@@ -34,6 +54,7 @@ do
 end
 
 local T = {}
+T.misses = MISSES
 
 -- core VM operations that the legacy side does not record either (they are compiled to jumps / locals there)
 local SKIP = { set = true, setr = true, jump_zero = true, ["goto"] = true, callsub = true, callfunc = true, ["return"] = true,
@@ -76,6 +97,8 @@ local function fmtVal(v): string
 	return "<" .. t .. ">"
 end
 
+T_FMT = fmtVal
+
 -- is argument position k (1-based) a reference position of the builtin spec? (same walk as the C++ side)
 local function specIsRef(spec: string?, k: number): boolean
 	if not spec then return false end
@@ -92,15 +115,12 @@ local function specIsRef(spec: string?, k: number): boolean
 	return c == "r"
 end
 
-local function scriptedRand(env, a, b)
+-- the legacy hook overwrites the result of a successful rand() with this sequence (LCG over a call counter); the interpreter's own
+-- argument validation (failure + end of script for an empty range) still applies because the host only supplies the random source
+local function scriptedRand(env, lo, hi)
 	env.randN = (env.randN or 0) + 1
 	local r = (1103515245 * env.randN + 12345) % 2147483648
-	if b ~= nil then
-		if b < a then a, b = b, a end
-		return a + r % (b - a + 1)
-	end
-	if a <= 0 then return 0 end
-	return r % a
+	return lo + r % (hi - lo + 1)
 end
 
 -- wrap a command table so that every call is recorded (after completion, as on the legacy side)
@@ -125,9 +145,7 @@ local function traced(cmdTable)
 				local ok, r
 				local lineIdx
 				if PRE[name] then lineIdx = #st.replayOut + 1; st.replayOut[lineIdx] = name .. "(" .. table.concat((function() local t = {} for i = 1, n do t[i] = fmtVal(args[i]) end return t end)(), ",") .. ")" end
-				if name == "rand" then
-					ok, r = true, scriptedRand(st.env, ...)
-				elseif name == "gettime" then
+				if name == "gettime" then
 					local a = ...
 					ok, r = true, (a >= 1 and a <= 8) and ({ 56, 34, 12, 0, 18, 10, 2026, 291 })[a] or -1
 				elseif name == "gettimetick" then
@@ -165,6 +183,7 @@ local function softHandler(st, name, argNodes)
 		else
 			ok, v = pcall(I.eval, st, node)
 		end
+		if not ok and v == I.END then error(v, 0) end -- e.g. a failing rand() in the arguments ends the script, as in the legacy VM
 		parts[i] = ok and fmtVal(v) or "<err>"
 	end
 	st.replayOut[#st.replayOut + 1] = name .. "(" .. table.concat(parts, ",") .. ") !U"
@@ -242,9 +261,29 @@ end
 -- find and lower one NPC. returns prog, mapname, line or nil, err
 function T.loadNpc(path: string, npcName: string, setname: string)
 	local registry = registry(setname or "re")
-	local fi = R.fileIndex(path)
-	if not fi then return nil, "file-not-in-manifest" end
-	local text = C.text(fi)
+	local text
+	if path == "synthetic" then
+		text = require("./synthetic_src")[1]
+		if not registry.synthLoaded then
+			-- function scripts declared in the synthetic file join the registry of the load set
+			registry.synthLoaded = true
+			local r0 = C.ds.split(text)
+			for _, d in r0.decls do
+				if d.kind == "function" then registry.uf[string.lower(d.name)] = true end
+			end
+			for _, d in r0.decls do
+				if d.kind == "function" then
+					local ast = parser.parse(d.body, C.builtins, registry.uf)
+					local prog = ast and lower.lower(ast, { name = d.name, builtins = C.builtins, userfuncs = registry.uf })
+					if prog then registry.funcs[string.lower(d.name)] = prog end
+				end
+			end
+		end
+	else
+		local fi = R.fileIndex(path)
+		if not fi then return nil, "file-not-in-manifest" end
+		text = C.text(fi)
+	end
 	local r = C.ds.split(text)
 	for _, d in r.decls do
 		if d.kind == "script" and d.name == npcName then
@@ -274,9 +313,10 @@ function T.runCase(case)
 	local prog, map = T.loadNpc(case.path, case.npc, setname)
 	if not prog then return { "#end npc-not-found" }, nil, map end
 	local env = W.newEnv(registry(setname).funcs, 12345, WORLD)
+	env.rand = function(lo, hi) return scriptedRand(env, lo, hi) end
 	local npcVars = {}
 	env.npcvars[prog.name] = npcVars
-	local npc = { vars = npcVars, name = prog.name, map = (map == "-") and "" or map }
+	local npc = { vars = npcVars, name = prog.name, path = (case.path == "synthetic") and "npc/replay_synth.txt" or case.path, map = (map == "-") and "" or map, x = (map == "-") and 0 or case.x, y = (map == "-") and 0 or case.y }
 	local function mkState(player, out)
 		local st = I.newState{ player = player, env = env, npc = npc, commands = TRACED_EXT, unsupported = softHandler,
 			counts = {}, limit = 500000, glimit = 2048 }

@@ -1,0 +1,149 @@
+CASES (NPC x answer-script x player profile): 44    NPCs: 11
+strict pass (traces + end state identical): 8 / 44 = 18.2%
+pass modulo formatting-only differences:    8 / 44 = 18.2%
+legacy host calls recorded: 1050   legacy_interp: 1034
+cases with >= 1 blocking interaction (next/select/menu/input/...): 4; ended by the interaction cap: 0; median legacy calls per case: 18
+strict passes that are non-trivial (>= 5 legacy calls and >= 1 interaction): 3
+NPCs with all variants passing strictly: 2 / 11
+
+per category (cases strictly passing / total):
+  synthetic                      8 /  44
+
+mismatch classes (all aligned records, cascades included):  count
+  arg_value             176
+  missing_command       128
+  ret_value             100
+  missing_in_luau        28
+  legacy_failure         16
+  state_missing          12
+  extra_in_luau          12
+  state_extra             8
+  state_value             4
+
+ROOT (first) divergence per failing case, by class:
+  arg_value              16
+  missing_command         8
+  ret_value               8
+  missing_in_luau         4
+ROOT divergence attribution (class, cause):
+  arg_value        unattributed                                                                            16
+  missing_command  coverage (command not implemented in legacy_interp)                                      8
+  ret_value        world (value comes from game data / clock / player the harness does not model)           8
+  missing_in_luau  unattributed                                                                             4
+
+LEGACY END REASONS: {'end': 44}
+LUAU   END REASONS: {'end': 44}
+
+=== examples per class (all mismatches; case id -> file:line of the NPC) ===
+
+## arg_value (176)
+  [y01a] synthetic:0  (NPC "Syn_switch"; legacy trace line 2, luau trace line 2)
+      arguments differ
+      legacy: mes("pre")
+      luau  : mes("dflt")
+  [y02a] synthetic:0  (NPC "Syn_expr"; legacy trace line 4, luau trace line 1)
+      arguments differ
+      legacy: getitemname(504) -> "White Potion"
+      luau  : getitemname(503) -> "Item#503"
+
+## missing_command (128)
+  [y05a] synthetic:0  (NPC "Syn_str"; legacy trace line 1, luau trace line 1)
+      no implementation in legacy_interp (soft stub)
+      legacy: strcmp("a","c") -> -2
+      luau  : strcmp("a","c") !U
+  [y05a] synthetic:0  (NPC "Syn_str"; legacy trace line 7, luau trace line 7)
+      no implementation in legacy_interp (soft stub)
+      legacy: strtoupper("aBc1") -> "ABC1"
+      luau  : strtoupper("aBc1") !U
+  [y05a] synthetic:0  (NPC "Syn_str"; legacy trace line 8, luau trace line 8)
+      no implementation in legacy_interp (soft stub)
+      legacy: strtolower("AbC1") -> "abc1"
+      luau  : strtolower("AbC1") !U
+  [y05a] synthetic:0  (NPC "Syn_str"; legacy trace line 9, luau trace line 9)
+      no implementation in legacy_interp (soft stub)
+      legacy: strtol("ff",16) -> 255
+      luau  : strtol("ff",16) !U
+  [y05a] synthetic:0  (NPC "Syn_str"; legacy trace line 12, luau trace line 12)
+      no implementation in legacy_interp (soft stub)
+      legacy: axtoi("1F") -> 31
+      luau  : axtoi("1F") !U
+
+## ret_value (100)
+  [y02a] synthetic:0  (NPC "Syn_expr"; legacy trace line 4, luau trace line 1)
+      return differs
+      legacy: getitemname(504) -> "White Potion"
+      luau  : getitemname(503) -> "Item#503"
+  [y05a] synthetic:0  (NPC "Syn_str"; legacy trace line 18, luau trace line 18)
+      return differs
+      legacy: sscanf("Yellow Mage Hat","%s Mage Hat","") -> 1
+      luau  : sscanf("Yellow Mage Hat","%s Mage Hat","") -> 0
+  [y05a] synthetic:0  (NPC "Syn_str"; legacy trace line 36, luau trace line 36)
+      return differs
+      legacy: atoi("42x") -> 42
+      luau  : atoi("42x") -> 0
+  [y05a] synthetic:0  (NPC "Syn_str"; legacy trace line 39, luau trace line 39)
+      return differs
+      legacy: explode(&.@p$,"a:b:c",":")
+      luau  : explode(&.@p$,"a:b:c",":") -> 3
+  [y05a] synthetic:0  (NPC "Syn_str"; legacy trace line 43, luau trace line 43)
+      return differs
+      legacy: getarraysize(&.@q$) -> 4
+      luau  : getarraysize(&.@q$) -> 2
+
+## missing_in_luau (28)
+  [y02a] synthetic:0  (NPC "Syn_expr"; legacy trace line 1, luau trace line None)
+      legacy-only call
+      legacy: getitemname(501) -> "Red Potion"
+  [y11a] synthetic:0  (NPC "Syn_func"; legacy trace line 18, luau trace line None)
+      legacy-only call
+      legacy: charat("le",0) -> "l"
+  [y11a] synthetic:0  (NPC "Syn_func"; legacy trace line 19, luau trace line None)
+      legacy-only call
+      legacy: compare("aeiou","l") -> 0
+  [y11a] synthetic:0  (NPC "Syn_func"; legacy trace line 24, luau trace line None)
+      legacy-only call
+      legacy: sprintf("%d %s",2,"APPLES") -> "2 APPLES"
+
+## legacy_failure (16)
+  [y05a] synthetic:0  (NPC "Syn_str"; legacy trace line 22, luau trace line 22)
+      legacy buildin returned failure, legacy_interp did not
+      legacy: sscanf("zzz","%d",12) -> -1 !F
+      luau  : sscanf("zzz","%d",0) -> 0
+  [y09a] synthetic:0  (NPC "Syn_misc"; legacy trace line 55, luau trace line 55)
+      legacy buildin returned failure, legacy_interp did not
+      legacy: getmapxy(&.@nm$,&.@nx,&.@ny,999) -> -1 !F
+      luau  : getmapxy(&.@nm$,&.@nx,&.@ny,999) -> 0
+  [y09a] synthetic:0  (NPC "Syn_misc"; legacy trace line 57, luau trace line 57)
+      legacy buildin returned failure, legacy_interp did not
+      legacy: callshop("no_such_shop") -> 0 !F
+      luau  : callshop("no_such_shop") -> 0
+  [y09a] synthetic:0  (NPC "Syn_misc"; legacy trace line 58, luau trace line 58)
+      legacy buildin returned failure, legacy_interp did not
+      legacy: getcastledata("no_such_castle",1) -> 0 !F
+      luau  : getcastledata("no_such_castle",1) -> 0
+
+## state_missing (12)
+  [y01a] synthetic:0  (NPC "Syn_switch"; legacy trace line None, luau trace line None)
+      $@__sw3_val=7 only in legacy
+  [y01a] synthetic:0  (NPC "Syn_switch"; legacy trace line None, luau trace line None)
+      $@__sw5_val=9 only in legacy
+  [y01a] synthetic:0  (NPC "Syn_switch"; legacy trace line None, luau trace line None)
+      $@__swc_val=6 only in legacy
+
+## extra_in_luau (12)
+  [y06a] synthetic:0  (NPC "Syn_arr"; legacy trace line None, luau trace line 28)
+      legacy_interp-only call
+      luau  : mes(0)
+  [y06a] synthetic:0  (NPC "Syn_arr"; legacy trace line None, luau trace line 30)
+      legacy_interp-only call
+      luau  : close()
+
+## state_extra (8)
+  [y07a] synthetic:0  (NPC "Syn_scope"; legacy trace line None, luau trace line None)
+      'inst=8 only in legacy_interp
+  [y07a] synthetic:0  (NPC "Syn_scope"; legacy trace line None, luau trace line None)
+      'is$="w" only in legacy_interp
+
+## state_value (4)
+  [y02a] synthetic:0  (NPC "Syn_expr"; legacy trace line None, luau trace line None)
+      $@cnt legacy=7 luau=4

@@ -1,0 +1,128 @@
+CASES (NPC x answer-script x player profile): 900    NPCs: 300
+strict pass (traces + end state identical): 809 / 900 = 89.9%
+pass modulo formatting-only differences:    809 / 900 = 89.9%
+legacy host calls recorded: 10173   legacy_interp: 10215
+cases with >= 1 blocking interaction (next/select/menu/input/...): 453; ended by the interaction cap: 2; median legacy calls per case: 7
+strict passes that are non-trivial (>= 5 legacy calls and >= 1 interaction): 386
+NPCs with all variants passing strictly: 264 / 300
+
+per category (cases strictly passing / total):
+  hunt                         809 / 900
+
+mismatch classes (all aligned records, cascades included):  count
+  arg_value             118
+  extra_in_luau         103
+  missing_in_luau        70
+  ret_value              50
+  missing_command        36
+
+ROOT (first) divergence per failing case, by class:
+  ret_value              37
+  missing_in_luau        27
+  missing_command        15
+  arg_value              12
+ROOT divergence attribution (class, cause):
+  ret_value        world (value comes from game data / clock / player the harness does not model)          29
+  missing_in_luau  unattributed                                                                            27
+  missing_command  coverage (command not implemented in legacy_interp)                                     15
+  arg_value        unattributed                                                                            12
+  ret_value        unattributed                                                                             8
+
+LEGACY END REASONS: {'end': 898, 'cap': 2}
+LUAU   END REASONS: {'end': 898, 'cap': 2}
+
+=== examples per class (all mismatches; case id -> file:line of the NPC) ===
+
+## arg_value (118)
+  [h003a] npc/battleground/tierra/tierra02.txt:818  (NPC "Release all#a02"; legacy trace line 5, luau trace line 5)
+      arguments differ
+      legacy: logmes("Tester attempted to access GM NPC Release all#a02 (bat_a02,1,1).")
+      luau  : logmes("Tester attempted to access GM NPC Release all#a02 (prontera,150,150).") -> 0
+  [h004a] npc/cities/ayothaya.txt:80  (NPC "Aibakthing#ayo2"; legacy trace line 10, luau trace line 10)
+      arguments differ
+      legacy: warp("alberta",245,87)
+      luau  : warp("alberta",235,45) -> 0
+  [h018a] npc/cities/izlude.txt:505  (NPC "Sailor#2izlude"; legacy trace line 7, luau trace line 7)
+      arguments differ
+      legacy: warp("izlude",197,210)
+      luau  : warp("izlude",176,182) -> 0
+  [h032a] npc/cities/lighthalzen.txt:2385  (NPC "Rocky#li_house"; legacy trace line 3, luau trace line 3)
+      arguments differ
+      legacy: mes("Woof woof!")
+      luau  : mes("Grrrrrrr...")
+  [h059a] npc/merchants/refine.txt:595  (NPC "Manthasman"; legacy trace line 3, luau trace line 4)
+      arguments differ
+      legacy: mes("Hahaha, you already knew it. So you'd like to refine something?")
+      luau  : mes("I'm the Armsmith.")
+
+## extra_in_luau (103)
+  [h059a] npc/merchants/refine.txt:595  (NPC "Manthasman"; legacy trace line None, luau trace line 2)
+      legacy_interp-only call
+      luau  : disable_items() -> 0
+  [h059a] npc/merchants/refine.txt:595  (NPC "Manthasman"; legacy trace line None, luau trace line 8)
+      legacy_interp-only call
+      luau  : setarray(&.@indices[1],6,7,8,9,3,2,0,1,5,4) -> 0
+  [h059a] npc/merchants/refine.txt:595  (NPC "Manthasman"; legacy trace line None, luau trace line 9)
+      legacy_interp-only call
+      luau  : getarraysize(&.@indices) -> 11
+  [h059a] npc/merchants/refine.txt:595  (NPC "Manthasman"; legacy trace line None, luau trace line 10)
+      legacy_interp-only call
+      luau  : getequipisequiped(6) -> 0
+  [h059a] npc/merchants/refine.txt:595  (NPC "Manthasman"; legacy trace line None, luau trace line 30)
+      legacy_interp-only call
+      luau  : mes("[Manthasman Pruhag]")
+
+## missing_in_luau (70)
+  [h059a] npc/merchants/refine.txt:595  (NPC "Manthasman"; legacy trace line 5, luau trace line 6)
+      legacy ran close2 where legacy_interp ran mes
+      legacy: close2()
+      luau  : mes("know what you want me to refine.")
+  [h059a] npc/merchants/refine.txt:595  (NPC "Manthasman"; legacy trace line 6, luau trace line 7)
+      legacy ran refineui where legacy_interp ran next
+      legacy: refineui()
+      luau  : next()
+  [h066a] npc/quests/bard_quest.txt:2467  (NPC "Bard#4"; legacy trace line 28, luau trace line None)
+      legacy-only call
+      legacy: mes("'The Rich Mr. Kim~!'")
+  [h066a] npc/quests/bard_quest.txt:2467  (NPC "Bard#4"; legacy trace line 58, luau trace line None)
+      legacy-only call
+      legacy: next()
+  [h068a] npc/quests/counteragent_mixture.txt:20  (NPC "Louitz#cm"; legacy trace line 5, luau trace line None)
+      legacy-only call
+      legacy: countitem(971) -> 0
+
+## ret_value (50)
+  [h004a] npc/cities/ayothaya.txt:80  (NPC "Aibakthing#ayo2"; legacy trace line 9, luau trace line 9)
+      return differs
+      legacy: checkre(0) -> 1
+      luau  : checkre(0) -> 0
+  [h018a] npc/cities/izlude.txt:505  (NPC "Sailor#2izlude"; legacy trace line 6, luau trace line 6)
+      return differs
+      legacy: checkre(0) -> 1
+      luau  : checkre(0) -> 0
+  [h032a] npc/cities/lighthalzen.txt:2385  (NPC "Rocky#li_house"; legacy trace line 1, luau trace line 1)
+      return differs
+      legacy: rand(1,2) -> 1
+      luau  : rand(1,2) -> 2
+  [h061a] npc/other/arena/arena_room.txt:370  (NPC "Helper Lonik"; legacy trace line 11, luau trace line 11)
+      return differs
+      legacy: getmapusers("force_1-2") -> 0
+      luau  : getmapusers("force_1-2") -> 1
+  [h065a] npc/other/turbo_track.txt:4675  (NPC "Turbo Track Guide#Entran"; legacy trace line 7, luau trace line 7)
+      return differs
+      legacy: checkre(0) -> 1
+      luau  : checkre(0) -> 0
+
+## missing_command (36)
+  [h020a] npc/cities/jawaii.txt:467  (NPC "Employee#jaw2"; legacy trace line 3, luau trace line 3)
+      no implementation in legacy_interp (soft stub)
+      legacy: getpartnerid() -> 0
+      luau  : getpartnerid() !U
+  [h059a] npc/merchants/refine.txt:595  (NPC "Manthasman"; legacy trace line 1, luau trace line 1)
+      no implementation in legacy_interp (soft stub)
+      legacy: getbattleflag("feature.refineui") -> 1
+      luau  : getbattleflag("feature.refineui") !U
+  [h186a] npc/re/merchants/cashmall.txt:334  (NPC "Cat Hand Salesman Tunkarom"; legacy trace line 5, luau trace line 5)
+      no implementation in legacy_interp (soft stub)
+      legacy: mesitemicon(1001583) -> "Boots of Good and Evil Coupon"
+      luau  : mesitemicon(1001583) !U

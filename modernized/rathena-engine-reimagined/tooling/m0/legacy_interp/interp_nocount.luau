@@ -8,6 +8,7 @@ local K = P.K
 local E_NUM, E_STR, E_VAR, E_CALL, E_BIN, E_UN, E_TERN, E_ASSIGN, E_INCDEC, E_NEXTLINE =
 	K.E_NUM, K.E_STR, K.E_VAR, K.E_CALL, K.E_BIN, K.E_UN, K.E_TERN, K.E_ASSIGN, K.E_INCDEC, K.E_NEXTLINE
 local E_PARAM = Lw.E_PARAM
+local E_TMPSET = Lw.E_TMPSET
 local OP = Lw.OP
 local OP_EXPR, OP_JZ, OP_JMP, OP_JNZ, OP_SWITCH, OP_GOTO, OP_CALLSUB, OP_CALLFUNC, OP_RETURN, OP_END, OP_MENU =
 	OP.EXPR, OP.JZ, OP.JMP, OP.JNZ, OP.SWITCH, OP.GOTO, OP.CALLSUB, OP.CALLFUNC, OP.RETURN, OP.END, OP.MENU
@@ -25,6 +26,12 @@ local function terr(st, t: string, fields)
 	error(fields, 0)
 end
 M.terr = terr
+
+-- a command that returns SCRIPT_CMD_FAILURE in the legacy VM calls this (host harnesses read st.cmdFailed; the interpreter keeps going
+-- unless the handler also ends the script, as the legacy command does with `st->state = END`)
+function M.cmdFail(st)
+	st.cmdFailed = true
+end
 
 local function tostr(v)
 	if type(v) == "number" then
@@ -51,7 +58,10 @@ local function scopeTable(st, scope)
 	elseif scope == "$@" then return st.env.gtemp
 	elseif scope == "#" then return st.player.acc
 	elseif scope == "##" then return st.player.acc2
-	elseif scope == "'" then return st.env.instance
+	elseif scope == "'" then
+		-- instance variables exist only while the script runs inside an instance (legacy: reads default, writes are errors)
+		if (st.env.instanceId or 0) > 0 then return st.env.instance end
+		return {}
 	end
 	terr(st, "BAD_SCOPE", { scope = scope })
 end
@@ -118,6 +128,14 @@ end
 ---------------------------------------------------------------------------------------------
 local eval
 
+-- array subscript: the legacy getelementofarray() ends the script (st->state = END, SCRIPT_CMD_FAILURE) for an index < 0 or >= SCRIPT_MAX_ARRAYSIZE
+local function evalIndex(st, ie)
+	local i = eval(st, ie)
+	if type(i) ~= "number" then i = tonumber(i) or 0 end
+	if i < 0 or i >= 4294967295 then error(END, 0) end
+	return i
+end
+
 local BIN = {}
 BIN["+"] = function(a, b)
 	if type(a) == "string" or type(b) == "string" then return tostr(a) .. tostr(b) end
@@ -142,11 +160,39 @@ BIN["<"] = function(a, b) if type(a) == type(b) then return a < b and 1 or 0 end
 BIN["<="] = function(a, b) if type(a) == type(b) then return a <= b and 1 or 0 end return tonum(a) <= tonum(b) and 1 or 0 end
 BIN[">"] = function(a, b) if type(a) == type(b) then return a > b and 1 or 0 end return tonum(a) > tonum(b) and 1 or 0 end
 BIN[">="] = function(a, b) if type(a) == type(b) then return a >= b and 1 or 0 end return tonum(a) >= tonum(b) and 1 or 0 end
-BIN["&"] = function(a, b) return bit_and(a, b) end
-BIN["|"] = function(a, b) return bit_or(a, b) end
-BIN["^"] = function(a, b) return bit_xor(a, b) end
-BIN["<<"] = function(a, b) return bit_lsh(a, b) end
-BIN[">>"] = function(a, b) return bit_rsh(a, b) end
+-- 64-bit bitwise operators on doubles (legacy ints are int64; bit32 is 32-bit only). Operands are split into a signed high part and an
+-- unsigned 32-bit low part (two's complement), combined per half. Exact for |x| < 2^53.
+local TWO32 = 4294967296
+local function split64(x)
+	x = x >= 0 and floor(x) or ceil(x)
+	local hi = floor(x / TWO32)
+	local lo = x - hi * TWO32
+	return hi, lo
+end
+local function bitop(f)
+	return function(a, b)
+		a, b = tonum(a), tonum(b)
+		if a >= 0 and b >= 0 and a < TWO32 and b < TWO32 then return f(a, b) end
+		local ah, al = split64(a)
+		local bh, bl = split64(b)
+		local hi = f(ah % TWO32, bh % TWO32)
+		if hi >= 2147483648 then hi -= TWO32 end -- back to signed high part
+		return hi * TWO32 + f(al, bl)
+	end
+end
+BIN["&"] = bitop(bit_and)
+BIN["|"] = bitop(bit_or)
+BIN["^"] = bitop(bit_xor)
+BIN["<<"] = function(a, b)
+	a, b = tonum(a), tonum(b)
+	if b < 0 or b >= 64 then return 0 end
+	return a * 2 ^ b
+end
+BIN[">>"] = function(a, b)
+	a, b = tonum(a), tonum(b)
+	if b < 0 or b >= 64 then return a < 0 and -1 or 0 end
+	return floor(a / 2 ^ b) -- arithmetic shift
+end
 M.BIN = BIN
 
 local function truthy(v)
@@ -180,7 +226,7 @@ function mkref(st, node)
 	local k = node[1]
 	if k == E_VAR then
 		local idx = node[4]
-		if idx then idx = eval(st, idx) end
+		if idx then idx = evalIndex(st, idx) end
 		return { node[2], node[3], idx, node[2] == ".@" and st.frame.locals or nil }
 	elseif false then
 	elseif k == E_CALL and node[2] == "getarg" then
@@ -236,7 +282,7 @@ function eval(st, e)
 			local v = st.frame.locals[e[3]]
 			if type(v) == "number" or type(v) == "string" then return v end
 		end
-		return getvar(st, e[2], e[3], ie and eval(st, ie))
+		return getvar(st, e[2], e[3], ie and evalIndex(st, ie))
 	elseif k == E_BIN then
 		local op = e[2]
 		-- The legacy VM has no short-circuit: C_LAND / C_LOR are plain stack ops (script.cpp op_2) and BOTH operands are evaluated.
@@ -283,6 +329,7 @@ function eval(st, e)
 		for i = 1, n do
 			if refs and refs[i] then av[i] = mkref(st, args[i]) else av[i] = eval(st, args[i]) end
 		end
+		st.argNodes = args -- for handlers whose targets are variables although the arg spec has no 'r' (sscanf)
 		local r = h(st, table.unpack(av, 1, n))
 		if r == nil then return 0 end
 		return r
@@ -296,7 +343,7 @@ function eval(st, e)
 		end
 		local scope, name = tgt[2], tgt[3]
 		local idx = tgt[4]
-		if idx then idx = eval(st, idx) end
+		if idx then idx = evalIndex(st, idx) end
 		if op ~= "=" then val = BIN[ASSIGNOP[op]](getvar(st, scope, name, idx), val) end
 		if not idx and scope == ".@" and type(val) == "number" and val ~= 0 then
 			local loc = st.frame.locals
@@ -309,7 +356,7 @@ function eval(st, e)
 		local op, v = e[2], eval(st, e[3])
 		if op == "-" then return -tonum(v)
 		elseif op == "!" then return truthy(v) and 0 or 1
-		else return bit32.bnot(v) end
+		else return -tonum(v) - 1 end -- ~x on int64
 	elseif k == E_TERN then
 		-- legacy C_OP3: condition and both branches are evaluated (stack op), then one is selected
 		local c, a, b = eval(st, e[2]), eval(st, e[3]), eval(st, e[4])
@@ -322,7 +369,7 @@ function eval(st, e)
 			return e[3] and old or old + e[2]
 		end
 		local idx = tgt[4]
-		if idx then idx = eval(st, idx) end
+		if idx then idx = evalIndex(st, idx) end
 		local old = getvar(st, tgt[2], tgt[3], idx)
 		local new = old + e[2]
 		if not idx and tgt[2] == ".@" and new ~= 0 then
@@ -338,6 +385,10 @@ function eval(st, e)
 		return new
 	elseif k == E_PARAM then
 		return getparam(st, e[2])
+	elseif k == E_TMPSET then
+		local v = eval(st, e[3])
+		st.frame.locals[e[2]] = v -- hoisted command result: stored raw, keeps its type
+		return v
 	elseif k == E_NEXTLINE then
 		return -1
 	end
@@ -470,8 +521,14 @@ function runFrames(st)
 				local arefs
 				for i = 1, #a do
 					local node = a[i]
-					av[i] = eval(st, node)
-					if node[1] == E_VAR then arefs = arefs or {}; arefs[i] = mkref(st, node) end
+					if node[1] == E_VAR then
+						-- a variable argument is passed as a reference (index expression evaluated ONCE); its value is read through it
+						local ref = mkref(st, node)
+						arefs = arefs or {}; arefs[i] = ref
+						av[i] = M.refget(st, ref)
+					else
+						av[i] = eval(st, node)
+					end
 				end
 				fr.pc = pc -- return address
 				local prog, entry
@@ -495,7 +552,7 @@ function runFrames(st)
 				if st.depth == 0 then return v end -- returned from the entry frame: script ends
 				local caller = stack[st.depth]
 				st.frame = caller
-				if dst then setvar(st, ".@", dst, nil, v) end
+				if dst then caller.locals[dst] = v end -- hoisted call result: raw store, keeps its type (string or number)
 				break
 			elseif op == OP_END then
 				error(END, 0)

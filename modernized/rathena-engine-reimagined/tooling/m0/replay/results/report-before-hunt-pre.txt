@@ -1,0 +1,122 @@
+CASES (NPC x answer-script x player profile): 879    NPCs: 293
+excluded: 21 cases (7 NPCs) that the real server does not instantiate (NPC not found by the legacy hook); not counted below
+strict pass (traces + end state identical): 816 / 879 = 92.8%
+pass modulo formatting-only differences:    816 / 879 = 92.8%
+legacy host calls recorded: 13253   legacy_interp: 12662
+cases with >= 1 blocking interaction (next/select/menu/input/...): 583; ended by the interaction cap: 3; median legacy calls per case: 11
+strict passes that are non-trivial (>= 5 legacy calls and >= 1 interaction): 528
+NPCs with all variants passing strictly: 270 / 293
+
+per category (cases strictly passing / total):
+  hunt                         816 / 879
+
+mismatch classes (all aligned records, cascades included):  count
+  missing_in_luau       717
+  extra_in_luau         120
+  arg_value              73
+  ret_value              38
+  missing_command        12
+  state_missing           3
+
+ROOT (first) divergence per failing case, by class:
+  ret_value              26
+  missing_in_luau        25
+  missing_command         9
+  state_missing           3
+ROOT divergence attribution (class, cause):
+  missing_in_luau  unattributed                                                                            25
+  ret_value        world (value comes from game data / clock / player the harness does not model)          23
+  missing_command  coverage (command not implemented in legacy_interp)                                      9
+  state_missing    unattributed                                                                             3
+  ret_value        unattributed                                                                             3
+
+LEGACY END REASONS: {'end': 876, 'cap': 3}
+LUAU   END REASONS: {'end': 876, 'cap': 3}
+
+=== examples per class (all mismatches; case id -> file:line of the NPC) ===
+
+## missing_in_luau (717)
+  [h302c] npc/airports/airships.txt:464  (NPC "Apple Merchant#airplane"; legacy trace line 16, luau trace line None)
+      legacy-only call
+      legacy: countitem(713) -> 0
+  [h352a] npc/cities/lighthalzen.txt:1239  (NPC "Reuben#lhz_02"; legacy trace line 9, luau trace line None)
+      legacy-only call
+      legacy: next()
+  [h352a] npc/cities/lighthalzen.txt:1239  (NPC "Reuben#lhz_02"; legacy trace line 10, luau trace line None)
+      legacy-only call
+      legacy: mes("[Reuben]]")
+  [h352a] npc/cities/lighthalzen.txt:1239  (NPC "Reuben#lhz_02"; legacy trace line 15, luau trace line None)
+      legacy-only call
+      legacy: emotion(6)
+  [h405a] npc/jobs/2-1a/HighPriest.txt:18  (NPC "High Priest#Valkyrie"; legacy trace line 5, luau trace line None)
+      legacy-only call
+      legacy: mes("find peace, strength")
+
+## extra_in_luau (120)
+  [h320a] npc/cities/comodo.txt:202  (NPC "Moo#cmd"; legacy trace line None, luau trace line 8)
+      legacy_interp-only call
+      luau  : next()
+  [h320a] npc/cities/comodo.txt:202  (NPC "Moo#cmd"; legacy trace line None, luau trace line 9)
+      legacy_interp-only call
+      luau  : mes("[Moo]")
+  [h413a] npc/merchants/refine.txt:582  (NPC "Lambert"; legacy trace line None, luau trace line 2)
+      legacy_interp-only call
+      luau  : disable_items() -> 0
+
+## arg_value (73)
+  [h320a] npc/cities/comodo.txt:202  (NPC "Moo#cmd"; legacy trace line 3, luau trace line 3)
+      arguments differ
+      legacy: mes("Those cheating punks!")
+      luau  : mes("Greetings, I am Moo,")
+  [h352a] npc/cities/lighthalzen.txt:1239  (NPC "Reuben#lhz_02"; legacy trace line 3, luau trace line 3)
+      arguments differ
+      legacy: mes("Someday...")
+      luau  : mes("Hey. What are")
+  [h352a] npc/cities/lighthalzen.txt:1239  (NPC "Reuben#lhz_02"; legacy trace line 8, luau trace line 8)
+      arguments differ
+      legacy: emotion(7)
+      luau  : emotion(11) -> 0
+  [h405a] npc/jobs/2-1a/HighPriest.txt:18  (NPC "High Priest#Valkyrie"; legacy trace line 3, luau trace line 3)
+      arguments differ
+      legacy: mes("Through the power")
+      luau  : mes("Congratulations.")
+
+## ret_value (38)
+  [h320a] npc/cities/comodo.txt:202  (NPC "Moo#cmd"; legacy trace line 2, luau trace line 2)
+      return differs
+      legacy: rand(1,10) -> 1
+      luau  : rand(1,10) -> 7
+  [h334a] npc/cities/geffen.txt:127  (NPC "Stacey"; legacy trace line 1, luau trace line 1)
+      return differs
+      legacy: getequipid(6) -> -1
+      luau  : getequipid(6) -> 0
+  [h352a] npc/cities/lighthalzen.txt:1239  (NPC "Reuben#lhz_02"; legacy trace line 1, luau trace line 1)
+      return differs
+      legacy: rand(1,2) -> 1
+      luau  : rand(1,2) -> 2
+  [h401a] npc/cities/yuno.txt:62  (NPC "Juno Granny#juno"; legacy trace line 2, luau trace line 2)
+      return differs
+      legacy: rand(1,50) -> 41
+      luau  : rand(1,50) -> 33
+  [h405a] npc/jobs/2-1a/HighPriest.txt:18  (NPC "High Priest#Valkyrie"; legacy trace line 1, luau trace line 1)
+      return differs
+      legacy: rand(1,10) -> 1
+      luau  : rand(1,10) -> 7
+
+## missing_command (12)
+  [h342a] npc/cities/jawaii.txt:580  (NPC "Employee#jaw5"; legacy trace line 3, luau trace line 3)
+      no implementation in legacy_interp (soft stub)
+      legacy: getpartnerid() -> 0
+      luau  : getpartnerid() !U
+  [h413a] npc/merchants/refine.txt:582  (NPC "Lambert"; legacy trace line 1, luau trace line 1)
+      no implementation in legacy_interp (soft stub)
+      legacy: getbattleflag("feature.refineui") -> 1
+      luau  : getbattleflag("feature.refineui") !U
+  [h517a] npc/quests/quests_lighthalzen.txt:7492  (NPC "Guard"; legacy trace line 9, luau trace line 9)
+      no implementation in legacy_interp (soft stub)
+      legacy: nude()
+      luau  : nude() !U
+
+## state_missing (3)
+  [h448a] npc/quests/kiel_hyre_quest.txt:6282  (NPC "Robots#kh1"; legacy trace line None, luau trace line None)
+      $@mobid=110013151 only in legacy

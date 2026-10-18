@@ -140,3 +140,27 @@ The approach works. The legacy dialect parses completely (0 failures over 13,850
 - Persistence, account/global variable limits (33-char key, 255-char value), multibyte (GBK) escape handling in strings (`p[-1] <= 0x7e` rule), `npc_parsesrcfile` map/coordinate validation.
 - Numeric values of enum-backed constants and of mob/skill name constants (not in the extracted set).
 - Native-codegen numbers are from the CLI's `--codegen` flag on this machine only.
+
+## Replay-driven corrections (this supersedes the findings it names)
+
+Source: `../replay/` (real legacy script VM vs this interpreter, 2,485 runs, 53,565 compared host calls; numbers in `../replay/README.md`).
+
+* **Finding 1 above (111 `callsub`/`callfunc` under `?:` `&&` `||` need host-stack recursion) no longer holds**: the legacy VM does not short-circuit
+  (`C_LAND`, `C_LOR`, `C_OP3` are stack operators), so all operands run and the calls are hoisted like any other (1,082 renewal + 344 pre-renewal sites, 0 left in
+  expressions). The evaluator has no recursion path for them; the `HOST_STACK_OVERFLOW` limit measured in M0(b) cannot occur for script calls. `t_semantics.luau` now
+  runs the same chain to depth 20,000 on heap frames.
+* **`switch`**: statements between `switch (...) {` and the first `case` run; the compare-chain image (default flag `lower.switchCompat = true`) leaves `$@__swN_val`
+  like the legacy compiler (N counts if/while/do/for/function/switch and every `case`). With the flag off the table dispatch of the original design is used. The
+  `switch dispatch` micro-benchmark of M0(b) measured the table form; the compat form costs about 3 more ops per `case` tested.
+* Other semantic bugs found and fixed (all pinned by `../replay/corpus/synthetic.txt` and `t_semantics.luau`): string results of hoisted calls were coerced to 0; commands to the
+  left of a hoisted call ran after it; the index expression of a variable passed to `callsub` was evaluated twice; `getarg` returned the value at call time instead of reading the
+  reference; a negative array subscript did not end the script; `& | ^ << >> ~` were 32-bit; instance variables were writable outside instances; a failing `rand()` did not end
+  the script; `input` clamped/returned the wrong way; `atoi`, `strcmp`, `strnpcinfo`, `explode`, `implode`, `replacestr`, `countstr`, `substr`, `strpos`, `charislower/upper`,
+  `sprintf` without arguments, `getitem/delitem/countitem` failures, `mobcount` on unknown maps, `warp` / `getmapxy` / player position, `checkre`... differed from the legacy command.
+* Invented constants removed: the stubs for `getitemname` ("Item#id"), `getequipid`/`getequipisequiped` ("rich" profile), `getguildname` ("Guild"), `getpartyname`, `getguildmaster`,
+  `getmapusers`... are replaced by the legacy behaviour for an empty world or by the data-provider interface (`world.luau`), see `README.md`.
+* New commands: `getpartnerid sprintf sscanf strcmp strtolower strtoupper strtol axtoi charisalpha/lower/upper insertchar delchar setchar inarray countinarray distance isday isnight
+  getlook nude getitem2/3/4 getbattleflag getiteminfo getmonsterinfo mesitemlink mesitemicon getstatus getgmlevel mercenary_get/set_faith getgdskilllv is_guild_leader isdead` and the
+  no-op client commands listed in `commands_ext.luau`.
+* Parse/lower of all 13,850 bodies is unchanged (0 failures, `run_parse.luau -a re|pre lower`); lowered ops 662,653 (renewal) and 344,559 (pre-renewal); the per-op cost is in the noise of M0(b)
+  (`run_bench.luau`: 180 to 280 ns/op with the counter, same machine class).

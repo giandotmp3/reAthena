@@ -235,9 +235,9 @@ check("switch compat: $@__swN_val left behind (non-zero when no case matched, 0 
 	switch (2) { case 1: break; case 2: break; }
 	switch (7) { case 1: mes "no"; break; }
 	switch (9) { case 1: break; default: mes "dflt"; break; }
-	mes "v0=" + $@__sw0_val + " v1=" + $@__sw1_val + " v2=" + $@__sw2_val;
-]], "dflt|v0=0 v1=7 v2=9")
-check("switch compat: index counter shared with if/while/for/do/function{}", [[
+	mes "v0=" + $@__sw0_val + " v3=" + $@__sw3_val + " v5=" + $@__sw5_val;
+]], "dflt|v0=0 v3=7 v5=9")
+check("switch compat: index counter shared with if/while/for/do/function{}/case", [[
 	if (1) { .@a = 1; }
 	for (.@i = 0; .@i < 1; .@i++) { .@a++; }
 	switch (5) { case 1: break; }
@@ -268,7 +268,7 @@ lower.switchCompat = false
 check("switch compat OFF: table dispatch, pre-case statements run, no global left behind", [[
 	switch (2) { mes "pre"; case 1: mes "one"; break; case 2: mes "two"; default: mes "d"; }
 	switch (7) { case 1: break; }
-	mes "[" + $@__sw0_val + "][" + $@__sw1_val + "]";
+	mes "[" + $@__sw0_val + "][" + $@__sw3_val + "]";
 ]], "pre|two|d|[0][0]")
 lower.switchCompat = true
 

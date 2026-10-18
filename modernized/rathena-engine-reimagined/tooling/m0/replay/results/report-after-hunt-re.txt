@@ -1,0 +1,20 @@
+CASES (NPC x answer-script x player profile): 900    NPCs: 300
+strict pass (traces + end state identical): 900 / 900 = 100.0%
+pass modulo formatting-only differences:    900 / 900 = 100.0%
+legacy host calls recorded: 10173   legacy_interp: 10173
+cases with >= 1 blocking interaction (next/select/menu/input/...): 453; ended by the interaction cap: 2; median legacy calls per case: 7
+strict passes that are non-trivial (>= 5 legacy calls and >= 1 interaction): 450
+NPCs with all variants passing strictly: 300 / 300
+
+per category (cases strictly passing / total):
+  hunt                         900 / 900
+
+mismatch classes (all aligned records, cascades included):  count
+
+ROOT (first) divergence per failing case, by class:
+ROOT divergence attribution (class, cause):
+
+LEGACY END REASONS: {'end': 898, 'cap': 2}
+LUAU   END REASONS: {'end': 898, 'cap': 2}
+
+=== examples per class (all mismatches; case id -> file:line of the NPC) ===

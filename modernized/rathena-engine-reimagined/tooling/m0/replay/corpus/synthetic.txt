@@ -126,10 +126,11 @@ L_E:
 	mes "bad=" + .@m;
 	.@m = sscanf("", "%d", .@a);
 	mes "empty=" + .@m;
-	mes strlen("héllo") + "|" + substr("abcdef", 1, 3) + "|" + charat("abc", 1) + "|" + charat("abc", 9) + "|" + strpos("hello", "l") + "|" + strpos("hello", "z");
+	mes getstrlen("hello") + "|" + substr("abcdef", 1, 3) + "|" + charat("abc", 1) + "|" + charat("abc", 9) + "|" + strpos("hello", "l") + "|" + strpos("hello", "z");
 	mes replacestr("a-b-c", "-", "+") + "|" + countstr("a-b-c", "-") + "|" + compare("Hello", "ELL") + "|" + atoi("42x") + "|" + atoi("x");
-	.@n = explode(.@p$, "a:b:c", ":");
-	mes .@n + "," + .@p$[0] + .@p$[1] + .@p$[2] + "," + implode(.@p$, "/");
+	explode(.@p$, "a:b:c", ":");
+	explode(.@q$[2], "x,y", ",");
+	mes getarraysize(.@p$) + "," + .@p$[0] + .@p$[1] + .@p$[2] + "," + implode(.@p$, "/") + "," + .@q$[2] + .@q$[3] + "," + getarraysize(.@q$);
 	mes charisalpha("a1", 0) + "" + charisalpha("a1", 1) + charislower("aB", 0) + charisupper("aB", 1);
 	close;
 }
@@ -217,7 +218,7 @@ L_REC:
 
 -	script	Syn_misc	-1,{
 	// a grab bag of cheap commands: min/max/abs/rand, time constants, string/number mixing in mes, equipment and look queries
-	mes max(3, 9, 4) + "|" + min(3, 9, 4) + "|" + abs(-5);
+	mes max(3, 9, 4) + "|" + min(3, 9, 4) + "|" + pow(2, 10) + "|" + sqrt(17);
 	mes gettime(1) + ":" + gettime(2) + ":" + gettime(3) + " " + gettime(5) + "/" + gettime(6) + "/" + gettime(7) + " wd" + gettime(4);
 	mes rand(5) + "," + rand(1, 3) + "," + rand(10, 20);
 	mes getequipid(2) + "," + getequipisequiped(2) + "," + getequipname(2) + "," + getequiprefinerycnt(2) + "," + getlook(1) + "," + getlook(9);
@@ -226,12 +227,58 @@ L_REC:
 	mes isday() + "," + isnight() + "," + distance(1, 1, 4, 3);
 	mes getbattleflag("base_exp_rate");
 	mes mobcount("prontera", "x") + "," + mobcount("no_such_map", "x");
-	.@m$ = "?"; getmapxy(.@m$, .@x, .@y, 0);
+	.@m$ = "?"; getmapxy(.@m$, .@x, .@y, BL_PC);
 	mes .@m$ + "," + .@x + "," + .@y;
 	warp "prontera", 100, 100;
-	getmapxy(.@m$, .@x, .@y, 0);
+	getmapxy(.@m$, .@x, .@y, BL_PC);
 	mes .@m$ + "," + .@x + "," + .@y + "," + strcharinfo(3);
+	getmapxy(.@nm$, .@nx, .@ny, BL_NPC);
+	mes .@nm$ + "," + .@nx + "," + .@ny;
+	mes getmapxy(.@nm$, .@nx, .@ny, BL_PET);
+	mes getmapxy(.@nm$, .@nx, .@ny, 999);
 	callshop "no_such_shop";
 	mes getcastledata("no_such_castle", 1);
 	close;
+}
+
+-	script	Syn_loops	-1,{
+	for (.@i = 0; .@i < 6; .@i++) {
+		if (.@i == 1) continue;
+		if (.@i == 4) break;
+		mes "for" + .@i;
+	}
+	.@j = 0;
+	do { .@j++; if (.@j == 2) continue; mes "do" + .@j; } while (.@j < 4);
+	.@k = 0;
+	while (1) { .@k++; if (.@k > 3) break; for (.@m = 0; .@m < 2; .@m++) { if (.@m == 1) continue; mes "w" + .@k + .@m; } }
+	for (;;) { .@z++; if (.@z >= 2) break; }
+	mes "z=" + .@z;
+	// goto out of nested loops, label inside a loop body
+	for (.@a = 0; .@a < 3; .@a++) { for (.@b = 0; .@b < 3; .@b++) { if (.@a * 3 + .@b == 4) goto L_OUT; } }
+L_OUT:
+	mes "out " + .@a + .@b;
+	// else-if chains and dangling else
+	.@v = 2;
+	if (.@v == 1) mes "v1"; else if (.@v == 2) mes "v2"; else mes "other";
+	if (.@v == 1) if (.@v == 2) mes "x"; else mes "inner-else";
+	if (.@v) { mes "block"; } else { mes "no"; }
+	close;
+}
+
+-	script	Syn_func	-1,{
+	mes "rand=" + callfunc("F_Rand", 10, 20, 30);
+	mes "inline=" + callfunc("Syn_inl", 4) + "," + callfunc("Syn_inl", 5);
+	setd ".@dyn" + 1, 5;
+	setd "$@dynG", 9;
+	mes getd(".@dyn1") + "|" + getd("$@dynG") + "|" + getd("$@dynG$") + "|";
+	setarray .@list$[0], "q", "w";
+	setd ".@dl$[1]", "changed";
+	mes .@list$[1] + "," + getd(".@list$[0]");
+	mes callfunc("F_InsertComma", 1234567);
+	mes callfunc("F_InsertPlural", 2, "apple", "apples");
+	end;
+}
+
+function	script	Syn_inl	{
+	return getarg(0) * 2;
 }

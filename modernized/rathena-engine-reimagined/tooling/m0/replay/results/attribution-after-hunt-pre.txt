@@ -1,0 +1,13 @@
+pre-renewal hunt corpus: ATTRIBUTION of failing cases (root divergence): 879 cases, 876 strict passes, 3 failing
+  interpreter bug           0 cases,   0 NPCs
+  missing world state       3 cases,   1 NPCs
+  command coverage          0 cases,   0 NPCs
+  harness artifact          0 cases,   0 NPCs
+  documented deviation      0 cases,   0 NPCs
+
+== missing world state (3)
+    3  state_missing    $@mobid                e.g. h448a h448b h448c
+  examples:
+    [h448a] npc/quests/kiel_hyre_quest.txt:6282 NPC "Robots#kh1"
+        $@mobid=110013151 only in legacy
+

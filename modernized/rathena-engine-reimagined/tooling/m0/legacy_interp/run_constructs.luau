@@ -118,7 +118,7 @@ local function list(label, arr, n)
 	for i = 1, math.min(n, #arr) do local s = arr[i]; print("   " .. abs(s.ctx, s.line) .. (s.name and (" (" .. s.name .. (s.depth and (" depth " .. s.depth) or "") .. ")") or "")) end
 end
 list("labels defined INSIDE a nested block (if/loop/switch/{}) - jumping into the middle of a block", lower.nestedLabels, 12)
-list("callsub/callfunc/user-function calls under ?: && || that cannot be hoisted (need host-stack recursion)", lower.nestedCallSites, 12)
+list("callsub/callfunc/user-function calls that cannot be hoisted (always empty since the legacy VM evaluates every operand of && || ?:; kept as a tripwire)", lower.nestedCallSites, 12)
 list("goto/callsub whose target is not a statically known label (dynamic)", lower.dynamicTargets, 12)
 list("inline `function name { }` definitions", lower.funcDefs, 6)
 local q = {}

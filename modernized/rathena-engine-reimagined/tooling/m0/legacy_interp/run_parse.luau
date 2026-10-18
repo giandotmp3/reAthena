@@ -82,7 +82,7 @@ for k in stats.decl do ks[#ks + 1] = k end
 table.sort(ks)
 for _, k in ks do print("  decl", k, stats.decl[k]) end
 print(string.format("script bodies parsed: %d scripts + %d function scripts = %d; failures=%d; ok=%.3f%%", stats.scripts, stats.functions, stats.scripts + stats.functions, stats.failures, 100 * (1 - stats.failures / (stats.scripts + stats.functions))))
-if doLower then print(string.format("lowering: hoisted callsub/callfunc out of expressions=%d, left as nested (under ?:, &&, ||)=%d, ops=%d", lower.stats.hoisted, lower.stats.nested, lower.stats.ops)) end
+if doLower then print(string.format("lowering: hoisted callsub/callfunc out of expressions=%d, left as nested (always 0: all operands are evaluated)=%d, ops=%d", lower.stats.hoisted, lower.stats.nested, lower.stats.ops)) end
 print(string.format("tokens=%d  split_time=%.3fs  parse_time=%.3fs  lower_time=%.3fs", stats.ntok, tSplit, tParse, tLower))
 print(string.format("retained %s memory delta = %.1f MB (%.1f bytes/token)", doLower and "LOWERED programs" or "AST", (mem1 - mem0) / 1024, (mem1 - mem0) * 1024 / math.max(stats.ntok, 1)))
 local cs = {}

@@ -20,70 +20,166 @@ local function stub(name, ret)
 	end
 end
 
+-- String commands: ports of script.cpp BUILDIN_FUNC(...), byte-exact incl. their quirks
+local function byteAt(s, i) return string.byte(s, i + 1) or 0 end -- 0-based, NUL past the end
 C.substr = function(st, s, a, b)
+	rec(st, "substr", s, a, b)
 	s = tostr(s)
-	if a < 0 or b < a or a >= #s then return "" end
-	return string.sub(s, a + 1, b + 1)
+	if a >= 0 and b < #s and a <= b then return string.sub(s, a + 1, b + 1) end
+	return ""
 end
 C.charat = function(st, s, i)
+	rec(st, "charat", s, i)
 	s = tostr(s)
-	if i < 0 or i >= #s then return "" end
-	return string.sub(s, i + 1, i + 1)
+	if i >= 0 and i < #s then return string.sub(s, i + 1, i + 1) end
+	return ""
+end
+C.setchar = function(st, s, c, i)
+	rec(st, "setchar", s, c, i)
+	s, c = tostr(s), tostr(c)
+	if i >= 0 and i < #s then return string.sub(s, 1, i) .. string.sub(c, 1, 1) .. string.sub(s, i + 2) end
+	return s
+end
+C.insertchar = function(st, s, c, i)
+	rec(st, "insertchar", s, c, i)
+	s, c = tostr(s), tostr(c)
+	if i < 0 then i = 0 elseif i > #s then i = #s end -- size_t index: a negative value wraps to huge and is then capped to the length
+	if i < 0 then i = 0 end
+	return string.sub(s, 1, i) .. string.sub(c, 1, 1) .. string.sub(s, i + 1)
+end
+C.delchar = function(st, s, i)
+	rec(st, "delchar", s, i)
+	s = tostr(s)
+	if i < 0 or i > #s then return s end
+	return string.sub(s, 1, i) .. string.sub(s, i + 2)
 end
 C.strpos = function(st, hay, needle, from)
-	local p = string.find(tostr(hay), tostr(needle), (from or 0) + 1, true)
+	rec(st, "strpos", hay, needle, from)
+	hay, needle = tostr(hay), tostr(needle)
+	local i = from or 0
+	if needle == "" then return -1 end
+	if i < 0 then return -1 end -- (uint32 comparison in the legacy loop)
+	local p = string.find(hay, needle, i + 1, true)
 	return p and p - 1 or -1
 end
-C.replacestr = function(st, s, from, to, case, count)
-	s, from, to = tostr(s), tostr(from), tostr(to)
-	if from == "" then return s end
-	local out, i, n = {}, 1, 0
-	while true do
-		local a, b = string.find(s, from, i, true)
-		if not a or (count and count > 0 and n >= count) then break end
-		out[#out + 1] = string.sub(s, i, a - 1); out[#out + 1] = to
-		i = b + 1; n += 1
+local function foldEq(a, b)
+	return a == b or string.upper(string.char(a)) == string.upper(string.char(b))
+end
+C.replacestr = function(st, input, find, replace, usecase, count)
+	rec(st, "replacestr", input, find, replace, usecase, count)
+	input, find, replace = tostr(input), tostr(find), tostr(replace)
+	local inputlen, findlen = #input, #find
+	if findlen == 0 then error(END, 0) end
+	if usecase ~= nil and type(usecase) ~= "number" then error(END, 0) end
+	local useCase = usecase == nil or usecase ~= 0
+	if count == 0 then error(END, 0) end -- explicit count 0 is rejected by the legacy command
+	count = count or 0
+	local out, numFinds, i = {}, 0, 0
+	while i < inputlen do
+		if count ~= 0 and count == numFinds then break end
+		local f = 0
+		while f <= findlen do
+			if f == findlen then
+				numFinds += 1
+				out[#out + 1] = replace
+				i += findlen - 1
+				break
+			else
+				local ic, fc = byteAt(input, i + f), byteAt(find, f)
+				local mismatch = (i + f) > inputlen or ic ~= fc
+				if useCase then
+					if mismatch then out[#out + 1] = string.sub(input, i + 1, i + 1); break end
+				else
+					if mismatch and not foldEq(ic, fc) then out[#out + 1] = string.sub(input, i + 1, i + 1); break end
+				end
+			end
+			f += 1
+		end
+		i += 1
 	end
-	out[#out + 1] = string.sub(s, i)
+	if i < inputlen then out[#out + 1] = string.sub(input, i + 1) end
 	return table.concat(out)
 end
-C.countstr = function(st, s, sub)
-	local n, i = 0, 1
-	s, sub = tostr(s), tostr(sub)
-	while sub ~= "" do
-		local a, b = string.find(s, sub, i, true)
-		if not a then break end
-		n += 1; i = b + 1
+C.countstr = function(st, input, find, usecase)
+	rec(st, "countstr", input, find, usecase)
+	input, find = tostr(input), tostr(find)
+	local inputlen, findlen = #input, #find
+	if findlen == 0 then error(END, 0) end
+	if usecase ~= nil and type(usecase) ~= "number" then error(END, 0) end
+	local useCase = usecase == nil or usecase ~= 0
+	local n, i = 0, 0
+	while i < inputlen do
+		local f = 0
+		while f <= findlen do
+			if f == findlen then n += 1; i += findlen - 1; break end
+			local ic, fc = byteAt(input, i + f), byteAt(find, f)
+			local mismatch = (i + f) > inputlen or ic ~= fc
+			if useCase then
+				if mismatch then break end
+			else
+				if mismatch and not foldEq(ic, fc) then break end
+			end
+			f += 1
+		end
+		i += 1
 	end
 	return n
 end
 C.explode = function(st, ref, str, delim)
-	str, delim = tostr(str), tostr(delim)
-	local i, n = 1, 0
-	while true do
-		local a = string.find(str, delim, i, true)
-		setvar(st, ref[1], ref[2], n, string.sub(str, i, (a or #str + 1) - 1))
-		n += 1
-		if not a then break end
-		i = a + #delim
+	rec(st, "explode", ref[2], str, delim)
+	-- legacy: a SINGLE delimiter character (first char of the 3rd argument; "" = NUL = never splits), elements are written from the
+	-- reference's own index upward, nothing is returned, existing elements beyond the last piece are left alone
+	if string.byte(ref[2] or "", -1) ~= 36 then error(END, 0) end
+	str, delim = tostr(str), string.sub(tostr(delim), 1, 1)
+	local start = ref[3] or 0
+	local i, buf = 1, {}
+	for k = 1, #str do
+		local ch = string.sub(str, k, k)
+		if delim ~= "" and ch == delim then
+			refset(st, { ref[1], ref[2], start, ref[4], ref[5] }, table.concat(buf)); start += 1; buf = {}
+		else
+			buf[#buf + 1] = ch
+		end
 	end
-	return n
+	refset(st, { ref[1], ref[2], start, ref[4], ref[5] }, table.concat(buf))
+	return nil
 end
 C.implode = function(st, ref, glue)
+	rec(st, "implode", ref[2], glue)
+	if string.byte(ref[2] or "", -1) ~= 36 then error(END, 0) end
 	local size = I.arraysize(st, ref[1], ref[2])
+	if size == 0 then return "NULL" end
 	local parts = {}
-	for i = 0, size - 1 do parts[#parts + 1] = tostr(getvar(st, ref[1], ref[2], i)) end
+	for i = 0, size - 1 do parts[#parts + 1] = tostr(I.refget(st, { ref[1], ref[2], i, ref[4], ref[5] })) end
 	return table.concat(parts, glue and tostr(glue) or "")
 end
-C.getmapxy = function(st, mref, xref, yref, kind)
+-- getmapxy(<map$>,<x>,<y>{,<type>{,<search>}}): types BL_PC (the attached player) and BL_NPC (this NPC) are modelled; pets, homunculi,
+-- mercenaries and elementals do not exist in this world (-1). Argument-kind violations are -1 + failure, as in the legacy command.
+C.getmapxy = function(st, mval, xval, yval, kind, search)
 	rec(st, "getmapxy")
-	local p = st.player
-	refset(st, mref, p.map or "prontera"); refset(st, xref, p.x or 150); refset(st, yref, p.y or 150)
+	local nodes = st.argNodes
+	local function isVar(i) return nodes[i] and nodes[i][1] == require("./parser").K.E_VAR end
+	local function isStr(i) return string.byte(nodes[i][3], -1) == 36 end
+	if not (isVar(1) and isVar(2) and isVar(3)) or not isStr(1) or isStr(2) or isStr(3) then cmdFail(st); return -1 end
+	local K = require("./consts").consts
+	local ty = kind or K.bl_pc
+	local map, x, y
+	if ty == K.bl_pc then
+		local p = st.player
+		map, x, y = p.map or "prontera", p.x or 150, p.y or 150
+	elseif ty == K.bl_npc then
+		if search ~= nil then return -1 end -- another NPC by name/id: not modelled
+		map, x, y = st.npc.map or "", st.npc.x or 0, st.npc.y or 0
+	elseif ty == K.bl_pet or ty == K.bl_hom or ty == K.bl_mer or ty == K.bl_elem then
+		return -1
+	else
+		cmdFail(st); return -1
+	end
+	local refs = {}
+	for k = 1, 3 do refs[k] = I.mkref(st, nodes[k]) end
+	refset(st, refs[1], map); refset(st, refs[2], x); refset(st, refs[3], y)
 	return 0
 end
-C.mesitemlink = function(st, id) return "<ITEM>" .. tostr(id) .. "</ITEM>" end
-C.getguildname = function(st, id) return "Guild" end
-C.getcastlename = function(st, m) return "Castle" end
 C.eaclass = function(st) return st.player.params.class end
 
 for _, n in { "logmes", "achievementupdate", "npcskill", "readbook", "openstorage", "unitwarp", "awake", "guardian", "setcastledata",
@@ -92,11 +188,10 @@ for _, n in { "logmes", "achievementupdate", "npcskill", "readbook", "openstorag
 	"hateffect", "setquestinfo_unused", "unitskilluseid", "unitattack", "unitkill", "unitstop", "unitstopattack", "getunitdata", "maprespawn" } do
 	stub(n, 0)
 end
-for _, n in { "agitcheck", "agitcheck2", "achievementinfo", "checkwall", "getpartyleader", "getd_unused" } do stub(n, 0) end
+for _, n in { "agitcheck", "agitcheck2", "achievementinfo", "checkwall", "getd_unused" } do stub(n, 0) end
 stub("basicskillcheck", 1)
 stub("getskilllv", 0)
 stub("readparam", 0)
-stub("getpartyname", "Party")
 stub("getmapname_unused", "prontera")
 stub("getnpcdir", 0)
 stub("rid2name", "Tester")
@@ -109,11 +204,6 @@ C.copyarray = function(st, dst, src, n)
 	for i = 0, n - 1 do I.refset(st, { dst[1], dst[2], (dst[3] or 0) + i, dst[4], dst[5] }, I.refget(st, { src[1], src[2], (src[3] or 0) + i, src[4], src[5] })) end
 	return 0
 end
-stub("getmapusers", 1)
-stub("getareausers", 1)
-stub("getgdid", 0)
-stub("getguildmaster", "Master")
-stub("getguildmasterid", 1)
 stub("getguildmember", 0)
 stub("guildopenstorage", 0)
 stub("setd_unused", 0)
@@ -141,15 +231,17 @@ end
 C.strcmp = function(st, a, b) rec(st, "strcmp", a, b); return cstrcmp(tostr(a), tostr(b)) end
 C.strtolower = function(st, s) rec(st, "strtolower", s); return string.lower(tostr(s)) end
 C.strtoupper = function(st, s) rec(st, "strtoupper", s); return string.upper(tostr(s)) end
-local function charTest(name, pat)
+local function charTest(name, pat, truth)
 	C[name] = function(st, s, pos)
 		rec(st, name, s, pos)
 		s = tostr(s)
 		if pos < 0 or pos >= #s then return 0 end
-		return string.find(string.sub(s, pos + 1, pos + 1), pat) and 1 or 0
+		return string.find(string.sub(s, pos + 1, pos + 1), pat) and truth or 0
 	end
 end
-charTest("charisalpha", "^%a$"); charTest("charislower", "^%l$"); charTest("charisupper", "^%u$")
+charTest("charisalpha", "^%a$", 1)
+-- charislower / charisupper return the raw libc islower()/isupper() value (glibc: the ctype class bit 512 / 256), not 0/1
+charTest("charislower", "^%l$", 512); charTest("charisupper", "^%u$", 256)
 local function cstrtol(s, base)
 	-- C strtol: leading whitespace, optional sign, base 0/8/10/16 prefixes; capped to int32 like the legacy command
 	s = tostr(s)
@@ -179,6 +271,7 @@ C.isnight = function(st) rec(st, "isnight"); return st.env.night and 1 or 0 end
 
 C.sprintf = function(st, fmt, ...)
 	rec(st, "sprintf", fmt, ...)
+	if select("#", ...) == 0 then return tostr(fmt) end -- no arguments: the format is returned unparsed (even %%)
 	local s, why = cfmt.sprintf(tostr(fmt), { ... })
 	if s == nil then cmdFail(st); return "" end
 	return s
@@ -320,6 +413,13 @@ C.getbattleflag = function(st, name)
 	local v = d and d.battleflag and d.battleflag(string.lower(tostr(name)))
 	return v or 0
 end
+-- getitem2/3/4, getitembound*: the end state only holds item id -> amount, attributes (identify/refine/cards/bound) are not tracked
+for _, name in { "getitem2", "getitem3", "getitem4", "getitembound", "getitembound2", "getitembound3", "getitembound4" } do
+	C[name] = function(st, key, amount, ...)
+		rec(st, name, key, amount, ...)
+		return Base.commands.getitem(st, key, amount)
+	end
+end
 C.getgmlevel = function(st, ...) rec(st, "getgmlevel", ...); return st.player.gmlevel or 0 end
 C.mercenary_get_faith = function(st, g) rec(st, "mercenary_get_faith", g); return (st.player.mercfaith and st.player.mercfaith[g]) or 0 end
 C.mercenary_set_faith = function(st, g, v)
@@ -339,6 +439,100 @@ C.warp = function(st, map, x, y)
 	p.map, p.x, p.y = map, x, y
 	return 0
 end
-C.getusers = function(st, ...) rec(st, "getusers", ...); return 1 end -- exactly the one scripted player
+
+---------------------------------------------------------------------------------------------------------------------
+-- Static game-data lookups through the generic data-provider hook data.lookup(cmd, ...) -> value | nil (world.luau). A host that has
+-- the database answers; without it the command answers like the legacy VM does for an unknown key (the fallbacks below).
+---------------------------------------------------------------------------------------------------------------------
+local function lookup(st, cmd, ...)
+	local d = st.env.data
+	if d and d.lookup then return d.lookup(cmd, ...) end
+	return nil
+end
+C.getiteminfo = function(st, id, ty)
+	rec(st, "getiteminfo", id, ty)
+	local v = lookup(st, "getiteminfo", id, ty)
+	if v ~= nil then return v end
+	return -1 -- unknown item (legacy: -1, or "" for the aegis-name type)
+end
+C.getmonsterinfo = function(st, id, ty)
+	rec(st, "getmonsterinfo", id, ty)
+	local v = lookup(st, "getmonsterinfo", id, ty)
+	if v ~= nil then return v end
+	return ty == 0 and "null" or -1
+end
+C.getitemslots = function(st, id) rec(st, "getitemslots", id); local v = lookup(st, "getitemslots", id); if v ~= nil then return v end return -1 end
+C.mesitemlink = function(st, id, ...)
+	rec(st, "mesitemlink", id, ...)
+	local v = lookup(st, "mesitemlink", id, ...)
+	if v ~= nil then return v end
+	local d = st.env.data
+	local n = d and d.itemname and d.itemname(id)
+	if n == nil then cmdFail(st); return "" end
+	local brackets, name = ...
+	if brackets == nil then brackets = 1 end
+	if name ~= nil then n = name end
+	local iid = d.itemid and d.itemid(id) or id
+	return "<ITEM>" .. (brackets ~= 0 and "[" or "") .. n .. (brackets ~= 0 and "]" or "") .. "<INFO>" .. tostr(iid) .. "</INFO></ITEM>"
+end
+C.mesitemicon = function(st, id, ...)
+	local name = ...
+	rec(st, "mesitemicon", id, ...)
+	local v = lookup(st, "mesitemicon", id, ...)
+	if v ~= nil then return v end
+	local d = st.env.data
+	local n = d and d.itemname and d.itemname(id)
+	if n == nil then cmdFail(st); return "" end
+	return name or n -- feature disabled (needs a newer PACKETVER): the plain name
+end
+C.checkre = function(st, t) rec(st, "checkre", t); local v = lookup(st, "checkre", t); if v ~= nil then return v end return 0 end -- server build flags (RENEWAL, RENEWAL_CAST, ...)
+C.getcastlename = function(st, map) rec(st, "getcastlename", map); local v = lookup(st, "getcastlename", map); if v ~= nil then return v end return "" end
+C.jobname = function(st, c) rec(st, "jobname", c); local v = lookup(st, "jobname", c); if v ~= nil then return v end return "" end
+C.getmapflag = function(st, map, f) rec(st, "getmapflag", map, f); local v = lookup(st, "getmapflag", map, f); if v ~= nil then return v end return 0 end
+C.checkcell = function(st, map, x, y, t) rec(st, "checkcell", map, x, y, t); local v = lookup(st, "checkcell", map, x, y, t); if v ~= nil then return v end return 0 end
+C.getusers = function(st, t) rec(st, "getusers", t); local v = lookup(st, "getusers", t); if v ~= nil then return v end return 0 end
+-- players on a map / in an area: the scripted player is not counted by the map's user counters; unknown map = -1
+C.getmapusers = function(st, map)
+	rec(st, "getmapusers", map)
+	local d = st.env.data
+	if d and d.mapexists and not d.mapexists(map) then return -1 end
+	return 0
+end
+C.getareausers = function(st, map, ...)
+	rec(st, "getareausers", map, ...)
+	local d = st.env.data
+	if d and d.mapexists and not d.mapexists(map) then return -1 end
+	return 0
+end
+
+-- no guilds / parties in this world (the scripted player has none): unknown ids answer "null" / 0 like the legacy VM
+C.getguildname = function(st, gid) rec(st, "getguildname", gid); return "null" end
+C.getguildmaster = function(st, gid) rec(st, "getguildmaster", gid); return "null" end
+C.getguildmasterid = function(st, gid) rec(st, "getguildmasterid", gid); return 0 end
+C.getgdid = function(st, ...) rec(st, "getgdid", ...); return st.player.guildid or 0 end
+C.getpartyname = function(st, pid) rec(st, "getpartyname", pid); return "null" end
+C.getpartyleader = function(st, pid, ty) rec(st, "getpartyleader", pid, ty); if ty and ty ~= 0 then return -1 end return "null" end
+C.getstatus = function(st, id, ty) rec(st, "getstatus", id, ty); return (st.player.status and st.player.status[id]) and 1 or 0 end
+
+-- client-effect / world-effect commands without a script-visible result or player state in this world (no return value, the
+-- legacy command pushes nothing): recorded, otherwise no-ops. Argument validation failures of the legacy commands are not modelled.
+for _, n in { "flagemblem", "soundeffectall", "viewpointmap", "npcspeed", "specialpopup", "removespecialeffect", "areapercentheal",
+	"refineui", "killmonsterall", "questinfo_refresh", "classchange", "setunittitle", "unitskillusepos", "unitwalk", "areawarp" } do
+	C[n] = function(st, ...) rec(st, n, ...); return nil end
+end
+-- status flags of the scripted player (cart/riding/mount/option bits): none are set in this world
+for _, n in { "checkcart", "checkriding", "ismounting", "checkfalcon", "checkwug", "checkmadogear", "checkdragon" } do
+	C[n] = function(st, ...) rec(st, n, ...); return 0 end
+end
+C.isequippedcnt = function(st, ...) rec(st, "isequippedcnt", ...); return 0 end
+-- makeitem <item>,<amount>,"<map>",<x>,<y>: drops an item on the floor (negative id = unidentified); fails only for an unknown item
+C.makeitem = function(st, key, amount, map, x, y, ...)
+	rec(st, "makeitem", key, amount, map, x, y, ...)
+	local d = st.env.data
+	local k = (type(key) == "number" and key < 0) and -key or key
+	local id = d and d.itemid and d.itemid(k)
+	if id == nil then cmdFail(st) end
+	return nil
+end
 
 return M

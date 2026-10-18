@@ -1,0 +1,24 @@
+CASES (NPC x answer-script x player profile): 240    NPCs: 80
+strict pass (traces + end state identical): 240 / 240 = 100.0%
+pass modulo formatting-only differences:    240 / 240 = 100.0%
+legacy host calls recorded: 4746   legacy_interp: 4746
+cases with >= 1 blocking interaction (next/select/menu/input/...): 170; ended by the interaction cap: 4; median legacy calls per case: 12
+strict passes that are non-trivial (>= 5 legacy calls and >= 1 interaction): 170
+NPCs with all variants passing strictly: 80 / 80
+
+per category (cases strictly passing / total):
+  array-string                  54 /  54
+  dense-flow                    72 /  72
+  simple-dialogue               36 /  36
+  spread                        42 /  42
+  switch-menu                   36 /  36
+
+mismatch classes (all aligned records, cascades included):  count
+
+ROOT (first) divergence per failing case, by class:
+ROOT divergence attribution (class, cause):
+
+LEGACY END REASONS: {'end': 236, 'cap': 4}
+LUAU   END REASONS: {'end': 236, 'cap': 4}
+
+=== examples per class (all mismatches; case id -> file:line of the NPC) ===

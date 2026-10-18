@@ -1,70 +1,97 @@
 #!/usr/bin/env python3
-"""Attribute every failing case to a cause: interpreter bug | missing world state | command coverage | unattributed.
+"""Classify every failing case of a replay run by the ROOT (first) divergence into one of five classes:
 
-Uses the two Luau modes: a case that passes once the && || ?: operands are all evaluated (mode nosc) was failing because of that
-interpreter semantic difference alone. For the remaining cases the first divergence of the nosc run is attributed by rule.
+  interpreter bug         legacy_interp computes something the legacy VM does not (control flow, evaluation, a command it implements wrongly)
+  missing world state     the value/behaviour depends on game data or server state the harness does not provide (rules in WORLD below)
+  command coverage        legacy_interp has no implementation of the command (soft stub '!U')
+  harness artifact        the difference comes from the harness (hook or trace format), not from either VM's script semantics
+  documented deviation    a difference we decided to keep (DEVIATIONS below; each has a reason, see replay/README.md)
 
-  python3 -I attribute.py --out <build>/out [--repo /home/user/reAthena]
-"""
+  python3 -I attribute.py --out <build>/out --name <report-name> [--title TEXT]      (name '' = the default 'results.json')
+
+Writes <out>/attribution[-<name>].txt and prints it. The tables are deliberately short and explicit: a divergence is a bug
+unless a rule says otherwise."""
 import os, re, sys, json, argparse, collections
+
 ap = argparse.ArgumentParser()
 ap.add_argument('--out', required=True)
-ap.add_argument('--repo', default=os.environ.get('RATHENA_REPO', '/home/user/reAthena'))
+ap.add_argument('--name', default='')
+ap.add_argument('--title', default='')
+ap.add_argument('--examples', type=int, default=3)
 args = ap.parse_args()
 
-# commands whose legacy_interp implementation is a constant stub / absent world model (items, equipment, mobs, shops, positions, castles)
-WORLD_STUBS = set('''getitemname getiteminfo getequipid getequipname getequipisequiped getequipisenableref getequipisidentify getequiprefinerycnt
-getequipweaponlv getequippercentrefinery mobcount callshop getmapxy getcastledata instance_npcname instance_mapname instance_id
-countitem countitem2 checkweight checkweight2 getmonsterinfo gettime getgmlevel getskilllv isequipped getpartnerid checkquest
-logmes strnpcinfo strcharinfo getcharid getnpcid agitcheck agitcheck2 getguildname getguildmaster getpartyname readparam rand'''.split())
+tag = '-' + args.name if args.name else ''
+res = [r for r in json.load(open(os.path.join(args.out, 'results%s.json' % tag)))['cases'] if not r.get('skipped')]
 
-def switch_prelude(path, npc):
-    """does the NPC have statements between `switch (...) {` and its first case? (legacy executes them, legacy_interp skips them)"""
-    try:
-        text = open(os.path.join(args.repo, path), 'rb').read().decode('latin-1')
-    except OSError:
-        return False
-    i = text.find('\tscript\t' + npc + '\t')
-    if i < 0: return False
-    j = text.find('\n}\n', i)
-    body = text[i:j if j > 0 else len(text)]
-    return re.search(r'switch\s*\([^\n]*\)\s*\{[ \t]*\n(?:[ \t]*\n)*[ \t]*(?!case\b|default\b|//|\})[A-Za-z_]', body) is not None
+# (kind, command) pairs attributed to world state: the legacy value comes from data/state the Luau side does not model.
+# command-level entries match every kind that carries the command; (kind, '*') matches a state key class.
+WORLD = {
+    # dynamic server state
+    'mobcount', 'getmapusers', 'getareausers', 'agitcheck', 'agitcheck2', 'agitcheck3', 'getnpcid', 'checkvending', 'checkchatting',
+    'getpartymember', 'getguildmember', 'getmapguildusers',
+    # game data tables (db/*.yml) without a provider
+    'getiteminfo', 'getmonsterinfo', 'getskilllv', 'jobname', 'getrefine', 'getbrokenid', 'isequipped', 'getequipcardcnt',
+    'getgroupitem', 'getpetinfo', 'gethominfo', 'getmercinfo', 'checkcell', 'getmapflag', 'getunitdata', 'getskillname',
+}
+# documented deviations: (kind, command or '*', short reason)
+DEVIATIONS = [
+]
 
-cases = {c['id']: c for c in json.load(open(os.path.join(args.out, 'results.json')))['cases']}
-nosc = {c['id']: c for c in json.load(open(os.path.join(args.out, 'results-nosc.json')))['cases']}
+def classify(r):
+    root = r['root']
+    k, cmd = root['kind'], root['cmd']
+    if k == 'missing_command':
+        return 'command coverage'
+    if k in ('state_value', 'state_missing', 'state_extra') and (re.match(r"^'", str(cmd)) or cmd == '$@mobid'):
+        return 'missing world state'   # instance variables need a running instance; $@mobid holds runtime object ids of spawned monsters
+    for dk, dc, why in DEVIATIONS:
+        if k == dk and (dc == '*' or dc == cmd):
+            return 'documented deviation'
+    if k in ('ret_value', 'ret_format', 'arg_value', 'arg_format', 'legacy_failure', 'luau_failure') and cmd in WORLD:
+        return 'missing world state'
+    return 'interpreter bug'
+
 rows = collections.defaultdict(list)
-for cid, c in cases.items():
-    n = nosc[cid]
-    if c['strict_pass']: cat = 'PASS'
-    elif n['strict_pass']: cat = 'interpreter: && || ?: short-circuit (legacy evaluates every operand)'
-    else:
-        r = n['root'] or {}
-        k, cmd = r.get('kind'), r.get('cmd')
-        if k == 'missing_command': cat = 'coverage: command not implemented in legacy_interp (%s)' % cmd
-        elif k == 'legacy_failure': cat = 'world: legacy command failed, needs real state (%s)' % cmd
-        elif k == 'state_extra' and str(cmd).startswith("'"): cat = "world: instance variable ' needs a running instance"
-        elif k == 'missing_in_luau' and switch_prelude(c['file'], c['npc']): cat = 'interpreter: statements between `switch (...) {` and the first `case` are skipped'
-        elif k in ('ret_value', 'ret_format', 'arg_value', 'arg_format') and cmd in WORLD_STUBS: cat = 'world: no model / constant stub in harness (%s)' % cmd
-        else: cat = 'unattributed (%s %s)' % (k, cmd)
-    rows[cat].append(cid)
+for r in res:
+    if r['strict_pass']:
+        continue
+    rows[classify(r)].append(r)
+
+n = len(res)
+sp = sum(1 for r in res if r['strict_pass'])
 out = []
-tot = len(cases)
-out.append('ATTRIBUTION of %d cases (NPC x variant)' % tot)
-for cat, ids in sorted(rows.items(), key=lambda x: (-len(x[1]), x[0])):
-    out.append('  %4d  %-95s %s' % (len(ids), cat, ' '.join(ids[:8]) + (' ...' if len(ids) > 8 else '')))
-groups = collections.Counter()
-for cat, ids in rows.items():
-    g = cat.split(':')[0] if ':' in cat else cat.split(' ')[0]
-    groups[g] += len(ids)
-out.append('')
-out.append('by group: ' + ', '.join('%s=%d' % kv for kv in groups.most_common()))
-interp_fail = sum(len(v) for k, v in rows.items() if k.startswith('interpreter'))
-world_fail = sum(len(v) for k, v in rows.items() if k.startswith('world') or k.startswith('coverage'))
-out.append('failing cases explained by interpreter semantics: %d; by missing world state / coverage: %d; unattributed: %d' % (
-    interp_fail, world_fail, sum(len(v) for k, v in rows.items() if k.startswith('unattributed'))))
-npcs = collections.defaultdict(set)
-for cat, ids in rows.items():
-    for i in ids: npcs[cat].add(cases[i]['npc'])
+P = out.append
+P('%sATTRIBUTION of failing cases (root divergence): %d cases, %d strict passes, %d failing' % (args.title + ': ' if args.title else '', n, sp, n - sp))
+for cls in ('interpreter bug', 'missing world state', 'command coverage', 'harness artifact', 'documented deviation'):
+    lst = rows.get(cls, [])
+    P('  %-22s %4d cases, %3d NPCs' % (cls, len(lst), len(set(r['npc'] for r in lst))))
+P('')
+for cls in ('interpreter bug', 'missing world state', 'command coverage', 'harness artifact', 'documented deviation'):
+    lst = rows.get(cls, [])
+    if not lst:
+        continue
+    P('== %s (%d)' % (cls, len(lst)))
+    by = collections.defaultdict(list)
+    for r in lst:
+        by[(r['root']['kind'], r['root']['cmd'])].append(r)
+    for (k, cmd), g in sorted(by.items(), key=lambda x: -len(x[1])):
+        P('  %3d  %-16s %-22s e.g. %s' % (len(g), k, cmd, ' '.join(x['id'] for x in g[:6])))
+    P('  examples:')
+    seen = set()
+    shown = 0
+    for r in lst:
+        key = (r['npc'], r['root']['cmd'])
+        if key in seen:
+            continue
+        seen.add(key)
+        P('    [%s] %s:%s NPC "%s"' % (r['id'], r['file'], r['line'], r['npc']))
+        if r['root'].get('legacy'): P('        legacy: %s' % r['root']['legacy'][:220])
+        if r['root'].get('luau'): P('        luau  : %s' % r['root']['luau'][:220])
+        if not r['root'].get('legacy') and not r['root'].get('luau'): P('        %s' % r['root']['detail'][:220])
+        shown += 1
+        if shown >= args.examples:
+            break
+    P('')
 txt = '\n'.join(out) + '\n'
-open(os.path.join(args.out, 'attribution.txt'), 'w').write(txt)
+open(os.path.join(args.out, 'attribution%s.txt' % tag), 'w').write(txt)
 print(txt)

@@ -26,3 +26,4 @@ for _, c in cases do
 		print(string.format("=== END %s %.3f", c.id, os.clock() - t1))
 	end
 end
+for key in T.misses do print("### miss " .. key) end

@@ -1,0 +1,60 @@
+{
+ "note": "baseline of smoke.py: strict-pass counts per part; regenerate with smoke.py --record after a reviewed change",
+ "parts": {
+  "re": {
+   "total": 15,
+   "strict": 15,
+   "passing": [
+    "s01a",
+    "s01b",
+    "s01c",
+    "s02a",
+    "s02b",
+    "s02c",
+    "s03a",
+    "s03b",
+    "s03c",
+    "s04a",
+    "s04b",
+    "s04c",
+    "s05a",
+    "s05b",
+    "s05c"
+   ],
+   "failing": []
+  },
+  "pre": {
+   "total": 3,
+   "strict": 3,
+   "passing": [
+    "s06a",
+    "s06b",
+    "s06c"
+   ],
+   "failing": []
+  },
+  "synthetic": {
+   "total": 16,
+   "strict": 16,
+   "passing": [
+    "y01a",
+    "y01b",
+    "y01c",
+    "y01d",
+    "y02a",
+    "y02b",
+    "y02c",
+    "y02d",
+    "y03a",
+    "y03b",
+    "y03c",
+    "y03d",
+    "y04a",
+    "y04b",
+    "y04c",
+    "y04d"
+   ],
+   "failing": []
+  }
+ }
+}

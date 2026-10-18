@@ -82,3 +82,22 @@ Of the 44 failing runs: **11 interpreter bugs** (8 from short-circuiting, 3 from
 **Correction to M0(b) and to my earlier text:** the legacy VM does **not** short-circuit. `C_LAND`, `C_LOR` and `C_OP3` are ordinary stack operations in `run_script_main` (`script.cpp:4452-4461`, `op_2`/`op_3`), so every operand is evaluated, including calls with side effects. The interpreter must do the same. Consequences: (1) the 111 `callsub`/`callfunc` calls inside `?:`/`&&`/`||` **can be hoisted** after all, which removes the host-stack-recursion limit risk raised in M0(b); (2) `legacy_interp` must evaluate all operands by default; (3) statements before the first `case` execute; (4) legacy `switch` leaves `$@__SWn_VAL` globals behind (reproduce for parity or document the deviation).
 
 Not covered by the replay: timers, events, `OnInit` order, `sleep` timing, multiple players, the pre-renewal set. The corpus is 46 NPCs, not the full 9,000+, so 68% to 74% is a floor-style measurement of interpreter fidelity on *entry flows*, not a corpus pass rate.
+
+## Addendum 2: interpreter fixed against the real VM (2026-10-18)
+
+After fixing the 11 bugs from the first replay (no short-circuit, statements before the first `case`, `$@__swN_val` parity, `getpartnerid`) plus about 15 more found by widening the corpus (hoisted string returns coerced to 0, double evaluation of index expressions passed to `callsub`, `getarg` by-reference, negative array index, 32-bit bit operators, `rand(0,0)`, inverted `input` clamp and others), `legacy_interp` matches the real rAthena VM (strict: ordered host calls with args, returns, failure flags, plus final variable state) on:
+
+| Corpus | Before | After |
+|---|---|---|
+| Original 46 NPCs, 138 runs, renewal | 95 / 138 (68.8%) | 138 / 138 |
+| Wide corpus, 80 NPCs / 240 runs, renewal | 183 / 240 | 240 / 240 |
+| Wide corpus, pre-renewal | 190 / 240 | 240 / 240 |
+| Hunt corpus, 300 seeded-random NPCs / 900 runs, renewal | 809 / 900 | 900 / 900 |
+| Hunt corpus, pre-renewal, 879 runs | 816 / 879 | 876 / 879 |
+| Synthetic NPCs pinning rare semantics, renewal and pre-renewal | 8 / 44 each | 44 / 44 each |
+
+**2,482 of 2,485 runs (99.9%), 53,565 host calls compared with identical counts on both sides.** The 3 remaining failures are one NPC whose `monster` call stores the server's runtime object id in `$@mobid`; the allocator is not modelled. I re-ran the 34-case smoke test myself (62 s, all strict), and the comparator self-test passes.
+
+**What this does and does not show.** It shows the interpreter reproduces the legacy VM's *script semantics* on entry flows of about 1,000 distinct NPCs under three answer policies each, with an empty-world model whose static data (item names, battle config, castles, shops) is answered by probing the real VM. It does **not** cover timers, `OnInit`/`OnClock`/touch/mob-death events, `sleep` scheduling, multiple players, party/guild flows, instances, or any of the 427 unimplemented builtins (none were reached by any run). 7 pre-renewal hunt NPCs are excluded because the real server never instantiates them (map not in the cache). The comparator was not weakened; it now also reports the reverse failure case, and its self-test covers every mismatch class. Deviations kept (doubles without int64 overflow detection, more lenient parser, assignment-in-expression ordering relative to hoisted calls) are listed in `replay/README.md`.
+
+**Status of the acceptance bar** (`REIMAGINED_ARCHITECTURE_ENGINE.md` section 18): script-semantics fidelity is demonstrated for the entry-flow subset; remaining work is the event/timer/multi-player layer, the 427 builtins, the lazy cache, and moving the prototype into the `legacy-npc` unit.

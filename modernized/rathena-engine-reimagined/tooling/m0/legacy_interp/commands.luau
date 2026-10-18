@@ -81,16 +81,22 @@ C.select = menuLike("select")
 C.prompt = menuLike("prompt")
 
 C.input = function(st, ref, min, max)
+	-- BUILDIN_FUNC(input): defaults input_min_value 0 / input_max_value INT_MAX (script.cpp script_config defaults). A numeric variable receives the
+	-- value clamped to [min,max] and the command returns 1 (above max), -1 (below min) or 0; a string variable receives the text as is
+	-- and the same comparison applies to its LENGTH.
 	local isStr = string.byte(ref[2] or "", -1) == 36
 	rec(st, "input", ref[2])
+	min = min or 0
+	max = max or 2147483647
 	local v = yield(st, "input", { str = isStr, min = min, max = max })
 	if v == nil then v = isStr and "" or 0 end
-	refset(st, ref, v)
-	if not isStr then
-		if min and v < min then refset(st, ref, min); return 1 end
-		if max and v > max then refset(st, ref, max); return 2 end
+	if isStr then
+		refset(st, ref, v)
+		local len = #v
+		return len > max and 1 or len < min and -1 or 0
 	end
-	return 0
+	refset(st, ref, math.max(min, math.min(max, v)))
+	return v > max and 1 or v < min and -1 or 0
 end
 
 C.sleep = function(st, ms) rec(st, "sleep", ms); yield(st, "sleep", ms) end
@@ -166,44 +172,71 @@ C.getargcount = function(st) return #st.frame.args end
 
 -- ---- numbers / strings ---------------------------------------------------------------------
 C.rand = function(st, a, b)
-	local env = st.env
-	env.seed = (env.seed * 1103515245 + 12345) % 2147483648
-	local r = env.seed / 2147483648
-	if b == nil then
-		if a <= 0 then return 0 end
-		return math.floor(r * a)
+	-- script.cpp BUILDIN_FUNC(rand): rand(n) = 0..n-1, rand(min,max) inclusive (swapped when min > max); a range that leaves no
+	-- randomness (n < 1 after the exclusive max, min == max) is SCRIPT_CMD_FAILURE and ends the script
+	local lo, hi
+	if b ~= nil then
+		lo, hi = a, b
+		if lo > hi then lo, hi = hi, lo end
+	else
+		lo, hi = 0, a - 1
+		if a < 0 or hi < 1 then I.cmdFail(st); error(END, 0) end
 	end
-	if b < a then a, b = b, a end
-	return a + math.floor(r * (b - a + 1))
+	if lo == hi then I.cmdFail(st); error(END, 0) end
+	local env = st.env
+	if env.rand then return env.rand(lo, hi) end -- a host may supply the random source (the replay harness scripts it)
+	env.seed = (env.seed * 1103515245 + 12345) % 2147483648
+	return lo + math.floor(env.seed / 2147483648 * (hi - lo + 1))
 end
 C.max = function(st, ...) return math.max(...) end
 C.min = function(st, ...) return math.min(...) end
 C.abs = function(st, a) return math.abs(a) end
 C.strlen = function(st, s) return #tostr(s) end
-C.atoi = function(st, s) return tonumber(s) or 0 end
+C.atoi = function(st, s)
+	-- C atoi(): leading blanks, optional sign, then as many decimal digits as there are ("42x" -> 42); int32 wrap is not modelled
+	local sign, digits = string.match(tostr(s), "^[ \t\n\r\v\f]*([+-]?)(%d+)")
+	if not digits then return 0 end
+	local v = tonumber(digits)
+	if sign == "-" then v = -v end
+	return v
+end
 C.compare = function(st, a, b) return string.find(string.lower(tostr(a)), string.lower(tostr(b)), 1, true) and 1 or 0 end
 
 -- ---- inventory / player ---------------------------------------------------------------------
-C.getitem = function(st, id, amount)
-	rec(st, "getitem", id, amount)
-	local inv = st.player.inv
-	if type(id) == "number" then inv[id] = (inv[id] or 0) + (amount or 1) end
-	return 0
+-- item commands: items are validated against item_db through the data provider (world.luau data.itemid); an unknown item is a
+-- failure like in the legacy VM (getitem/countitem: SCRIPT_CMD_FAILURE, delitem: failure + the script ends).
+local function itemId(st, key)
+	local d = st.env.data
+	local id = d and d.itemid and d.itemid(key)
+	return id
 end
-C.delitem = function(st, id, amount)
-	rec(st, "delitem", id, amount)
+C.getitem = function(st, key, amount)
+	rec(st, "getitem", key, amount)
+	local id = itemId(st, key)
+	if id == nil then I.cmdFail(st); return nil end
+	amount = (amount or 1) % 65536 -- uint16 amount in the legacy command
+	if amount <= 0 then return nil end
 	local inv = st.player.inv
-	if type(id) == "number" then
-		inv[id] = (inv[id] or 0) - (amount or 1)
-		if inv[id] <= 0 then inv[id] = nil end
-	end
-	return 0
+	inv[id] = (inv[id] or 0) + amount
+	return nil
 end
-C.countitem = function(st, id)
-	rec(st, "countitem", id)
-	local d = st.player.defaultItemCount
-	if type(id) ~= "number" then return d end
-	return st.player.inv[id] or d
+C.delitem = function(st, key, amount)
+	rec(st, "delitem", key, amount)
+	local id = itemId(st, key)
+	if id == nil then I.cmdFail(st); error(END, 0) end
+	if amount <= 0 then return nil end
+	local inv = st.player.inv
+	local have = inv[id] or st.player.defaultItemCount
+	if have < amount then I.cmdFail(st); error(END, 0) end -- not enough: nothing is deleted, the script ends
+	local left = (inv[id] or have) - amount
+	if left > 0 then inv[id] = left else inv[id] = nil end
+	return nil
+end
+C.countitem = function(st, key)
+	rec(st, "countitem", key)
+	local id = itemId(st, key)
+	if id == nil then I.cmdFail(st); return 0 end
+	return st.player.inv[id] or st.player.defaultItemCount
 end
 C.checkweight = function(st, ...) rec(st, "checkweight", ...); return 1 end
 C.strcharinfo = function(st, n)
@@ -213,14 +246,18 @@ C.strcharinfo = function(st, n)
 end
 C.strnpcinfo = function(st, n)
 	rec(st, "strnpcinfo", n)
-	local full = st.npc.name or "?"
-	if n == 0 then return full
-	elseif n == 1 then return (string.match(full, "^([^#:]*)")) or full
-	elseif n == 2 then return (string.match(full, "#([^:]*)")) or full
-	elseif n == 3 then return st.npc.map or "prontera"
-	elseif n == 4 then return st.npc.map or "prontera"
+	-- nd->name is "Visible#fragment", nd->exname the unique name (the part after "::" of a declaration, else the same as name)
+	local full = st.npc.name or ""
+	local disp, uniq = string.match(full, "^(.-)::(.*)$")
+	if not disp then disp, uniq = full, full end
+	if n == 0 then return disp
+	elseif n == 1 then return (string.match(disp, "^([^#]*)")) or disp
+	elseif n == 2 then return (string.match(disp, "#(.*)$")) or ""
+	elseif n == 3 then return uniq
+	elseif n == 4 then return st.npc.map or ""
+	elseif n == 5 then return st.npc.path or ""
 	end
-	return full
+	return ""
 end
 
 -- ---- world: record only ---------------------------------------------------------------------
@@ -261,7 +298,7 @@ end
 C.getvariableofnpc = function(st, ref) return I.refget(st, ref) end
 stub("donpcevent", 0)
 stub("doevent", 0)
-stub("playerattached", 1)
+C.playerattached = function(st) rec(st, "playerattached"); return st.player.gameid or 0 end -- the attached player's block id (rid)
 stub("getnpcid", 1)
 -- getcharid(type): 0 char id, 1 party id, 2 guild id, 3 account id, 4 battleground id, 5 clan id (script.cpp BUILDIN_FUNC(getcharid));
 -- the ids of the scripted player live in world.luau (W.newPlayer); the replay harness uses the legacy hook's synthetic player ids
@@ -273,7 +310,6 @@ C.getcharid = function(st, t, name)
 	return 0
 end
 stub("is_party_leader", 0)
-stub("getmonsterinfo", 0)
 -- item_db name through the data provider (world.luau); unknown id -> "null" exactly like the legacy VM (BUILDIN_FUNC(getitemname))
 C.getitemname = function(st, id)
 	rec(st, "getitemname", id)
@@ -287,7 +323,6 @@ stub("instance_mapname", function(st, name) return tostring(name) end)
 stub("instance_id", 0)
 stub("getcastledata", 0)
 stub("isequipped", 0)
-stub("checkre", 0)
 stub("gettime", 0)
 stub("getequipcardid", 0)
 stub("questinfo", 0)

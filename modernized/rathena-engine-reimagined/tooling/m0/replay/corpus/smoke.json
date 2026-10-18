@@ -1,0 +1,65 @@
+{
+ "note": "fixed smoke subset for smoke.py: 5 renewal + 1 pre-renewal corpus NPCs (+ 4 synthetic NPCs, ids in synthetic_ids)",
+ "synthetic_ids": [
+  "y01",
+  "y02",
+  "y03",
+  "y04"
+ ],
+ "chosen": [
+  {
+   "file": "npc/cities/prontera.txt",
+   "name": "Shevild#pront",
+   "line": 331,
+   "lines": 71,
+   "map": "prt_in",
+   "category": "worst:prontera.txt",
+   "set": "re"
+  },
+  {
+   "file": "npc/re/quests/eden/eden_quests.txt",
+   "name": "Administrator Michael",
+   "line": 1772,
+   "lines": 385,
+   "map": "moc_para01",
+   "category": "callsub-goto",
+   "set": "re"
+  },
+  {
+   "file": "npc/merchants/cashheadgear_dye.txt",
+   "name": "Alora",
+   "line": 17,
+   "lines": 103,
+   "map": "prt_in",
+   "category": "array-string",
+   "set": "re"
+  },
+  {
+   "file": "npc/battleground/kvm/kvm_item_pay.txt",
+   "name": "KVM Logistic Officer#a",
+   "line": 15,
+   "lines": 297,
+   "map": "bat_room",
+   "category": "callsub-goto",
+   "set": "re"
+  },
+  {
+   "file": "npc/quests/quests_comodo.txt",
+   "name": "Hair Ornament Girl",
+   "line": 36,
+   "lines": 193,
+   "map": "comodo",
+   "category": "switch-menu",
+   "set": "re"
+  },
+  {
+   "set": "pre",
+   "file": "npc/quests/quests_rachel.txt",
+   "name": "Panno#rachel",
+   "line": 6311,
+   "lines": 431,
+   "map": "ra_temin",
+   "category": "dense-flow"
+  }
+ ]
+}

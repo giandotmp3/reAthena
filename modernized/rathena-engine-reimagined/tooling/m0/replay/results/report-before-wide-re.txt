@@ -1,0 +1,177 @@
+CASES (NPC x answer-script x player profile): 240    NPCs: 80
+strict pass (traces + end state identical): 183 / 240 = 76.2%
+pass modulo formatting-only differences:    183 / 240 = 76.2%
+legacy host calls recorded: 20079   legacy_interp: 19992
+cases with >= 1 blocking interaction (next/select/menu/input/...): 136; ended by the interaction cap: 3; median legacy calls per case: 9
+strict passes that are non-trivial (>= 5 legacy calls and >= 1 interaction): 96
+NPCs with all variants passing strictly: 57 / 80
+
+per category (cases strictly passing / total):
+  array-string                  39 /  60
+  dense-flow                    64 /  72
+  simple-dialogue               33 /  36
+  spread                        15 /  36
+  switch-menu                   32 /  36
+
+mismatch classes (all aligned records, cascades included):  count
+  ret_value            8228
+  missing_in_luau       151
+  arg_value             139
+  extra_in_luau          59
+  missing_command        22
+  state_missing           9
+  legacy_failure          8
+  state_extra             3
+  state_value             1
+
+ROOT (first) divergence per failing case, by class:
+  ret_value              26
+  missing_command        13
+  arg_value               8
+  legacy_failure          7
+  missing_in_luau         3
+ROOT divergence attribution (class, cause):
+  ret_value        world (value comes from game data / clock / player the harness does not model)          22
+  missing_command  coverage (command not implemented in legacy_interp)                                     13
+  arg_value        unattributed                                                                             8
+  legacy_failure   world (legacy buildin failed: needs real world state)                                    7
+  ret_value        unattributed                                                                             4
+  missing_in_luau  unattributed                                                                             3
+
+LEGACY END REASONS: {'end': 237, 'cap': 3}
+LUAU   END REASONS: {'end': 237, 'cap': 3}
+
+=== examples per class (all mismatches; case id -> file:line of the NPC) ===
+
+## ret_value (8228)
+  [w004c] npc/re/merchants/enchan_mora.txt:1170  (NPC "Artifact Collector#blan"; legacy trace line 19, luau trace line 19)
+      return differs
+      legacy: playerattached() -> 150000
+      luau  : playerattached() -> 1
+  [w004c] npc/re/merchants/enchan_mora.txt:1170  (NPC "Artifact Collector#blan"; legacy trace line 118, luau trace line 118)
+      return differs
+      legacy: getitemname(1657) -> "Wand Of Affection"
+      luau  : getitemname(1657) -> "Item#1657"
+  [w014a] npc/re/quests/juno_monster_society.txt:3354  (NPC "Map Examiner Rana#85"; legacy trace line 2, luau trace line 2)
+      return differs
+      legacy: getitemname(1000374) -> "Ultra-Low Carbonated Soda"
+      luau  : getitemname(1000374) -> "Item#1000374"
+  [w015b] npc/re/quests/quests_15_1.txt:6270  (NPC "Contribution Certificate Vending Machine#ep14_3"; legacy trace line 9, luau trace line 9)
+      return differs
+      legacy: getitemname(608) -> "Yggdrasil Seed"
+      luau  : getitemname(608) -> "Item#608"
+  [w024a] npc/re/quests/quests_16_1.txt:14236  (NPC "Noblesse Operator#ext161"; legacy trace line 3, luau trace line 3)
+      return differs
+      legacy: mesitemlink(6919) -> "<ITEM>[Honor Token]<INFO>6919</INFO></ITEM>"
+      luau  : mesitemlink(6919) -> "<ITEM>6919</ITEM>"
+
+## missing_in_luau (151)
+  [w055b] npc/re/quests/quests_dewata.txt:747  (NPC "Memo#dew_drink"; legacy trace line 11, luau trace line None)
+      legacy-only call
+      legacy: select("What happened?") -> 1
+  [w055b] npc/re/quests/quests_dewata.txt:747  (NPC "Memo#dew_drink"; legacy trace line 15, luau trace line None)
+      legacy-only call
+      legacy: next()
+  [w055b] npc/re/quests/quests_dewata.txt:747  (NPC "Memo#dew_drink"; legacy trace line 16, luau trace line None)
+      legacy-only call
+      legacy: mes("[Memo]")
+  [w055b] npc/re/quests/quests_dewata.txt:747  (NPC "Memo#dew_drink"; legacy trace line 37, luau trace line None)
+      legacy-only call
+      legacy: emotion(9)
+
+## arg_value (139)
+  [w004c] npc/re/merchants/enchan_mora.txt:1170  (NPC "Artifact Collector#blan"; legacy trace line 20, luau trace line 20)
+      arguments differ
+      legacy: emotion(23,150000)
+      luau  : emotion(23,1) -> 0
+  [w004c] npc/re/merchants/enchan_mora.txt:1170  (NPC "Artifact Collector#blan"; legacy trace line 119, luau trace line 119)
+      arguments differ
+      legacy: mes("Wand Of Affection must of course be refined to +7 or higher for me to distill it to an enchantment.")
+      luau  : mes("Item#1657 must of course be refined to +7 or higher for me to distill it to an enchantment.")
+  [w004c] npc/re/merchants/enchan_mora.txt:1170  (NPC "Artifact Collector#blan"; legacy trace line 126, luau trace line 126)
+      arguments differ
+      legacy: select("Empowered Wand Of Affection attributes?") -> 1
+      luau  : select("Item#1660 attributes?") -> 1
+  [w014c] npc/re/quests/juno_monster_society.txt:3354  (NPC "Map Examiner Rana#85"; legacy trace line 17, luau trace line 17)
+      arguments differ
+      legacy: mes("If you have Ultra-Low Carbonated Soda, please give me one... and I'll teleport you.")
+      luau  : mes("If you have Item#1000374, please give me one... and I'll teleport you.")
+  [w014c] npc/re/quests/juno_monster_society.txt:3354  (NPC "Map Examiner Rana#85"; legacy trace line 19, luau trace line 19)
+      arguments differ
+      legacy: select("Give me 1 Ultra-Low Carbonated Soda with Veins","No") -> 1
+      luau  : select("Give me 1 Item#1000374 with Veins","No") -> 1
+
+## extra_in_luau (59)
+  [w070a] npc/battleground/kvm/kvm_enter.txt:17  (NPC "KVM Mercenary Officer#1"; legacy trace line None, luau trace line 2)
+      legacy_interp-only call
+      luau  : checkquest(6025,1) -> -1
+  [w070a] npc/battleground/kvm/kvm_enter.txt:17  (NPC "KVM Mercenary Officer#1"; legacy trace line None, luau trace line 3)
+      legacy_interp-only call
+      luau  : mes("[Guillaume Mercenary Officer]")
+  [w070a] npc/battleground/kvm/kvm_enter.txt:17  (NPC "KVM Mercenary Officer#1"; legacy trace line None, luau trace line 5)
+      legacy_interp-only call
+      luau  : next()
+  [w070a] npc/battleground/kvm/kvm_enter.txt:17  (NPC "KVM Mercenary Officer#1"; legacy trace line None, luau trace line 6)
+      legacy_interp-only call
+      luau  : select("I will fight with you.:End Conversation.") -> 1
+  [w070a] npc/battleground/kvm/kvm_enter.txt:17  (NPC "KVM Mercenary Officer#1"; legacy trace line None, luau trace line 10)
+      legacy_interp-only call
+      luau  : close2()
+
+## missing_command (22)
+  [w026a] npc/re/quests/newgears/2012_headgears.txt:19  (NPC "Reno#2012hat"; legacy trace line 34, luau trace line 34)
+      no implementation in legacy_interp (soft stub)
+      legacy: getstatus(589) -> 0
+      luau  : getstatus(589) !U
+  [w033a] npc/re/merchants/OldGlastHeim_merchants.txt:344  (NPC "Dark magic master#pa082"; legacy trace line 12, luau trace line 12)
+      no implementation in legacy_interp (soft stub)
+      legacy: insertchar("100000",",",3) -> "100,000"
+      luau  : insertchar("100000",",",3) !U
+  [w043a] npc/other/mercenary_rent.txt:24  (NPC "Mercenary Manager#main"; legacy trace line 9, luau trace line 9)
+      no implementation in legacy_interp (soft stub)
+      legacy: mercenary_get_faith(0) -> 0
+      luau  : mercenary_get_faith(0) !U
+  [w060a] npc/cities/jawaii.txt:613  (NPC "Employee#jaw6"; legacy trace line 3, luau trace line 3)
+      no implementation in legacy_interp (soft stub)
+      legacy: getpartnerid() -> 0
+      luau  : getpartnerid() !U
+  [w070a] npc/battleground/kvm/kvm_enter.txt:17  (NPC "KVM Mercenary Officer#1"; legacy trace line 1, luau trace line 1)
+      no implementation in legacy_interp (soft stub)
+      legacy: getbattleflag("feature.bgqueue") -> 1
+      luau  : getbattleflag("feature.bgqueue") !U
+
+## state_missing (9)
+  [w054a] npc/re/guides/guides_malangdo.txt:7  (NPC "Malangdo Guide#Malangdo"; legacy trace line None, luau trace line None)
+      $@__sw1_val=3 only in legacy
+  [w055b] npc/re/quests/quests_dewata.txt:747  (NPC "Memo#dew_drink"; legacy trace line None, luau trace line None)
+      @menu=2 only in legacy
+  [w055b] npc/re/quests/quests_dewata.txt:747  (NPC "Memo#dew_drink"; legacy trace line None, luau trace line None)
+      dew_drink=1 only in legacy
+  [w072a] npc/guild2/agit_main_se.txt:839  (NPC "Kafra#template"; legacy trace line None, luau trace line None)
+      @menu=1 only in legacy
+
+## legacy_failure (8)
+  [w025b] npc/re/quests/quests_dicastes.txt:6947  (NPC "dic_enc#main"; legacy trace line 11, luau trace line 11)
+      legacy buildin returned failure, legacy_interp did not
+      legacy: countitem(0) -> 0 !F
+      luau  : countitem(0) -> 0
+  [w034a] npc/re/guild3/agit_main_te.txt:699  (NPC "lever2_TE"; legacy trace line 2, luau trace line 2)
+      legacy buildin returned failure, legacy_interp did not
+      legacy: getcastledata("",1) -> 0 !F
+      luau  : getcastledata("",1) -> 0
+  [w035a] npc/re/guild3/agit_main_te.txt:744  (NPC "lever1_TE"; legacy trace line 6, luau trace line 6)
+      legacy buildin returned failure, legacy_interp did not
+      legacy: warp("",0,0) !F
+      luau  : warp("",0,0) -> 0
+  [w072a] npc/guild2/agit_main_se.txt:839  (NPC "Kafra#template"; legacy trace line 3, luau trace line 3)
+      legacy buildin returned failure, legacy_interp did not
+      legacy: getcastledata("",1) -> 0 !F
+      luau  : getcastledata("",1) -> 0
+
+## state_extra (3)
+  [w070a] npc/battleground/kvm/kvm_enter.txt:17  (NPC "KVM Mercenary Officer#1"; legacy trace line None, luau trace line None)
+      @menu=1 only in legacy_interp
+
+## state_value (1)
+  [w072c] npc/guild2/agit_main_se.txt:839  (NPC "Kafra#template"; legacy trace line None, luau trace line None)
+      %zeny legacy=999800 luau=1000000
