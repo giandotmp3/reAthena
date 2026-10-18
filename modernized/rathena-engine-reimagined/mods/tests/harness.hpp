@@ -27,6 +27,12 @@ struct Registrar {
 struct CheckFailure : std::runtime_error {
   using std::runtime_error::runtime_error;
 };
+// Thrown by tests that need something absent from this build (e.g. the Luau
+// VM). Reported as SKIP; a skipped PENDING test is not an expected-failure.
+struct SkipTest : std::runtime_error {
+  using std::runtime_error::runtime_error;
+};
+#define SKIP_TEST(why) throw SkipTest(why)
 
 #define CHECK(cond)                                                          \
   do {                                                                       \

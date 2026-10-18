@@ -1,12 +1,14 @@
 #pragma once
 // mod.toml manifest (architecture 6.1) and ruleset package metadata
 // (BR-RULESET-118).
+#include <filesystem>
 #include <map>
 #include <optional>
 #include <string>
 #include <vector>
 
 #include "mods/common.hpp"
+#include "mods/toml.hpp"
 #include "mods/semver.hpp"
 
 namespace mods {
@@ -39,8 +41,14 @@ std::optional<Permission> parse_permission(const std::string& s);
 struct RulesetMeta {
   std::string mode;                  // "renewal" | "prerenewal"
   std::map<std::string, bool> flags; // cast, drop, exp, lvdmg, aspd, stat, edp
-  std::string db_set;                // "re" | "pre-re"
+  std::string db_set;                // "re" | "pre-re" (also accepted: "db/re", "db/pre-re")
+  std::optional<bool> legacy_quirks;  // HITL #2 item 6
+  std::optional<bool> strict_parity;
+  bool renewal() const { return mode == "renewal"; }
 };
+
+// The sub-flag names of BR-RULESET-118 (six legacy flags plus EDP).
+const std::vector<std::string>& ruleset_flag_names();
 
 struct Manifest {
   std::string id;
@@ -53,10 +61,31 @@ struct Manifest {
   std::vector<std::string> load_before;
   std::vector<Permission> permissions;         // requested, NOT granted
   std::optional<RulesetMeta> ruleset;
+  // Script entry modules (relative paths under the package). Empty = the
+  // package default (init.luau when present, otherwise every module).
+  std::vector<std::string> entry;
+  std::string description;
+  // Tables the mod owns (e.g. legacy-npc's [legacy]); preserved verbatim,
+  // never interpreted by the loader.
+  std::map<std::string, toml::Value> config;
+  // Non-fatal findings, e.g. a top-level key written after a [table] header.
+  std::vector<std::string> warnings;
 };
 
-// Parses and validates mod.toml text. Throws LoadError{"manifest.*"} with a
-// message naming the offending field.
-Manifest parse_manifest(const std::string& toml_text);
+// Parses and validates mod.toml text. Throws LoadError with a code
+//   manifest.syntax | manifest.missing_key | manifest.unknown_key |
+//   manifest.bad_type | manifest.bad_id | manifest.bad_version |
+//   manifest.bad_range | manifest.bad_permission | manifest.bad_value |
+//   manifest.duplicate | manifest.inconsistent
+// and a message of the form
+//   mod 'example.mod' (path/mod.toml:12:5): key 'permissions[1]': <reason>
+// `source` (optional) is the file name shown in messages.
+Manifest parse_manifest(const std::string& toml_text, const std::string& source = {});
+
+// Reads and parses a mod.toml file. Throws LoadError{"manifest.io"} if unreadable.
+Manifest load_manifest_file(const std::filesystem::path& file);
+
+// Keys a manifest may contain at top level (for documentation and tests).
+const std::vector<std::string>& manifest_known_keys();
 
 }  // namespace mods

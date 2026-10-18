@@ -10,7 +10,7 @@ std::vector<TestCase>& registry() {
 
 int main(int argc, char** argv) {
   bool list = argc > 1 && std::strcmp(argv[1], "--list") == 0;
-  int pass = 0, fail = 0, xfail = 0, xpass = 0;
+  int pass = 0, fail = 0, xfail = 0, xpass = 0, skip = 0;
   for (const auto& t : registry()) {
     if (list) {
       std::cout << t.rule << (t.pending ? " PENDING " : " ACTIVE  ") << t.name << "\n";
@@ -20,6 +20,10 @@ int main(int argc, char** argv) {
     std::string why;
     try {
       t.fn();
+    } catch (const SkipTest& e) {
+      ++skip;
+      std::cout << "SKIP   " << t.rule << " " << t.name << " (" << e.what() << ")\n";
+      continue;
     } catch (const std::exception& e) {
       ok = false;
       why = e.what();
@@ -35,6 +39,6 @@ int main(int argc, char** argv) {
   }
   if (list) return 0;
   std::cout << "\n" << pass << " passed, " << fail << " failed, " << xfail
-            << " expected-failures, " << xpass << " unexpected passes\n";
+            << " expected-failures, " << xpass << " unexpected passes, " << skip << " skipped\n";
   return (fail || xpass) ? 1 : 0;
 }

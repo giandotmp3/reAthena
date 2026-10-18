@@ -139,7 +139,7 @@ mods/<id>/
   types/*.d.luau    # optional exported types
 ```
 
-`mod.toml` fields: `id`, `version` (semver), `engine_api` (range), `depends = {"base" = "^1"}`, `conflicts`, `provides = ["ruleset"]`, `load_after`, `load_before`, `permissions` (e.g. `storage.account`, `storage.read:other`, `http.route`, `sql.read`, `unbounded_loop`, `atcommand`, `net.raw`). Permissions are granted by the operator in `mods.lock`. A mod using an ungranted API is refused at load with a precise error.
+`mod.toml` fields: `id`, `version` (semver), `engine_api` (range), `depends = {"rathena.base" = "^0.1"}`, `conflicts`, `provides = ["ruleset"]`, `load_after`, `load_before`, `permissions` (e.g. `storage.account`, `storage.read:other`, `http.route`, `unbounded_loop`, `atcommand`, `net.raw`). Permissions are granted by the operator in `mods.lock`. A mod using an ungranted API is refused at load with a precise error.
 
 ### 6.2 Namespaced IDs and client-visible numbers
 
@@ -345,3 +345,10 @@ The legacy script VM runs headless here, and a 138-run comparison against `legac
 ## 19. Replay result after interpreter fixes (recorded 2026-10-18)
 
 `legacy_interp` now matches the real VM on 2,482 of 2,485 replay runs (99.9%) over about 1,000 NPCs in both load sets (`M0_RESULTS.md`, addendum 2). The acceptance bar from §18 is met for entry flows in the empty-world model. It remains open for events, timers, multi-player flows and the unimplemented builtins. The prototype lives under `tooling/m0/legacy_interp/`; porting it into the `legacy-npc` unit (with the lazy flat-op cache) is the next implementation step for that unit.
+
+## 20. Corrections from the mods implementation (recorded 2026-10-18)
+
+- `sql.read` is **not** a permission (section 5 governs); the section 6.1 example list is corrected. Permissions enforced end to end today: `storage.account`, `storage.read:<mod>`, `unbounded_loop`. `http.route`, `atcommand` and `net.raw` have no host API yet.
+- `rathena.base` is versioned `0.1.0`; rulesets depend on `^0.1`, not `^1`. All shipped manifests now declare `engine_api = "^1"` and resolve together.
+- Mutually exclusive rulesets (`conflicts`) may share explicit legacy client ids; lookup takes the set of active mods. Other collisions remain load errors.
+- Signatures are a keyed SHA-256 MAC behind a `SignatureVerifier` seam; public-key verification (Ed25519) is not implemented.

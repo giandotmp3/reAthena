@@ -1,0 +1,5 @@
+# Slugs derived from ruleset definitions that are ordinary mechanism vocabulary
+# when they appear in rathena.base (one per line, case-insensitive, with the
+# reason). Every entry must be justified by a real collision; the CI test fails
+# when an entry no longer suppresses anything, so this list cannot rot.
+freeze   # Luau's table.freeze (language API); also the SC_FREEZE status slug in the migrator output

@@ -16,7 +16,11 @@ bool kind_rest(char c) { return lower_alnum(c) || c == '_'; }
 bool name_rest(char c) { return lower_alnum(c) || c == '_' || c == '.' || c == '/' || c == '-'; }
 }  // namespace
 
-bool is_valid_mod_id(const std::string& s) { return all_of(s, lower_alnum, mod_rest); }
+bool is_valid_mod_id(const std::string& s) {
+  // [a-z0-9][a-z0-9._-]*, at most 64 bytes, no empty dotted segment (".." or trailing ".")
+  if (s.size() > 64 || !all_of(s, lower_alnum, mod_rest)) return false;
+  return s.find("..") == std::string::npos && s.back() != '.';
+}
 
 std::optional<NamespacedId> parse_namespaced_id(const std::string& s) {
   auto colon = s.find(':');

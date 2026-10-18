@@ -1,16 +1,15 @@
 # ruleset.prerenewal package manifest (architecture section 6.1, 6.3)
 id = "ruleset.prerenewal"
 version = "0.1.0"
-engine_api = ">=0.1, <1"
+engine_api = "^1"
 provides = ["ruleset"]
 conflicts = ["ruleset.renewal"]
 load_after = ["rathena.base"]
+# No permissions: a pure ruleset needs no storage, http, sql or unbounded_loop.
+permissions = []
 
 [depends]
 "rathena.base" = "^0.1"
-
-# No permissions: a pure ruleset needs no storage, http, sql or unbounded_loop.
-permissions = []
 
 [ruleset]
 mode = "pre-renewal"

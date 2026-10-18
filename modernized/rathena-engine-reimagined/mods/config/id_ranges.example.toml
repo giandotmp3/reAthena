@@ -1,0 +1,46 @@
+# Range registry (CI): which explicit client_id ranges each mod owns and where
+# automatic allocation happens. Checked by RangeRegistry::validate; two owners
+# may overlap only if their mods are mutually exclusive (the two rulesets keep
+# the legacy numbers).
+[allocation]
+skill  = [100000, 109999]
+status = [100000, 109999]
+item   = [500000, 599999]
+mob    = [200000, 209999]
+job    = [10000, 10999]
+
+[[range]]
+owner = "ruleset.prerenewal"
+kind = "skill"
+first = 1
+last = 9999
+
+[[range]]
+owner = "ruleset.renewal"
+kind = "skill"
+first = 1
+last = 9999
+
+[[range]]
+owner = "ruleset.prerenewal"
+kind = "item"
+first = 500
+last = 499999
+
+[[range]]
+owner = "ruleset.renewal"
+kind = "item"
+first = 500
+last = 499999
+
+[[range]]
+owner = "ruleset.prerenewal"
+kind = "status"
+first = 0
+last = 9999
+
+[[range]]
+owner = "ruleset.renewal"
+kind = "status"
+first = 0
+last = 9999

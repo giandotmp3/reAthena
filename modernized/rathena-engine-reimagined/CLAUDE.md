@@ -33,7 +33,7 @@ The generic core (`engine-core`, `netproto`, `persistence`, `gateway`, `script-h
 | `script-host/` | C++20 + Luau 0.690 (`RATHENA_LUAU_ROOT`) | Per-mod states, bus, coroutines, budgets, reload generations, storage, numerics, `.d.luau` generation. **Implemented** (54 tests skip without Luau) | 136 / 1 |
 | `persistence/` | C++20 + GoogleTest | Generic records and KV, write-behind, WAL, id_map, quotas | 7 / 34 skipped |
 | `gateway/` | C++20 | Login, tickets, char-select plumbing, seams, `--role` | 25 / 68 |
-| `mods/` | C++20 + `base/` Luau | Loader, manifest, permissions, ID registry, `rathena.base` | 10 / 36 |
+| `mods/` | C++20 + `base/` Luau | TOML parser, manifests, resolver (ranges, conflicts, cycles), `mods.lock` grants, id registry with tombstones, loader over script-host, kill switch, `rathena.base` purity check. **Implemented**; real mods load through it | 111 / 0 |
 | `ruleset-prerenewal/` | Luau package | Pre-renewal basic-attack pipeline **matching the real legacy code on 5,424/5,424 golden cases** (+76,660 fuzz cases); statuses, data, conformance (built first) | 96 / 86 |
 | `ruleset-renewal/` | Luau package | Renewal package, the architecture proof (built second) | 18 / 19 |
 | `legacy-npc/` | C++20 + Luau | Ported, tested interpreter (`legacy.npc` mod): sigils on script-host storage, lazy loading (renewal set: 16 MB index vs 320 MB eager), blocking commands on the dialogue manager, `On*` events/timers, unsupported-command report. Held to the replay baseline | 156 / 0 (+1 skip) |
@@ -86,11 +86,11 @@ Done: the interpreter is ported into `legacy-npc` (lazy loading, events and time
 2. **`netproto` spec is now extracted from the legacy headers** (`proto/legacy_20211103.yaml`: 1390 live definitions, 948 opcodes; `--verify-legacy` fails on drift; cross-checked against `g++ -E` with 0 disagreements). Default build 20211103 is the **RE flavour** (WantToConnection is 0x0436, 23 bytes; 0x0085 is ChangeDir). Deliberate divergence: one canonical opcode per name; other legacy-accepted opcodes disconnect. Not captured yet: opcode obfuscation and the other 154 shuffle blocks, field layouts for the 786 handler-parsed packets, packed sub-encodings, phase gates. Build now needs Python 3 + PyYAML. Two legacy structs disagree with their table length (`PACKET_ZC_FEED_PET`/`_MER`, 7 vs 5); reported, not reconciled.
 3. **Ruleset starter data is hand-authored and provisional;** conformance vectors come from spec text, not captured legacy golden traces (`RATHENA_GOLDEN_TRACE`). BR-RULESET-025 (RES) and 034 (float32 crit) readings need confirmation against golden traces.
 4. **`persistence`:** `open_connection()` throws `NotImplementedError` for real URLs until the SQLite and PostgreSQL connections are lifted from `modernized/rathena-reimagined/persistence`. BR-CHAR-054 is implemented as a generic per-kind cap, which needs confirmation.
-5. **Spec contradiction:** architecture §6.1 lists `sql.read` as a permission while §5 says no general `sql.read` exists. `mods` followed §5 and tests assert it is rejected. Fix §6.1.
+5. ~~Spec contradiction on `sql.read`~~ fixed in architecture §6.1 and §20.
 6. **Gaps the spec leaves open:** late-timer catch-up rules, A* neighbour order and hash-collision behavior (`engine-core`); on-move hook veto semantics (assumed: veto stops the walk without moving); `min_chars` default (assumed 3); several gateway placeholder tests need config/fake-resolver seams.
 7. **Secure defaults chosen where the spec was silent** (`netproto`): out-of-phase packet disconnects, unsupported client version is refused, the 6th connection in a burst is rejected. Legacy may differ.
 8. **Operator questions still open:** Q-K (more than one map process in production?), Q-I (use of the 283 unused script commands, `query_sql`, `atcommand`, `setunitdata`), Q-F (naming of status `val1..val4`; the DB never names them). **Answered from the legacy source:** Q-H (`.` variables ARE shared by `duplicate()` clones: `npc.cpp:4602` shares the script object), Q-J (a third event for a busy player is dropped; `MAX_EVENTQUEUE` 2, `npc.cpp:1751-1759`; the oldest queued event runs via a 100 ms player timer), Q-D (per-DB merge table in `tooling/migrate/README.md`).
-9. The `rathena.base` manifest version is `0.1.0`; the architecture says `^1`. The scaffold uses `^0.1`.
+9. `rathena.base` is `0.1.0`; rulesets depend on `^0.1` and every shipped manifest declares `engine_api = "^1"` (fixed during the `mods` work, along with a `permissions` key that sat under `[depends]`).
 
 ## Legacy to modern traceability
 
