@@ -96,10 +96,27 @@ ApiSchema load_api_schema_yaml(const std::string& text) {
     if (!nss->is_map()) throw LoadError("api schema: 'namespaces' must be a mapping");
     for (auto& [ns, body] : nss->map) {
       if (auto* g = body.find("also_global"); g && need_scalar(*g, ns + ".also_global") == "true") s.global_namespaces.push_back(ns);
+      s.namespaces.push_back(ns);
       auto* fns = body.find("functions");
-      if (!fns || !fns->is_seq()) throw LoadError("api schema: namespace '" + ns + "' needs a 'functions' list");
-      for (auto& e : fns->seq) s.functions.push_back(read_function(e, ns, ns + ".functions"));
+      auto* vals = body.find("values");
+      if ((!fns || !fns->is_seq()) && (!vals || !vals->is_seq()))
+        throw LoadError("api schema: namespace '" + ns + "' needs a 'functions' list (or a 'values' list)");
+      if (fns && fns->is_seq())
+        for (auto& e : fns->seq) s.functions.push_back(read_function(e, ns, ns + ".functions"));
+      if (vals && vals->is_seq())
+        for (auto& e : vals->seq) {
+          ApiValue v;
+          v.ns = ns;
+          v.name = need_scalar(need(e, "name", ns + ".values"), ns + ".values.name");
+          v.type = need_scalar(need(e, "type", ns + ".values"), ns + ".values.type");
+          if (auto* d = e.find("doc")) v.doc = need_scalar(*d, ns + ".values.doc");
+          s.values.push_back(std::move(v));
+        }
     }
+  }
+  if (auto* eng = root.find("engine")) {
+    if (!eng->is_seq()) throw LoadError("api schema: 'engine' must be a list of namespace names");
+    for (auto& e : eng->seq) s.engine.push_back(need_scalar(e, "engine entry"));
   }
 
   // Cross-checks: unique names, declared types.
@@ -125,6 +142,15 @@ ApiSchema load_api_schema_yaml(const std::string& text) {
     for (auto& f : t.fields)
       for (auto& id : type_identifiers(f.type)) if (!declared.count(id)) throw LoadError("api schema: " + t.name + "." + f.name + " uses undeclared type '" + id + "'");
   }
+  std::set<std::string> seen_values;
+  for (auto& v : s.values) {
+    if (!seen_values.insert(v.ns + "." + v.name).second) throw LoadError("api schema: duplicate value " + v.ns + "." + v.name);
+    if (seen.count(v.ns + "." + v.name)) throw LoadError("api schema: " + v.ns + "." + v.name + " is both a function and a value");
+    for (auto& id : type_identifiers(v.type)) if (!declared.count(id)) throw LoadError("api schema: value " + v.ns + "." + v.name + " uses undeclared type '" + id + "'");
+  }
+  for (auto& e : s.engine)
+    if (std::find(s.namespaces.begin(), s.namespaces.end(), e) == s.namespaces.end())
+      throw LoadError("api schema: engine lists unknown namespace '" + e + "'");
   for (auto& g : s.global_namespaces)
     if (std::none_of(s.functions.begin(), s.functions.end(), [&](const ApiFunction& f) { return f.ns == g; }))
       throw LoadError("api schema: also_global namespace '" + g + "' has no functions");
@@ -153,20 +179,27 @@ std::string generate_luau_declarations(const ApiSchema& s) {
       o << "end\n";
     }
   }
-  std::vector<std::string> order;
-  for (auto& f : s.functions)
-    if (std::find(order.begin(), order.end(), f.ns) == order.end()) order.push_back(f.ns);
-  for (auto& ns : order) {
+  for (auto& ns : s.namespaces) {
     o << "\ndeclare " << ns << ": {\n";
     for (auto& f : s.functions) {
       if (f.ns != ns) continue;
       if (!f.doc.empty()) o << "  -- " << f.doc << "\n";
       o << "  " << f.name << ": " << fn_type(f) << ",\n";
     }
+    for (auto& v : s.values) {
+      if (v.ns != ns) continue;
+      if (!v.doc.empty()) o << "  -- " << v.doc << "\n";
+      o << "  " << v.name << ": " << v.type << ",\n";
+    }
     o << "}\n";
     if (std::find(s.global_namespaces.begin(), s.global_namespaces.end(), ns) != s.global_namespaces.end())
       for (auto& f : s.functions)
         if (f.ns == ns) o << "declare function " << f.name << "(" << param_list(f.params, false) << ")" << (f.returns == "()" ? "" : ": " + f.returns) << "\n";
+  }
+  if (!s.engine.empty()) {
+    o << "\n-- the table a package's register(engine) receives (a global `engine` exists when the loader asks for it)\nexport type Engine = {\n";
+    for (auto& e : s.engine) o << "  " << e << ": typeof(" << e << "),\n";
+    o << "}\n";
   }
   return o.str();
 }

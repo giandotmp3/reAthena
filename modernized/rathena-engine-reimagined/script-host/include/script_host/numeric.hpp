@@ -13,6 +13,13 @@
 
 namespace script_host {
 
+// Rounds a double to the nearest IEEE binary32 value (ties to even) and returns it as a double:
+// the legacy `(double)(float)x`. NaN and infinities pass through; values past the binary32 range
+// become +-infinity (the IEEE result; the C++ cast would be undefined there). Denormals are exact.
+// This is the host primitive behind the Luau `num.f32(x)`; float32 +, -, * and / are
+// `num.f32(a op b)` because a double holds more than 2 * 24 + 2 bits.
+double f32_round(double x);
+
 class NumCtx {
  public:
   explicit NumCtx(std::int64_t v = 0) : v_(v) {}

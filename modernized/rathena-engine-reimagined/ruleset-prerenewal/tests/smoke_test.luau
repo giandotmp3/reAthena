@@ -1,18 +1,21 @@
 --!nonstrict
 -- Non-rule smoke tests: package registration and domain validators.
 local T = import("tests/support/harness")
+local booted = import("tests/support/booted")
 local fake = import("tests/support/fake_host")
 local init = import("scripts/init")
 local domain = import("scripts/domain")
 local pipeline = import("scripts/pipeline")
 
 T.run("SMOKE", "register defines pipelines, statuses, skills and items", false, function()
-	local engine, log = fake()
-	init.register(engine)
-	T.assert_deep_equal(log.pipelines.weapon, pipeline.ORDER.weapon, "SMOKE")
-	assert(log.status["ruleset.prerenewal:status/blessing"], "blessing missing")
-	assert(log.skill["ruleset.prerenewal:skill/al_heal"], "heal missing")
-	assert(log.item["ruleset.prerenewal:item/poring_card"], "card missing")
+	booted.isolated(function()
+		local engine, log = fake()
+		init.register(engine)
+		T.assert_deep_equal(log.pipelines.weapon, pipeline.ORDER.weapon, "SMOKE")
+		assert(log.status["ruleset.prerenewal:status/blessing"], "blessing missing")
+		assert(log.skill["ruleset.prerenewal:skill/al_heal"], "heal missing")
+		assert(log.item["ruleset.prerenewal:item/poring_card"], "card missing")
+	end)
 end)
 
 T.run("SMOKE", "status ids outside the package namespace are rejected", false, function()

@@ -48,14 +48,19 @@ def run_luau(args):
     entry = "tests/golden_report" if "--report" in args else "tests/main"
     out = ROOT / "build" / "bundle_tests.luau"
     subprocess.run([sys.executable, "-I", str(TOOLS / "bundle_luau.py"), entry, str(out)], check=True, stdout=subprocess.DEVNULL)
-    return subprocess.run([exe, str(out)], cwd=ROOT).returncode
+    rc = subprocess.run([exe, str(out)], cwd=ROOT).returncode
+    if entry == "tests/main":  # the extra suite (tests/extra.luau) runs after the main one, in its own process
+        out2 = ROOT / "build" / "bundle_extra.luau"
+        subprocess.run([sys.executable, "-I", str(TOOLS / "bundle_luau.py"), "tests/extra", str(out2)], check=True, stdout=subprocess.DEVNULL)
+        rc = rc or subprocess.run([exe, str(out2)], cwd=ROOT).returncode
+    return rc
 
 
 def run_lupa():
     from lupa import LuaRuntime
-    lua = LuaRuntime(unpack_returned_tuples=True)
-    code = lua.execute(BOOT, str(ROOT))
-    return int(code or 0)
+    code = int(LuaRuntime(unpack_returned_tuples=True).execute(BOOT, str(ROOT)) or 0)
+    extra = int(LuaRuntime(unpack_returned_tuples=True).execute(BOOT.replace("tests/main", "tests/extra"), str(ROOT)) or 0)
+    return code or extra
 
 
 def main() -> int:

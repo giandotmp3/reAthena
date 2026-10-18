@@ -14,6 +14,9 @@ struct ApiFunction {
   std::string doc;
 };
 struct ApiField { std::string name, type; };
+struct ApiValue {            // a read-only value in a namespace table (e.g. config.legacy_quirks)
+  std::string ns, name, type, doc;
+};
 struct ApiType {
   std::string name;
   bool opaque = false;                 // declare class X end
@@ -23,6 +26,9 @@ struct ApiType {
 struct ApiSchema {
   int api_version = 0;
   std::vector<ApiFunction> functions;  // namespaced functions, in schema order
+  std::vector<ApiValue> values;        // namespaced read-only values, in schema order
+  std::vector<std::string> namespaces; // every namespace, in schema order
+  std::vector<std::string> engine;     // namespaces collected into the `engine` global table (handed to register(engine))
   std::vector<std::string> global_namespaces;  // namespaces whose functions are also globals (say, choose, ...)
   std::vector<ApiType> types;
 };

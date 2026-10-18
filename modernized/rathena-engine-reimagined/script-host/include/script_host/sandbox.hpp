@@ -10,18 +10,26 @@
 #include <set>
 #include <string>
 #include <unordered_map>
+#include <variant>
 #include <vector>
 
 #include "script_host/budget.hpp"
 #include "script_host/dialogue.hpp"
 #include "script_host/hook.hpp"
+#include "script_host/pipeline.hpp"
 #include "script_host/storage.hpp"
 
 namespace script_host {
 
 class RngStreams;
 
-enum class Permission { StorageAccount, StorageReadOther, HttpRoute, UnboundedLoop, Atcommand, NetRaw };
+// ProtectedStages: replace, cancel or move a stage a pipeline marked protected, or cancel a run that would skip one.
+enum class Permission { StorageAccount, StorageReadOther, HttpRoute, UnboundedLoop, Atcommand, NetRaw, ProtectedStages };
+
+// Read-only values the host exposes to a mod as the Luau table `config` (also `engine.config`). The loader fills it from
+// the mod's manifest (for a ruleset: its [ruleset] table). `legacy_quirks` is always present and defaults to true: legacy
+// defects ship as-is unless the manifest says otherwise.
+using ConfigValue = std::variant<bool, std::int64_t, double, std::string>;
 
 struct ModEnvironmentSpec {
   std::string mod_id;
@@ -29,6 +37,12 @@ struct ModEnvironmentSpec {
   std::uint64_t memory_cap_bytes = 32ull << 20;
   BudgetLimits budget{};                 // UnboundedLoop in `granted` lifts the step limit
   std::uint32_t max_sort_elements = 65536;  // bounded table.sort
+  std::map<std::string, ConfigValue> config;  // becomes the read-only `config` table of every generation
+  // Also define the global `engine` table (events, storage, dialogue, timers, definitions, rng, num, pipeline, config) for a loader
+  // whose bundler hands it to a package's register(engine). Off by default: mods' bundler calls register(engine) on EVERY entry
+  // module when `engine` exists, and rathena.base has a module whose register(name, handler) means something else. The globals
+  // `pipeline`, `num` and `config` are always there.
+  bool expose_engine = false;
 };
 
 enum class RunStatus { Ok, Error, BudgetExceeded, MemoryExceeded, PermissionDenied };
@@ -108,8 +122,13 @@ class ModSandbox {
   void set_host(Host h) { host_ = std::move(h); }
   void set_storage(StorageApi* s) { storage_ = s; }
   void set_rng(RngStreams* r) { rng_ = r; }
+  // The registry `pipeline.run/describe/order` read. The pointer must stay valid while the sandbox lives (the
+  // reload manager passes its own member, which it replaces atomically on commit).
+  void set_pipelines(PipelineRegistry* p) { pipes_ = p; }
+  PipelineRegistry* pipelines() const { return pipes_; }
 
   // Registrations collected by the last run().
+  std::vector<PipelineOp> take_pipeline_ops();  // pipeline.define / stage / insert_* / replace / cancel / move, in call order
   std::vector<RegisteredHook> take_hooks();
   std::vector<RegisteredMigrate> take_migrates();
   std::vector<std::string> take_shapes();  // definitions.declare() lines, in order
@@ -117,6 +136,8 @@ class ModSandbox {
   // ---- invoking mod functions -------------------------------------------
   // Throws HookFailure (Kind::Budget / Memory / Permission / Error).
   void call_hook(int ref, HookContext& ctx);
+  // Identity used by PipelineBody::owner.
+  const void* identity() const { return this; }
   RunResult call_ref(int ref, const std::string& label);  // timers
   RunResult call_migrate(int ref, std::uint32_t from, const Row& in, Row& out);
   void release_ref(int ref);
@@ -142,6 +163,7 @@ class ModSandbox {
   Host host_;
   StorageApi* storage_ = nullptr;
   RngStreams* rng_ = nullptr;
+  PipelineRegistry* pipes_ = nullptr;
   std::unique_ptr<Impl> impl_;
 };
 

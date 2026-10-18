@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -8,6 +9,7 @@
 
 #include "script_host/effect_queue.hpp"
 #include "script_host/numeric.hpp"
+#include "script_host/storage.hpp"
 
 namespace script_host {
 
@@ -43,6 +45,8 @@ struct HookContext {
   NumCtx num;                     // mutable int64 ctx for Modify hooks
   EffectQueue* effects = nullptr; // never applied inside the hook
   std::vector<EntityHandle> inputs;
+  // Read-only data snapshot the caller attached (pipeline.run opts.view); a script reads a fresh copy with ctx:view().
+  std::shared_ptr<const Value> view;
   std::optional<std::string> cancel_reason;
   // Set by the bus around each hook call:
   bool read_only = false;              // Observe hooks may not change `num`

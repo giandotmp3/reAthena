@@ -14,6 +14,8 @@ return {
 	ELE_ALL = 10, RC_ALL = 12, SZ_ALL = 3, CLASS_ALL = 6,
 	-- weapon types (status.hpp / mmo.hpp)
 	W_FIST = 0, W_DAGGER = 1, W_BOW = 11, W_KATAR = 16,
+	-- pc.hpp: indexed_bonus.weapon_damage_rate has 16 slots but is indexed by weapon type (up to 23)
+	WDR_SLOTS = 16,
 	-- storage widths of the legacy integer fields the pipeline narrows into
 	DEF_MIN = -128, DEF_MAX = 127, -- defType is `signed char` in pre-renewal (config/const.hpp)
 }

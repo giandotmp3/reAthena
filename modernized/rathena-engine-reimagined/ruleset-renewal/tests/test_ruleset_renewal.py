@@ -100,6 +100,20 @@ class Manifest(unittest.TestCase):
         text = (ROOT / "package.toml").read_text() + (ROOT / "mod.toml").read_text()
         self.assertIsNone(re.search(r"(?i)(password|secret|token|api[_-]?key)\s*=", text))
 
+    @needs_luau
+    def test_BR_RULESET_118_legacy_quirks_flag_reproduces_legacy_and_corrects_two_defects(self):
+        # tests/acceptance/quirks_test.luau: legacy_quirks = true reproduces the doubled monster crit multiplier and the weapon_damage_rate
+        # slot aliasing (golden), false gives the documented corrected behaviour and changes nothing else (every golden case compared)
+        luau_rule_passes(self, "BR-RULESET-118", at_least=3)
+        luau_rule_passes(self, "BR-RULESET-102", at_least=5)
+
+    def test_BR_RULESET_118_legacy_quirks_is_wired_from_the_manifest_to_the_package(self):
+        self.assertIs(MOD["ruleset"]["legacy_quirks"], True)
+        cfg = (ROOT / "data" / "damage_cfg.luau").read_text()
+        self.assertRegex(cfg, r"legacy_quirks = true")
+        init = (ROOT / "scripts" / "init.luau").read_text()
+        self.assertIn("engine.config.legacy_quirks", init)
+
     @pending("BR-RULESET-118")
     def test_BR_RULESET_118_unsupported_subflag_combo_refused_at_load(self):
         raise adapter.HostUnavailable("needs the mod loader (mods/): sub-flag combination validation is loader behaviour, no ruleset code yet")
@@ -342,11 +356,26 @@ class Architecture(unittest.TestCase):
             imports |= set(re.findall(r'import\("([^"]+)"\)', p.read_text()))
         self.assertTrue(all(i.startswith(("scripts/", "data/")) for i in imports), imports)
 
-    def test_register_calls_only_pipeline_define(self):
-        calls = set()
+    def test_the_package_uses_only_the_documented_engine_api(self):
+        # script-host's engine table (api/engine.yaml): pipeline.define / stage / run, num.f32 and config.legacy_quirks. No status, skill,
+        # item, storage, rng or event API: this package is pure rules over the pipeline runtime.
+        used = set()
         for p in (ROOT / "scripts").rglob("*.luau"):
-            calls |= set(re.findall(r"\bengine\.([A-Za-z_.]+)\s*\(", p.read_text()))
-        self.assertEqual(calls, {"pipeline.define"})
+            code = "\n".join(l.split("--")[0] for l in p.read_text().splitlines())
+            used |= set(re.findall(r"\bengine\.([A-Za-z_]+(?:\.[A-Za-z_]+)*)", code))
+        self.assertEqual(used, {"pipeline.define", "pipeline.stage", "pipeline.run", "num", "config.legacy_quirks"})
+
+    def test_the_other_ruleset_does_not_depend_on_this_one_either(self):
+        # the exclusion is symmetric: nothing in the pre-renewal package's code mentions ruleset.renewal or imports outside itself
+        pre = ROOT.parent / "ruleset-prerenewal"
+        if not pre.is_dir():
+            self.skipTest("ruleset-prerenewal not present")
+        for sub in ("scripts", "data", "tests"):
+            for p in (pre / sub).rglob("*.luau"):
+                code = "\n".join(l.split("--")[0] for l in p.read_text().splitlines())
+                self.assertNotRegex(code, r"ruleset[.-]renewal|ruleset_renewal", str(p))
+                for imp in re.findall(r'import\("([^"]+)"\)', code):
+                    self.assertTrue(imp.startswith(("scripts/", "data/", "tests/", "conformance/", "build/")), (str(p), imp))
 
     def test_numerics_lint_is_clean(self):
         r = subprocess.run([sys.executable, "-I", str(ROOT / "tools" / "lint_numeric.py")], capture_output=True, text=True)
@@ -357,15 +386,25 @@ class Architecture(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
     def test_the_mechanism_the_package_sits_on_was_not_touched(self):
+        # engine-core, native-defaults and rathena.base (mods/base) needed no change. script-host did: it gained the pipeline runtime,
+        # num.f32 and engine.config (ARCHITECTURE_PROOF.md section 12), and ruleset-prerenewal was refactored onto it; neither is watched.
         a = load("docs/pipeline_diff.json")["audit"]
         self.assertEqual(a["changed_outside_package"], [])
-        self.assertEqual(a["engine_api_calls"], ["pipeline.define"])
+        self.assertEqual(a["engine_api"], ["config.legacy_quirks", "num", "pipeline.define", "pipeline.run", "pipeline.stage"])
         self.assertEqual(a["cross_ruleset_references"], [])
 
     def test_the_pipeline_api_reproduces_the_renewal_order_from_the_prerenewal_names(self):
         a = load("docs/pipeline_diff.json")["api"]
         self.assertTrue(a["reproduces_re_order"])
         self.assertEqual(a["define_only"], 1)
+        # without `move`: 23 operations; script-host's real runtime executes exactly this list (script-host/tests/test_rulesets.cpp)
+        self.assertEqual(a["counts"], {"cancel": 3, "insert_after": 12, "replace": 8})
+        self.assertEqual(len(a["ops"]), 23)
+        # with `move`: the two stages that only changed position (card_attacker, skill_atk_bonus) are moved and keep their ids
+        m = a["with_move"]
+        self.assertTrue(m["reproduces_re_order"])
+        self.assertEqual(m["counts"], {"cancel": 1, "move": 2, "insert_after": 10, "replace": 8})
+        self.assertEqual(sorted(o[1] for o in m["ops"] if o[0] == "move"), ["card_attacker", "skill_atk_bonus"])
 
 
 if __name__ == "__main__":

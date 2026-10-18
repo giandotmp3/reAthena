@@ -76,7 +76,8 @@ def call(fn: str, args: list):
     if exe is None:
         raise HostUnavailable("Luau CLI not found (set LUAU or RATHENA_LUAU_ROOT)")
     code = _lib() + (
-        "\nlocal F = import('scripts/formulas')\n"
+        "\nimport('tests/support/booted')\n"  # registers the package with the fake host: binds num.f32
+        "local F = import('scripts/formulas')\n"
         f"local r = table.pack(F.{fn}({', '.join(_lua(a) for a in args)}))\n"
         "local out = {}\nfor i = 1, r.n do out[i] = tostring(r[i]) end\n"
         "print('R ' .. table.concat(out, ' '))\n")

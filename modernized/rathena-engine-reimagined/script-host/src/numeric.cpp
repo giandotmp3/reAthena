@@ -27,6 +27,19 @@ std::uint64_t fnv1a(const std::string& s, std::uint64_t h = 1469598103934665603u
 }
 }  // namespace
 
+double f32_round(double x) {
+  if (std::isnan(x)) return x;
+  // 2^128 - 2^103: the midpoint between FLT_MAX and 2^128; IEEE rounds anything at or past it to infinity.
+  constexpr double kOverflow = 3.4028235677973366e38;
+  if (x >= kOverflow) return std::numeric_limits<double>::infinity();
+  if (x <= -kOverflow) return -std::numeric_limits<double>::infinity();
+  // Between FLT_MAX and the midpoint the nearest binary32 is FLT_MAX itself (also avoids an out-of-range cast).
+  constexpr double kMax = static_cast<double>(std::numeric_limits<float>::max());
+  if (x > kMax) return kMax;
+  if (x < -kMax) return -kMax;
+  return static_cast<double>(static_cast<float>(x));
+}
+
 void NumCtx::add(std::int64_t d) { v_ = narrow(static_cast<i128>(v_) + d, "add"); }
 void NumCtx::sub(std::int64_t d) { v_ = narrow(static_cast<i128>(v_) - d, "sub"); }
 void NumCtx::mul(std::int64_t m) { v_ = narrow(static_cast<i128>(v_) * m, "mul"); }

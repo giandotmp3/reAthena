@@ -3,6 +3,7 @@
 -- legacy binary loads them; checked against the server's own values by conformance/golden_gen/gen_tables.py --dump (cfg lines).
 -- Booleans of the conf are 0/1 here because the legacy code compares integers.
 return {
+	legacy_quirks = true,              -- true: legacy defects reproduced as-is (doubled monster crit multiplier, weapon_damage_rate slot aliasing); false: corrected. The host's engine.config.legacy_quirks overrides it at register
 	min_hitrate = 5, max_hitrate = 100,
 	attack_attr_none = 14,             -- BL_ mask of attacker types whose basic attacks skip the element table (MOB|PET|HOM)
 	left_cardfix_to_right = 1,         -- left-hand card bonuses are merged into the right hand

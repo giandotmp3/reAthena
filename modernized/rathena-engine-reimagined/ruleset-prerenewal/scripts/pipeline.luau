@@ -24,6 +24,12 @@ M.ORDER = {
 -- Native opt-in by ID (architecture 1.1). Only populated if M0(a) shows Luau is too slow.
 M.NATIVE_OPT_IN = {}
 
+-- Stages whose bodies are registered protected: replacing, cancelling or moving them needs the host's protected-stage permission
+-- (a mod may still insert stages next to them). `init` sets up the attack and `final` closes it (BR-RULESET-001 tail).
+M.PROTECTED = { init = true, final = true }
+
+-- Declares the stage orders and registers the weapon stage bodies; the engine owns the loop (script-host pipeline.run). The magic
+-- and misc orders are declared only: this package has no bodies for them yet.
 function M.register(engine)
 	for kind, order in pairs(M.ORDER) do
 		engine.pipeline.define(kind, order)
@@ -31,6 +37,7 @@ function M.register(engine)
 	for _, opt in ipairs(M.NATIVE_OPT_IN) do
 		engine.pipeline.use_native(opt.pipeline, opt.stage, opt.native_id, opt.params)
 	end
+	import("scripts/damage/weapon").register(engine)
 end
 
 return M

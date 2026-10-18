@@ -25,7 +25,7 @@ ReloadManager::~ReloadManager() {
   // Sandboxes may outlive the manager (held by dialogues); detach their callbacks.
   for (auto& [m, e] : mods_)
     for (auto& [n, g] : e->gens)
-      if (g->sandbox) g->sandbox->set_host({});
+      if (g->sandbox) { g->sandbox->set_host({}); g->sandbox->set_pipelines(nullptr); }  // sandboxes may outlive the registry
 }
 
 void ReloadManager::set_environment(ModEnvironmentSpec spec) { envs_[spec.mod_id] = std::move(spec); }
@@ -42,7 +42,7 @@ std::shared_ptr<ModSandbox> ReloadManager::active_sandbox(const std::string& mod
 }
 
 std::size_t ReloadManager::live_registrations(const std::string& mod, std::uint64_t generation) const {
-  std::size_t n = bus_.count(mod, generation);
+  std::size_t n = bus_.count(mod, generation) + pipes_.count(mod, generation);
   for (auto& t : timers_)
     if (t.mod == mod && t.gen == generation) ++n;
   auto it = mods_.find(mod);
@@ -76,6 +76,7 @@ ReloadResult ReloadManager::reload(const std::string& mod, const std::string& ne
   auto sb = std::make_shared<ModSandbox>(spec);
   sb->set_storage(storage_);
   sb->set_rng(rng_);
+  sb->set_pipelines(&pipes_);
   struct LoadState {
     std::vector<std::pair<std::uint64_t, int>> pending_timers;  // timers.after during the load
     bool committed = false;
@@ -97,6 +98,7 @@ ReloadResult ReloadManager::reload(const std::string& mod, const std::string& ne
     return res;
   }
   auto hooks = sb->take_hooks();
+  auto pl_ops = sb->take_pipeline_ops();
   auto migrates = sb->take_migrates();
   auto shape = sb->take_shapes();
 
@@ -133,8 +135,35 @@ ReloadResult ReloadManager::reload(const std::string& mod, const std::string& ne
     return res;
   }
 
+  // Candidate pipelines: drop the old generation's definitions and edits, apply the new ones, rebuild every effective
+  // order. A conflict, a stage another mod's edit still needs, or a bad id refuses the reload and changes nothing.
+  PipelineRegistry pcand = pipes_;
+  try {
+    if (old_gen != 0) pcand.remove_generation(mod, old_gen);
+    for (auto& op : pl_ops) {
+      auto body = std::make_shared<PipelineBody>();
+      body->keep = sb;
+      body->owner = sb->identity();
+      body->ref = op.ref;
+      if (op.ref != 0) {
+        int ref = op.ref;
+        body->call = [sb, ref](HookContext& c) { sb->call_hook(ref, c); };
+      }
+      pcand.apply(op, mod, gen, std::move(body));
+    }
+    PipelineOptions po;
+    po.strict_parity = rng_ ? rng_->strict_parity() : candidate.strict_parity();
+    po.load_order = [this](const std::string& m) { int o = bus_.mod_load_order(m); return o < 0 ? (1 << 20) : o; };
+    pcand.validate(po);
+  } catch (const LoadError& e) {
+    res.error = e.what();
+    sb->set_host({});
+    return res;
+  }
+
   // ---- commit (atomic from the caller's view; nothing below can fail) --------
   bus_ = std::move(candidate);
+  pipes_ = std::move(pcand);
   if (storage_)
     for (auto& m : migrates) {
       int ref = m.ref;

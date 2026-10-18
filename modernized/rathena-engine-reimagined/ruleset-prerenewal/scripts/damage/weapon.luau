@@ -6,6 +6,17 @@
 --   init, base_attack, skill_ratio, const_add, skill_atk_bonus, defense, post_defense, element, element_bonus,
 --   card_attacker, card_target, div_hands, target_modifiers, map_rates, final
 --
+-- The stage bodies live in M.STAGES (one function per stage name, operating on the attack state S). M.register(engine) hands them
+-- to the engine with pipeline.stage(); M.calc_attack builds S, runs the prelude (lucky dodge, crit roll, hit roll) and calls
+-- pipeline.run("weapon", S, ...), which executes the EFFECTIVE order (this package's order plus whatever other mods inserted,
+-- replaced, cancelled or moved). Stages in HIT_ONLY are skipped when the attack does not hit.
+--
+-- legacy_quirks (cfg.legacy_quirks, default true; the host's engine.config.legacy_quirks from mod.toml [ruleset]): the one legacy
+-- defect of this package's paths is weapon_damage_rate (battle_add_weapon_damage): the legacy array has 16 slots but is indexed by
+-- weapon type up to 23 (pc.hpp:577), so guns and grenade launchers (types 17..21; katar, type 16, is refused above) read
+-- arrow_addele[type - 16]. It is reproduced while the flag is true; with false every type reads its own slot (bonus.wdr_r / wdr_l).
+-- (The renewal-only doubled monster crit multiplier does not exist in the pre-renewal code: battle.cpp:2635 is #ifdef RENEWAL.)
+--
 -- ====================================================================================================================
 -- ctx interface (everything the pipeline needs from the host; nothing else is touched)
 --
@@ -32,6 +43,7 @@
 --   skills = { as_right, as_left, ko_right, ko_left } (dual-wield passive levels; job "thief" or "kagerou")
 --   bonus = { arrow_atk, crit_atk_rate, non_crit_atk_rate, short_atk, long_atk, near_def, long_def, crit_def,
 --             crit_def_rate, overrefine_r, overrefine_l, perfect_hit, arrow_hit, arrow_cri, crit_range, skill_ratio,
+--             wdr_r, wdr_l (weapon_damage_rate of the right / left weapon's type, percent),
 --             add_race/add_ele/add_size/add_class (right hand), ladd_* (left hand), aadd_* (arrow),
 --             sub_race/sub_ele/sub_size/sub_class/sub_defele, critadd_race }   (tables: index -> percent)
 --   sc = { berserk = {val1..val4}, curse, provoke, concentration, edp, maximize, weaponperfection, overthrust, deluge,
@@ -40,10 +52,13 @@
 -- ====================================================================================================================
 local C = import("scripts/damage/consts")
 local TABLES = import("data/damage_tables")
+local pipeline = import("scripts/pipeline")
 
 local M = {}
 
 local ALL = {} -- empty table for absent bonus maps
+
+local run = nil -- engine.pipeline.run, bound by M.register
 
 local function bit_set(mask, bit) -- mask & bit for a single-bit value; both are small non-negative integers
 	return mask % (bit * 2) >= bit
@@ -217,6 +232,24 @@ function M.base_range(ctx, src, hand, crit, arrow)
 	return atkmin, atkmax
 end
 
+-- legacy_quirks of an attack: S is nil for the pure helpers called without one (they keep the legacy behaviour)
+local function legacy_quirks(S)
+	return S == nil or S.cfg == nil or S.cfg.legacy_quirks ~= false
+end
+
+-- weapon_damage_rate lookup of battle_add_weapon_damage. Legacy defect: the array has 16 slots but weapon types go up to 23, so
+-- types 16..23 read the following member, indexed_bonus.arrow_addele[type - 16]. With legacy_quirks off every type reads the slot
+-- of its own type (the snapshot's wdr_r / wdr_l; one slot per type, so both hands of one weapon type share it).
+local function weapon_damage_rate(src, wtype, hand, legacy)
+	local b = bonus_of(src)
+	if legacy and wtype >= C.WDR_SLOTS then return at(b.aadd_ele, wtype - C.WDR_SLOTS) end
+	if hand == "l" then
+		if wtype == src.wtype1 then return b.wdr_r or 0 end
+		return b.wdr_l or 0
+	end
+	return b.wdr_r or 0
+end
+
 function M.base_damage(ctx, src, hand, tgt_size, crit, arrow, nosize, S)
 	local b = bonus_of(src)
 	local atkmin, atkmax = M.base_range(ctx, src, hand, crit, arrow)
@@ -240,9 +273,11 @@ function M.base_damage(ctx, src, hand, tgt_size, crit, arrow, nosize, S)
 		end
 	end
 	damage = damage + src.batk
-	if src.kind == "pc" then -- battle_add_weapon_damage: over-refine bonus is part of base ATK
+	if src.kind == "pc" then -- battle_add_weapon_damage: over-refine bonus is part of base ATK, then weapon_damage_rate
 		local over = hand == "l" and (b.overrefine_l or 0) or (b.overrefine_r or 0)
 		if over ~= 0 then damage = damage + ctx.rng.rnd() % over + 1 end
+		local wdr = weapon_damage_rate(src, hand == "l" and (src.wtype2 or 0) or src.wtype1, hand, legacy_quirks(S))
+		if wdr ~= 0 then damage = damage + ctx.mul_div(damage, wdr, 100) end
 	end
 	return damage
 end
@@ -385,21 +420,35 @@ function M.recover_cap(cfg, damage)
 	return damage
 end
 
+-- the element stage: the table (basic attacks of the types in attack_attr_none skip it AND the element_bonus stage that follows)
 local function element_stage(S)
 	local ctx, src, tgt, cfg = S.ctx, S.src, S.tgt, S.cfg
+	probe(S, "defense", S.dmg:get(), S.dmg2:get())
 	probe(S, "ele", S.rele, S.lele)
+	S.attr_skipped = false
 	if S.dmg:get() > 0 or S.dmg2:get() > 0 then
-		if bit_set(cfg.attack_attr_none, bl_type(src)) then return end -- BR-RULESET-030: skips the rest of the stage too
+		if bit_set(cfg.attack_attr_none, bl_type(src)) then
+			S.attr_skipped = true -- BR-RULESET-030: skips the rest of the element stages too
+			return
+		end
 		S.dmg:set(M.attr_fix(ctx, src, tgt, S.dmg:get(), S.rele))
 		if S.left then S.dmg2:set(M.attr_fix(ctx, src, tgt, S.dmg2:get(), S.lele)) end
 	end
 	probe(S, "attr", S.dmg:get(), S.dmg2:get())
-	-- element_bonus (BR-RULESET-033): EDP adds val3 percent after the table, right hand only
-	if S.dmg:get() > 0 or S.dmg2:get() > 0 then
-		local edp = sc_of(src, "edp")
-		if edp then S.dmg:add_pct(edp.val3) end
+end
+
+-- element_bonus (BR-RULESET-033): EDP adds val3 percent after the table, right hand only; then the attr_recover cap (BR-RULESET-032)
+local function element_bonus_stage(S)
+	local src, cfg = S.src, S.cfg
+	if not S.attr_skipped then
+		if S.dmg:get() > 0 or S.dmg2:get() > 0 then
+			local edp = sc_of(src, "edp")
+			if edp then S.dmg:add_pct(edp.val3) end
+		end
+		if cfg.attr_recover == 0 then min_damage(S, 0) end
 	end
-	if cfg.attr_recover == 0 then min_damage(S, 0) end -- BR-RULESET-032
+	probe(S, "element", S.dmg:get(), S.dmg2:get())
+	probe(S, "pre_card", S.dmg:get(), S.dmg2:get()) -- flat additions of skills (Weaponry Research &co) are 0 without skills
 end
 
 -- --------------------------------------------------------------------------------------------------------------------
@@ -531,25 +580,181 @@ function M.finish(is_player, d1, d2, dmg_lv, div)
 end
 
 -- --------------------------------------------------------------------------------------------------------------------
+-- STAGES: one function per stage name; S is the attack state built by calc_attack
+-- --------------------------------------------------------------------------------------------------------------------
+local STAGES = {}
+M.STAGES = STAGES
+
+-- stages that only run when the attack hits (battle.cpp: the `else if(!(infdef = ...))` block)
+M.HIT_ONLY = { base_attack = true, skill_ratio = true, const_add = true, skill_atk_bonus = true, defense = true, post_defense = true }
+
+local function snap(S, name) probe(S, name, S.dmg:get(), S.dmg2:get()) end
+
+function STAGES.init(S) -- BR-RULESET-002: the prelude (lucky dodge, crit, hit) has run; flags, hands and elements were set up
+end
+
+-- BR-RULESET-008, 014
+function STAGES.base_attack(S)
+	local ctx, src, tgt = S.ctx, S.src, S.tgt
+	local nosize = sc_of(src, "weaponperfection") ~= nil
+	local arrow = src.kind == "pc" and src.arrow == true
+	S.dmg:set(M.base_damage(ctx, src, "r", tgt.size, S.crit, arrow, nosize, S))
+	if S.left then
+		S.dmg2:set(M.base_damage(ctx, src, "l", tgt.size, S.crit, arrow, nosize, S))
+	end
+	local rate = M.base_rate_pct(src, tgt, S.crit)
+	if rate ~= 0 then atk_add_rate(S, rate) end
+	if S.crit and tgt.kind == "pc" and (bonus_of(tgt).crit_def_rate or 0) ~= 0 then
+		atk_add_rate(S, -bonus_of(tgt).crit_def_rate)
+	end
+	snap(S, "base")
+end
+
+-- skill_ratio (BR-RULESET-015), then the status ATK% after the ratio (BR-RULESET-016)
+function STAGES.skill_ratio(S)
+	atk_rate(S, M.skill_ratio(S.src))
+	snap(S, "ratio")
+	atk_rate(S, M.atk_percent(S.src))
+	snap(S, "sc_bonus")
+end
+
+function STAGES.const_add(S) -- BR-RULESET-017: a plain attack has no constant addition
+end
+
+function STAGES.skill_atk_bonus(S) -- pc_skillatk_bonus applies to skills only
+end
+
+-- battle.cpp: `if (wd.damage + wd.damage2) { defense; post_defense }` -- the guard is evaluated once, before the reduction
+function STAGES.defense(S)
+	S.has_damage = S.dmg:get() + S.dmg2:get() ~= 0
+	if S.has_damage then
+		defense_stage(S)
+		snap(S, "defred")
+	end
+end
+
+function STAGES.post_defense(S)
+	local has = S.has_damage
+	if has == nil then has = S.dmg:get() + S.dmg2:get() ~= 0 end
+	if has then post_defense_stage(S) end
+end
+
+function STAGES.element(S) element_stage(S) end
+function STAGES.element_bonus(S) element_bonus_stage(S) end
+
+-- BR-RULESET-020
+function STAGES.card_attacker(S)
+	local ctx, cfg, src, tgt = S.ctx, S.cfg, S.src, S.tgt
+	if src.kind == "pc" then
+		S.dmg:add(M.cardfix_attacker(ctx, cfg, src, tgt, S.dmg:get(), "r", S.flag))
+		if S.left then S.dmg2:add(M.cardfix_attacker(ctx, cfg, src, tgt, S.dmg2:get(), "l", S.flag)) end
+	end
+	snap(S, "card_atk")
+end
+
+-- BR-RULESET-021
+function STAGES.card_target(S)
+	local ctx, src, tgt = S.ctx, S.src, S.tgt
+	if tgt.kind == "pc" then
+		S.dmg:add(M.cardfix_target(ctx, src, tgt, S.dmg:get(), "r", S.flag, S.rele, S.lele))
+		if S.left then S.dmg2:add(M.cardfix_target(ctx, src, tgt, S.dmg2:get(), "l", S.flag, S.rele, S.lele)) end
+	end
+	snap(S, "card_tgt")
+end
+
+-- div is 1 for a plain attack (BR-RULESET-036 leaves damage unchanged), then dual wield
+function STAGES.div_hands(S)
+	local ctx, src = S.ctx, S.src
+	snap(S, "div")
+	if src.kind == "pc" and S.left then
+		local d1, d2 = M.dual_wield(ctx, src, S.dmg:get(), S.dmg2:get())
+		S.dmg:set(d1)
+		S.dmg2:set(d2)
+	end
+	if not S.left and S.dmg2:get() ~= 0 then S.dmg2:set(0) end
+	snap(S, "hands")
+end
+
+-- lanes that carry damage when the modifiers start: 1 right only, 2 left only, 3 both, 0 none (battle_calc_attack_gvg_bg branches
+-- on it once; the map_rates stage reuses it). nil when target_modifiers did not run: derived from the lanes at that time.
+local function lane_mask(S)
+	local d1, d2 = S.dmg:get(), S.dmg2:get()
+	if d1 + d2 == 0 then return 0 end
+	if d2 == 0 then return 1 end
+	if d1 == 0 then return 2 end
+	return 3
+end
+
+function STAGES.target_modifiers(S)
+	local ctx, cfg, tgt = S.ctx, S.cfg, S.tgt
+	local mask = lane_mask(S)
+	S.lane_mask = mask
+	if mask ~= 0 then
+		local vs = S.map ~= "normal"
+		local d1, d2 = S.dmg:get(), S.dmg2:get()
+		if mask ~= 2 then d1 = M.target_modifiers(ctx, cfg, tgt, d1, S.flag, vs) end
+		if mask ~= 1 then d2 = M.target_modifiers(ctx, cfg, tgt, d2, S.flag, vs) end
+		S.dmg:set(d1)
+		S.dmg2:set(d2)
+	end
+end
+
+function STAGES.map_rates(S)
+	local ctx, cfg = S.ctx, S.cfg
+	local mask = S.lane_mask
+	if mask == nil then mask = lane_mask(S) end
+	if mask ~= 0 then
+		local d1, d2 = S.dmg:get(), S.dmg2:get()
+		if S.map == "gvg" then
+			if mask ~= 2 then d1 = M.gvg_damage(ctx, cfg, d1, S.flag) end
+			if mask ~= 1 then d2 = M.gvg_damage(ctx, cfg, d2, S.flag) end
+		end
+		if mask == 3 and d1 > 1 and d2 < 1 then d2 = 1 end -- two-hand totals: the left hand never rounds down to 0
+		S.dmg:set(d1)
+		S.dmg2:set(d2)
+	end
+	snap(S, "map")
+end
+
+function STAGES.final(S)
+	snap(S, "final")
+end
+
+-- --------------------------------------------------------------------------------------------------------------------
+-- Hands the stage bodies to the engine (pipeline.stage) and binds pipeline.run. Called by register(engine) after
+-- pipeline.define. `init` and `final` are protected: a mod needs the protected-stage permission to replace, cancel or move them.
+-- --------------------------------------------------------------------------------------------------------------------
+-- what register() bound (tests that register the package with another engine restore it afterwards)
+function M.binding() return { run = run } end
+function M.bind(b) run = b.run end
+
+function M.register(engine)
+	run = engine.pipeline.run
+	for _, name in ipairs(pipeline.ORDER.weapon) do
+		engine.pipeline.stage("weapon", name, STAGES[name], { protected = pipeline.PROTECTED[name] == true })
+	end
+end
+
+-- --------------------------------------------------------------------------------------------------------------------
 -- the whole attack: battle_calc_attack(BF_WEAPON, src, tgt, 0, 0, 0)
 -- opts.trace: table that receives { name, damage, damage2 } stage probes; opts.map: "normal" | "pvp" | "gvg"
--- result: { damage, damage2, type, div, flag, dmg_lv }
+-- result: { damage, damage2, type, div, flag, dmg_lv }; a mod that cancelled the attack (ctx:cancel from its stage) yields
+-- zero damage, dmg_lv ATK_BLOCK and `cancelled = true`
 -- --------------------------------------------------------------------------------------------------------------------
+local NO_SKIP = {}
+
 function M.calc_attack(ctx, cfg, src, tgt, opts)
 	opts = opts or ALL
 	validate(src, tgt)
 	local S = {
-		ctx = ctx, cfg = cfg, src = src, tgt = tgt, trace = opts.trace,
+		ctx = ctx, cfg = cfg, src = src, tgt = tgt, trace = opts.trace, map = opts.map or "normal",
 		dmg = ctx.acc(0), dmg2 = ctx.acc(0),
-		type = C.DMG_NORMAL, div = 1, dmg_lv = C.ATK_DEF, crit = false,
+		type = C.DMG_NORMAL, div = 1, dmg_lv = C.ATK_DEF, crit = false, hit = false,
 	}
-	local map = opts.map or "normal"
 	-- BR-RULESET-002: init. A plain attack is BF_WEAPON|BF_NORMAL, long when it fires an arrow
 	S.flag = C.BF_WEAPON + C.BF_NORMAL + ((src.kind == "pc" and src.arrow) and C.BF_LONG or C.BF_SHORT)
 	S.left = left_handed(src)
 	S.rele, S.lele = M.weapon_element(src, "r"), M.weapon_element(src, "l")
-
-	local function snap(name) probe(S, name, S.dmg:get(), S.dmg2:get()) end
 
 	local lucky = M.lucky_dodge(ctx, tgt)
 	if lucky then
@@ -557,87 +762,15 @@ function M.calc_attack(ctx, cfg, src, tgt, opts)
 	else
 		local crit = M.crit_roll(ctx, src, tgt, S)
 		if crit then S.type, S.crit = C.DMG_CRITICAL, true end
-		if not M.hit_roll(ctx, cfg, src, tgt, crit, S) then
-			S.dmg_lv = C.ATK_FLEE
-		else
-			-- ---- base_attack (BR-RULESET-008, 014)
-			local nosize = sc_of(src, "weaponperfection") ~= nil
-			local arrow = src.kind == "pc" and src.arrow == true
-			S.dmg:set(M.base_damage(ctx, src, "r", tgt.size, S.crit, arrow, nosize, S))
-			if S.left then
-				S.dmg2:set(M.base_damage(ctx, src, "l", tgt.size, S.crit, arrow, nosize, S))
-			end
-			local rate = M.base_rate_pct(src, tgt, S.crit)
-			if rate ~= 0 then atk_add_rate(S, rate) end
-			if S.crit and tgt.kind == "pc" and (bonus_of(tgt).crit_def_rate or 0) ~= 0 then
-				atk_add_rate(S, -bonus_of(tgt).crit_def_rate)
-			end
-			snap("base")
-			-- ---- skill_ratio, const_add (BR-RULESET-015; no constant for a plain attack), skill_atk_bonus (none)
-			atk_rate(S, M.skill_ratio(src))
-			snap("ratio")
-			-- ---- status ATK% after the ratio (BR-RULESET-016)
-			atk_rate(S, M.atk_percent(src))
-			snap("sc_bonus")
-			-- ---- defense, post_defense
-			if S.dmg:get() + S.dmg2:get() ~= 0 then
-				defense_stage(S)
-				snap("defred")
-				post_defense_stage(S)
-			end
+		S.hit = M.hit_roll(ctx, cfg, src, tgt, crit, S)
+		if not S.hit then S.dmg_lv = C.ATK_FLEE end
+		-- the engine runs the effective order; `lane` and `view` are what stages of OTHER mods see of this attack
+		local res = run("weapon", S, { skip = S.hit and NO_SKIP or M.HIT_ONLY, lane = S.dmg, view = S })
+		if res and res.cancelled then
+			S.dmg:set(0)
+			S.dmg2:set(0)
+			return { damage = 0, damage2 = 0, type = S.type, div = S.div, flag = S.flag, dmg_lv = C.ATK_BLOCK, cancelled = true }
 		end
-	end
-	if not lucky then
-		snap("defense")
-		-- ---- element, element_bonus
-		element_stage(S)
-		snap("element")
-		snap("pre_card") -- flat additions of skills (Weaponry Research &co) are 0 without skills
-		-- ---- card_attacker (BR-RULESET-020)
-		if src.kind == "pc" then
-			S.dmg:add(M.cardfix_attacker(ctx, cfg, src, tgt, S.dmg:get(), "r", S.flag))
-			if S.left then S.dmg2:add(M.cardfix_attacker(ctx, cfg, src, tgt, S.dmg2:get(), "l", S.flag)) end
-		end
-		snap("card_atk")
-		-- ---- card_target (BR-RULESET-021)
-		if tgt.kind == "pc" then
-			S.dmg:add(M.cardfix_target(ctx, src, tgt, S.dmg:get(), "r", S.flag, S.rele, S.lele))
-			if S.left then S.dmg2:add(M.cardfix_target(ctx, src, tgt, S.dmg2:get(), "l", S.flag, S.rele, S.lele)) end
-		end
-		snap("card_tgt")
-		-- ---- div_hands: div is 1 for a plain attack (BR-RULESET-036 leaves damage unchanged), then dual wield
-		snap("div")
-		if src.kind == "pc" and S.left then
-			local d1, d2 = M.dual_wield(ctx, src, S.dmg:get(), S.dmg2:get())
-			S.dmg:set(d1)
-			S.dmg2:set(d2)
-		end
-		if not S.left and S.dmg2:get() ~= 0 then S.dmg2:set(0) end
-		snap("hands")
-		-- ---- target_modifiers, map_rates (battle_calc_attack_gvg_bg)
-		if S.dmg:get() + S.dmg2:get() ~= 0 then
-			local vs, gvg = map ~= "normal", map == "gvg"
-			local d1, d2 = S.dmg:get(), S.dmg2:get()
-			if d2 == 0 then
-				d1 = M.target_modifiers(ctx, cfg, tgt, d1, S.flag, vs)
-				if gvg then d1 = M.gvg_damage(ctx, cfg, d1, S.flag) end
-			elseif d1 == 0 then
-				d2 = M.target_modifiers(ctx, cfg, tgt, d2, S.flag, vs)
-				if gvg then d2 = M.gvg_damage(ctx, cfg, d2, S.flag) end
-			else
-				d1 = M.target_modifiers(ctx, cfg, tgt, d1, S.flag, vs)
-				d2 = M.target_modifiers(ctx, cfg, tgt, d2, S.flag, vs)
-				if gvg then
-					d1 = M.gvg_damage(ctx, cfg, d1, S.flag)
-					d2 = M.gvg_damage(ctx, cfg, d2, S.flag)
-				end
-				if d1 > 1 and d2 < 1 then d2 = 1 end
-			end
-			S.dmg:set(d1)
-			S.dmg2:set(d2)
-		end
-		snap("map")
-		snap("final")
 	end
 	-- ---- BR-RULESET-001: total below 1 is a miss; players report a single hit
 	local d1, d2 = S.dmg:get(), S.dmg2:get()

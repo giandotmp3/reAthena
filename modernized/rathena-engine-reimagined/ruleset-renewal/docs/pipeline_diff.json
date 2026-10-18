@@ -5,11 +5,11 @@
    "files": 2,
    "identical_code": 0,
    "modified": 2,
-   "pre_lines": 91,
-   "re_lines": 93,
+   "pre_lines": 92,
+   "re_lines": 94,
    "re_only": 0,
-   "shared": 50,
-   "shared_masked": 91
+   "shared": 51,
+   "shared_masked": 92
   },
   "golden generator": {
    "byte_identical": 1,
@@ -27,33 +27,33 @@
    "files": 7,
    "identical_code": 0,
    "modified": 5,
-   "pre_lines": 556,
-   "re_lines": 824,
+   "pre_lines": 647,
+   "re_lines": 836,
    "re_only": 2,
-   "shared": 284,
-   "shared_masked": 286
+   "shared": 364,
+   "shared_masked": 365
   },
   "test support": {
-   "byte_identical": 4,
-   "files": 7,
-   "identical_code": 4,
+   "byte_identical": 5,
+   "files": 8,
+   "identical_code": 5,
    "modified": 3,
-   "pre_lines": 412,
-   "re_lines": 422,
+   "pre_lines": 550,
+   "re_lines": 560,
    "re_only": 0,
-   "shared": 327,
-   "shared_masked": 328
+   "shared": 465,
+   "shared_masked": 466
   },
   "tools": {
    "byte_identical": 0,
    "files": 4,
    "identical_code": 0,
    "modified": 4,
-   "pre_lines": 163,
-   "re_lines": 147,
+   "pre_lines": 168,
+   "re_lines": 154,
    "re_only": 0,
-   "shared": 105,
-   "shared_masked": 105
+   "shared": 110,
+   "shared_masked": 110
   }
  },
  "api": {
@@ -169,13 +169,124 @@
     "target_modifiers"
    ]
   ],
-  "reproduces_re_order": true
+  "reproduces_re_order": true,
+  "with_move": {
+   "counts": {
+    "cancel": 1,
+    "insert_after": 10,
+    "move": 2,
+    "replace": 8
+   },
+   "ops": [
+    [
+     "cancel",
+     "element_bonus"
+    ],
+    [
+     "move",
+     "card_attacker",
+     "base_attack"
+    ],
+    [
+     "insert_after",
+     "card_attacker",
+     "ruleset.renewal:card_target_parts"
+    ],
+    [
+     "insert_after",
+     "ruleset.renewal:card_target_parts",
+     "ruleset.renewal:sc_bonus"
+    ],
+    [
+     "insert_after",
+     "ruleset.renewal:sc_bonus",
+     "ruleset.renewal:sum"
+    ],
+    [
+     "insert_after",
+     "ruleset.renewal:sum",
+     "ruleset.renewal:p_atk"
+    ],
+    [
+     "insert_after",
+     "ruleset.renewal:p_atk",
+     "ruleset.renewal:mastery"
+    ],
+    [
+     "insert_after",
+     "ruleset.renewal:mastery",
+     "ruleset.renewal:crit_rate"
+    ],
+    [
+     "insert_after",
+     "const_add",
+     "ruleset.renewal:adv_katar_mastery"
+    ],
+    [
+     "insert_after",
+     "ruleset.renewal:adv_katar_mastery",
+     "ruleset.renewal:res"
+    ],
+    [
+     "move",
+     "skill_atk_bonus",
+     "post_defense"
+    ],
+    [
+     "insert_after",
+     "element",
+     "ruleset.renewal:crit_multiplier"
+    ],
+    [
+     "insert_after",
+     "ruleset.renewal:crit_multiplier",
+     "ruleset.renewal:flat_additions"
+    ],
+    [
+     "replace",
+     "init"
+    ],
+    [
+     "replace",
+     "base_attack"
+    ],
+    [
+     "replace",
+     "skill_ratio"
+    ],
+    [
+     "replace",
+     "defense"
+    ],
+    [
+     "replace",
+     "post_defense"
+    ],
+    [
+     "replace",
+     "element"
+    ],
+    [
+     "replace",
+     "card_target"
+    ],
+    [
+     "replace",
+     "target_modifiers"
+    ]
+   ],
+   "reproduces_re_order": true
+  }
  },
  "audit": {
   "changed_outside_package": [],
   "cross_ruleset_references": [],
-  "engine_api_calls": [
-   "pipeline.define"
+  "engine_api": [
+   "config.legacy_quirks",
+   "num",
+   "pipeline.define",
+   "pipeline.run",
+   "pipeline.stage"
   ],
   "imports": [
    "data/damage_cfg",
@@ -202,10 +313,10 @@
    {
     "file": "data/damage_cfg.luau",
     "kind": "modified",
-    "pre_lines": 13,
-    "re_lines": 15,
-    "shared": 13,
-    "shared_masked": 13
+    "pre_lines": 14,
+    "re_lines": 16,
+    "shared": 14,
+    "shared_masked": 14
    },
    {
     "file": "data/damage_tables.luau",
@@ -270,17 +381,17 @@
    {
     "file": "scripts/damage/weapon.luau",
     "kind": "modified",
-    "pre_lines": 486,
-    "re_lines": 710,
-    "shared": 240,
-    "shared_masked": 241
+    "pre_lines": 568,
+    "re_lines": 724,
+    "shared": 314,
+    "shared_masked": 315
    },
    {
     "file": "scripts/damage/consts.luau",
     "kind": "modified",
-    "pre_lines": 9,
+    "pre_lines": 10,
     "re_lines": 12,
-    "shared": 6,
+    "shared": 7,
     "shared_masked": 7
    },
    {
@@ -294,24 +405,24 @@
    {
     "file": "scripts/pipeline.luau",
     "kind": "modified",
-    "pre_lines": 23,
-    "re_lines": 18,
-    "shared": 13,
-    "shared_masked": 13
+    "pre_lines": 25,
+    "re_lines": 20,
+    "shared": 15,
+    "shared_masked": 15
    },
    {
     "file": "scripts/init.luau",
     "kind": "modified",
-    "pre_lines": 16,
-    "re_lines": 5,
-    "shared": 5,
-    "shared_masked": 5
+    "pre_lines": 22,
+    "re_lines": 10,
+    "shared": 8,
+    "shared_masked": 8
    },
    {
     "file": "scripts/damage/fp.luau",
     "kind": "RE only",
     "pre_lines": 0,
-    "re_lines": 28,
+    "re_lines": 19,
     "shared": 0,
     "shared_masked": 0
    },
@@ -352,18 +463,26 @@
    {
     "file": "tests/support/fake_host.luau",
     "kind": "byte-identical",
-    "pre_lines": 14,
-    "re_lines": 14,
-    "shared": 14,
-    "shared_masked": 14
+    "pre_lines": 131,
+    "re_lines": 131,
+    "shared": 131,
+    "shared_masked": 131
+   },
+   {
+    "file": "tests/support/booted.luau",
+    "kind": "byte-identical",
+    "pre_lines": 20,
+    "re_lines": 20,
+    "shared": 20,
+    "shared_masked": 20
    },
    {
     "file": "tests/support/golden_runner.luau",
     "kind": "modified",
-    "pre_lines": 68,
-    "re_lines": 68,
-    "shared": 67,
-    "shared_masked": 67
+    "pre_lines": 69,
+    "re_lines": 69,
+    "shared": 68,
+    "shared_masked": 68
    },
    {
     "file": "tests/acceptance/weapon_golden_test.luau",
@@ -387,7 +506,7 @@
     "file": "tools/bundle_luau.py",
     "kind": "modified",
     "pre_lines": 31,
-    "re_lines": 40,
+    "re_lines": 42,
     "shared": 28,
     "shared_masked": 28
    },
@@ -410,24 +529,24 @@
    {
     "file": "tools/run_tests.py",
     "kind": "modified",
-    "pre_lines": 54,
-    "re_lines": 38,
-    "shared": 19,
-    "shared_masked": 19
+    "pre_lines": 59,
+    "re_lines": 43,
+    "shared": 24,
+    "shared_masked": 24
    }
   ]
  },
  "function_class_counts": {
-  "PRE only": 11,
-  "RE only": 35,
-  "identical": 19,
-  "logic differs": 11
+  "PRE only": 15,
+  "RE only": 20,
+  "identical": 23,
+  "logic differs": 26
  },
  "function_lines": {
-  "PRE only": 140,
-  "RE only": 394,
-  "identical": 96,
-  "logic differs": 204
+  "PRE only": 163,
+  "RE only": 237,
+  "identical": 112,
+  "logic differs": 357
  },
  "functions": [
   {
@@ -447,7 +566,7 @@
   {
    "class": "PRE only",
    "name": "M.base_damage",
-   "pre_lines": 29,
+   "pre_lines": 31,
    "re_lines": 0,
    "similarity": null
   },
@@ -467,10 +586,24 @@
   },
   {
    "class": "logic differs",
+   "name": "M.bind",
+   "pre_lines": 1,
+   "re_lines": 4,
+   "similarity": 0.0
+  },
+  {
+   "class": "logic differs",
+   "name": "M.binding",
+   "pre_lines": 1,
+   "re_lines": 1,
+   "similarity": 0.0
+  },
+  {
+   "class": "logic differs",
    "name": "M.calc_attack",
-   "pre_lines": 96,
-   "re_lines": 34,
-   "similarity": 0.323
+   "pre_lines": 30,
+   "re_lines": 31,
+   "similarity": 0.951
   },
   {
    "class": "logic differs",
@@ -585,6 +718,13 @@
    "similarity": null
   },
   {
+   "class": "logic differs",
+   "name": "M.register",
+   "pre_lines": 6,
+   "re_lines": 7,
+   "similarity": 0.923
+  },
+  {
    "class": "RE only",
    "name": "M.res_reduction",
    "pre_lines": 0,
@@ -641,25 +781,25 @@
    "similarity": null
   },
   {
-   "class": "RE only",
+   "class": "logic differs",
    "name": "STAGES.base_attack",
-   "pre_lines": 0,
+   "pre_lines": 15,
    "re_lines": 35,
-   "similarity": null
+   "similarity": 0.16
   },
   {
-   "class": "RE only",
+   "class": "logic differs",
    "name": "STAGES.card_attacker",
-   "pre_lines": 0,
+   "pre_lines": 8,
    "re_lines": 10,
-   "similarity": null
+   "similarity": 0.333
   },
   {
-   "class": "RE only",
+   "class": "logic differs",
    "name": "STAGES.card_target",
-   "pre_lines": 0,
+   "pre_lines": 8,
    "re_lines": 9,
-   "similarity": null
+   "similarity": 0.471
   },
   {
    "class": "RE only",
@@ -669,11 +809,11 @@
    "similarity": null
   },
   {
-   "class": "RE only",
+   "class": "logic differs",
    "name": "STAGES.const_add",
-   "pre_lines": 0,
+   "pre_lines": 2,
    "re_lines": 3,
-   "similarity": null
+   "similarity": 0.8
   },
   {
    "class": "RE only",
@@ -690,32 +830,39 @@
    "similarity": null
   },
   {
-   "class": "RE only",
+   "class": "logic differs",
    "name": "STAGES.defense",
-   "pre_lines": 0,
+   "pre_lines": 7,
    "re_lines": 12,
-   "similarity": null
+   "similarity": 0.316
   },
   {
-   "class": "RE only",
+   "class": "logic differs",
    "name": "STAGES.div_hands",
-   "pre_lines": 0,
+   "pre_lines": 11,
    "re_lines": 11,
-   "similarity": null
+   "similarity": 0.818
   },
   {
-   "class": "RE only",
+   "class": "logic differs",
    "name": "STAGES.element",
-   "pre_lines": 0,
+   "pre_lines": 1,
    "re_lines": 18,
+   "similarity": 0.0
+  },
+  {
+   "class": "PRE only",
+   "name": "STAGES.element_bonus",
+   "pre_lines": 1,
+   "re_lines": 0,
    "similarity": null
   },
   {
-   "class": "RE only",
+   "class": "logic differs",
    "name": "STAGES.final",
-   "pre_lines": 0,
+   "pre_lines": 3,
    "re_lines": 3,
-   "similarity": null
+   "similarity": 0.667
   },
   {
    "class": "RE only",
@@ -725,18 +872,18 @@
    "similarity": null
   },
   {
-   "class": "RE only",
+   "class": "identical",
    "name": "STAGES.init",
-   "pre_lines": 0,
+   "pre_lines": 2,
    "re_lines": 2,
-   "similarity": null
+   "similarity": 1.0
   },
   {
-   "class": "RE only",
+   "class": "logic differs",
    "name": "STAGES.map_rates",
-   "pre_lines": 0,
+   "pre_lines": 16,
    "re_lines": 19,
-   "similarity": null
+   "similarity": 0.457
   },
   {
    "class": "RE only",
@@ -753,11 +900,11 @@
    "similarity": null
   },
   {
-   "class": "RE only",
+   "class": "logic differs",
    "name": "STAGES.post_defense",
-   "pre_lines": 0,
+   "pre_lines": 5,
    "re_lines": 5,
-   "similarity": null
+   "similarity": 0.4
   },
   {
    "class": "RE only",
@@ -774,18 +921,18 @@
    "similarity": null
   },
   {
-   "class": "RE only",
+   "class": "identical",
    "name": "STAGES.skill_atk_bonus",
-   "pre_lines": 0,
+   "pre_lines": 2,
    "re_lines": 2,
-   "similarity": null
+   "similarity": 1.0
   },
   {
-   "class": "RE only",
+   "class": "logic differs",
    "name": "STAGES.skill_ratio",
-   "pre_lines": 0,
+   "pre_lines": 6,
    "re_lines": 4,
-   "similarity": null
+   "similarity": 0.6
   },
   {
    "class": "RE only",
@@ -795,11 +942,11 @@
    "similarity": null
   },
   {
-   "class": "RE only",
+   "class": "logic differs",
    "name": "STAGES.target_modifiers",
-   "pre_lines": 0,
+   "pre_lines": 13,
    "re_lines": 15,
-   "similarity": null
+   "similarity": 0.429
   },
   {
    "class": "identical",
@@ -873,8 +1020,22 @@
   },
   {
    "class": "PRE only",
+   "name": "element_bonus_stage",
+   "pre_lines": 12,
+   "re_lines": 0,
+   "similarity": null
+  },
+  {
+   "class": "PRE only",
    "name": "element_stage",
    "pre_lines": 15,
+   "re_lines": 0,
+   "similarity": null
+  },
+  {
+   "class": "PRE only",
+   "name": "lane_mask",
+   "pre_lines": 7,
    "re_lines": 0,
    "similarity": null
   },
@@ -883,6 +1044,13 @@
    "name": "left_handed",
    "pre_lines": 4,
    "re_lines": 4,
+   "similarity": 1.0
+  },
+  {
+   "class": "identical",
+   "name": "legacy_quirks",
+   "pre_lines": 3,
+   "re_lines": 3,
    "similarity": 1.0
   },
   {
@@ -928,6 +1096,13 @@
    "similarity": 1.0
   },
   {
+   "class": "PRE only",
+   "name": "snap",
+   "pre_lines": 1,
+   "re_lines": 0,
+   "similarity": null
+  },
+  {
    "class": "identical",
    "name": "step",
    "pre_lines": 3,
@@ -949,11 +1124,11 @@
    "similarity": 0.788
   },
   {
-   "class": "RE only",
+   "class": "identical",
    "name": "weapon_damage_rate",
-   "pre_lines": 0,
+   "pre_lines": 9,
    "re_lines": 9,
-   "similarity": null
+   "similarity": 1.0
   },
   {
    "class": "identical",
@@ -1098,7 +1273,7 @@
     "M.mob_base_damage",
     "STAGES.base_attack"
    ],
-   "similarity": 0.263,
+   "similarity": 0.26,
    "stage": "base_attack"
   },
   {
@@ -1252,7 +1427,7 @@
     "M.attr_fix",
     "STAGES.element"
    ],
-   "similarity": 0.241,
+   "similarity": 0.379,
    "stage": "element"
   },
   {
@@ -1333,9 +1508,9 @@
  "weapon_luau": {
   "file": "scripts/damage/weapon.luau",
   "kind": "modified",
-  "pre_lines": 486,
-  "re_lines": 710,
-  "shared": 240,
-  "shared_masked": 241
+  "pre_lines": 568,
+  "re_lines": 724,
+  "shared": 314,
+  "shared_masked": 315
  }
 }

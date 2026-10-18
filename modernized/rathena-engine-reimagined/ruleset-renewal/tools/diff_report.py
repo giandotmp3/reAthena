@@ -11,7 +11,8 @@ Measures
   3. stages: each stage of either order classified data-only (same code, other constants or tables) / override (other logic) /
      new in RE / removed from PRE, plus the stage ORDER difference (common stages, inversions) and the pipeline.define/insert_after/
      replace/cancel operations that turn the PRE order into the RE order (simulated here, result checked against the RE order)
-  4. mechanism audit: engine APIs the RE package calls, cross-ruleset references, files outside ruleset-renewal changed in git
+  4. mechanism audit: engine APIs the RE package uses (pipeline.define/stage/run, num.f32, config.legacy_quirks), cross-ruleset references,
+     files changed in git under the mechanism it sits on (engine-core, native-defaults, mods/base)
   5. data: element cells and size rows that differ between the two databases
 
 usage: diff_report.py [--check]      (--check: exit 1 if docs/pipeline_diff.json is out of date)
@@ -118,6 +119,7 @@ FILE_GROUPS = {
         ("tests/support/scripted_rng.luau", "tests/support/scripted_rng.luau"),
         ("tests/support/harness.luau", "tests/support/harness.luau"),
         ("tests/support/fake_host.luau", "tests/support/fake_host.luau"),
+        ("tests/support/booted.luau", "tests/support/booted.luau"),
         ("tests/support/golden_runner.luau", "tests/support/golden_runner.luau"),
         ("tests/acceptance/weapon_golden_test.luau", "tests/acceptance/weapon_golden_test.luau"),
         ("tests/bench_weapon.luau", "tests/bench_weapon.luau"),
@@ -310,6 +312,8 @@ class FakePipeline:
         self.body[stage] = body_id; self.calls.append("replace")
     def cancel(self, kind, stage):
         self.skipped.add(stage); self.calls.append("cancel")
+    def move_after(self, kind, stage, anchor):
+        self.order.remove(stage); self.order.insert(self.order.index(anchor) + 1, stage); self.calls.append("move")
     def effective(self):
         return [s for s in self.order if s not in self.skipped]
 
@@ -338,6 +342,33 @@ def api_ops(pre_order, re_order, stage_classes):
             anchor = re_order[0]
         ops.append(("insert_after", anchor, new_id)); p.insert_after("weapon", anchor, new_id)
     # 3. kept stages whose logic differs get a replaced body
+    for s in keep:
+        if stage_classes.get(s) == "logic differs":
+            ops.append(("replace", s)); p.replace("weapon", s, "ruleset.renewal:" + s)
+    eff = [s.replace("ruleset.renewal:", "") for s in p.effective()]
+    return ops, eff == re_order, eff
+
+
+def api_ops_with_move(pre_order, re_order, stage_classes):
+    """The same delta with the `move` operation: a stage that exists in both orders but sits elsewhere is moved (keeping its id and body)
+    instead of cancelled and re-inserted under a new id. Returns (ops, reproduces the RE order exactly, effective order)."""
+    keep = lcs(pre_order, re_order)
+    p = FakePipeline()
+    p.define("weapon", pre_order)
+    ops = []
+    for s in pre_order:
+        if s not in re_order:
+            ops.append(("cancel", s)); p.cancel("weapon", s)
+    for i, s in enumerate(re_order):
+        if s in keep:
+            continue
+        pred = re_order[i - 1] if i > 0 else None
+        anchor = pred if (pred in keep or pred in pre_order) else "ruleset.renewal:" + pred
+        if s in pre_order:  # moved: the stage keeps its id
+            ops.append(("move", s, anchor)); p.move_after("weapon", s, anchor)
+        else:
+            new_id = "ruleset.renewal:" + s
+            ops.append(("insert_after", anchor, new_id)); p.insert_after("weapon", anchor, new_id)
     for s in keep:
         if stage_classes.get(s) == "logic differs":
             ops.append(("replace", s)); p.replace("weapon", s, "ruleset.renewal:" + s)
@@ -386,12 +417,15 @@ def data_report():
 # ---------------------------------------------------------------------------------------------------------------------
 def audit():
     scripts = [p for p in (RE / "scripts").rglob("*.luau")]
-    engine_calls = sorted({m for p in scripts for m in re.findall(r"\bengine\.([A-Za-z_.]+)\s*\(", p.read_text())})
+    # every `engine.<api>` the package touches (calls and bindings): the host API surface it depends on
+    engine_api = sorted({m for p in scripts for m in re.findall(r"\bengine\.([A-Za-z_]+(?:\.[A-Za-z_]+)*)", strip_comment_block(p.read_text()))})
     cross = sorted({str(p.relative_to(RE)) for p in list((RE / "scripts").rglob("*.luau")) + list((RE / "data").rglob("*.luau"))
                     if re.search(r"prerenewal|ruleset-prerenewal|ruleset\.prerenewal", strip_comment_block(p.read_text()))})
     imports = sorted({m for p in scripts for m in re.findall(r'import\("([^"]+)"\)', p.read_text())})
-    # the mechanism the package sits on: engine-core, script-host, native-defaults, rathena.base (mods/base), the PRE package
-    watched = ["engine-core", "script-host", "native-defaults", "mods/base", "ruleset-prerenewal"]
+    # the mechanism the package sits on that must stay untouched: engine-core, native-defaults, rathena.base (mods/base). script-host
+    # gained the pipeline runtime, num.f32 and engine.config for the design findings of this proof (see ARCHITECTURE_PROOF.md section 12)
+    # and ruleset-prerenewal was refactored onto it, so both are expected to differ and are not watched here.
+    watched = ["engine-core", "native-defaults", "mods/base"]
     try:
         root = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=RE, capture_output=True, text=True, check=True).stdout.strip()
         base = RE.parent.relative_to(root)
@@ -400,7 +434,7 @@ def audit():
         outside = [l[3:] for l in st]
     except Exception as e:  # not a git checkout
         outside = [f"(git unavailable: {e})"]
-    return {"engine_api_calls": engine_calls, "cross_ruleset_references": cross, "imports": imports, "changed_outside_package": outside}
+    return {"engine_api": engine_api, "cross_ruleset_references": cross, "imports": imports, "changed_outside_package": outside}
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -415,6 +449,7 @@ def main():
     common, inv = inversions(pre_order, re_order)
     classes = {r["stage"]: r["class"] for r in stages}
     ops, ok, eff = api_ops(pre_order, re_order, classes)
+    mops, mok, _ = api_ops_with_move(pre_order, re_order, classes)
     data = data_report()
     au = audit()
 
@@ -440,7 +475,9 @@ def main():
         "order": {"pre": pre_order, "re": re_order, "common": len(common), "pre_only": removed, "re_only": [s for s in re_order if s not in pre_order],
                   "lcs": len(lcs(pre_order, re_order)), "inversions": [list(x) for x in inv]},
         "api": {"ops": [list(o) for o in ops], "counts": {k: sum(1 for o in ops if o[0] == k) for k in ("cancel", "insert_after", "replace")},
-                "define_only": 1, "reproduces_re_order": ok},
+                "define_only": 1, "reproduces_re_order": ok,
+                "with_move": {"ops": [list(o) for o in mops], "counts": {k: sum(1 for o in mops if o[0] == k) for k in ("cancel", "move", "insert_after", "replace")},
+                              "reproduces_re_order": mok}},
         "data": data, "audit": au,
     }
     out_json = DOCS / "pipeline_diff.json"
@@ -463,6 +500,7 @@ def main():
     print(f"pipeline code: {core['shared']} of {core['re_lines']} RE lines shared with PRE ({100 * core['shared'] // core['re_lines']} %)")
     print("stages:", counts, "| removed from PRE:", removed)
     print("api ops:", result["api"]["counts"], "reproduces RE order:", ok)
+    print("api ops with move:", result["api"]["with_move"]["counts"], "reproduces RE order:", mok)
     return 0
 
 
@@ -501,19 +539,26 @@ def render(r):
     a = r["api"]
     L += ["### pipeline API needed to express RE on top of the PRE stage names", "",
           f"* with `pipeline.define`: **1 call per kind** (the whole RE order); no insert/replace/cancel needed",
-          f"* with only the mod-facing edit calls on top of the PRE order (simulated by `FakePipeline`; result equals the RE order: **{a['reproduces_re_order']}**): "
-          f"{a['counts']['cancel']} cancel, {a['counts']['insert_after']} insert_after, {a['counts']['replace']} replace", "",
+          f"* with only the mod-facing edit calls on top of the PRE order, WITHOUT `move` (simulated by `FakePipeline`; result equals the RE order: **{a['reproduces_re_order']}**): "
+          f"{a['counts']['cancel']} cancel, {a['counts']['insert_after']} insert_after, {a['counts']['replace']} replace = {sum(a['counts'].values())} operations. "
+          "script-host's real runtime reproduces this exact list (script-host/tests/test_rulesets.cpp reads it from `pipeline_diff.json`)", "",
           "| # | call |", "|---|---|"]
     for i, op in enumerate(a["ops"], 1):
+        L.append(f"| {i} | `{op[0]}(" + ", ".join(repr(x) for x in op[1:]) + ")` |")
+    w = a["with_move"]
+    L += ["", f"* WITH `move` (a stage that exists in both orders is moved and keeps its id and body; result equals the RE order: **{w['reproduces_re_order']}**): "
+          f"{w['counts']['cancel']} cancel, {w['counts']['move']} move, {w['counts']['insert_after']} insert_after, {w['counts']['replace']} replace = {sum(w['counts'].values())} operations", "",
+          "| # | call |", "|---|---|"]
+    for i, op in enumerate(w["ops"], 1):
         L.append(f"| {i} | `{op[0]}(" + ", ".join(repr(x) for x in op[1:]) + ")` |")
     d = r["data"]
     L += ["", "## 5. Data", "", f"* element table: {d['element_cells_differ']} of {d['element_cells']} cells differ", f"* size table: {d['size_rows_differ']} of {d['size_rows']} weapon rows differ",
           f"* battle config keys that differ or are new in RE ({len(d['cfg_keys_differ_or_new'])} of {d['cfg_keys']}): {', '.join(d['cfg_keys_differ_or_new']) or 'none'}", ""]
     au = r["audit"]
-    L += ["## 6. Mechanism audit", "", f"* engine API calls in `scripts/`: {', '.join('`engine.' + c + '`' for c in au['engine_api_calls']) or 'none'}",
+    L += ["## 6. Mechanism audit", "", f"* engine API used by `scripts/`: {', '.join('`engine.' + c + '`' for c in au['engine_api']) or 'none'}",
           f"* references to the pre-renewal package in `scripts/` or `data/`: {', '.join(au['cross_ruleset_references']) or 'none'}",
           f"* modules imported: {', '.join('`' + i + '`' for i in au['imports'])}",
-          f"* files added or modified in the git working tree under the mechanism the package sits on (`engine-core`, `script-host`, `native-defaults`, `mods/base` = rathena.base, `ruleset-prerenewal`): {', '.join('`' + x + '`' for x in au['changed_outside_package']) or 'none'}", ""]
+          f"* files added or modified in the git working tree under the mechanism the package sits on that must stay untouched (`engine-core`, `native-defaults`, `mods/base` = rathena.base; `script-host` and `ruleset-prerenewal` are expected to differ since the pipeline runtime work, see `ARCHITECTURE_PROOF.md` section 12): {', '.join('`' + x + '`' for x in au['changed_outside_package']) or 'none'}", ""]
     return "\n".join(L) + "\n"
 
 

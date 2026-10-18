@@ -56,6 +56,7 @@ endif()
 add_library(script_host
   src/ids.cpp
   src/event_bus.cpp
+  src/pipeline.cpp
   src/effect_queue.cpp
   src/budget.cpp
   src/sandbox.cpp

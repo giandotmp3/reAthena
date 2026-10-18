@@ -1,32 +1,20 @@
 --!nonstrict
 -- IEEE floating point helpers for the places where the legacy renewal code computes in `float` / `double` (BR-RULESET-034, 010,
 -- 025, M0 numerics note). Luau numbers are IEEE doubles, so double arithmetic is the legacy `double` arithmetic; `float` arithmetic
--- is a double operation rounded to binary32 (exact for + - * / and sqrt because a double has more than 2 * 24 + 2 bits).
+-- is a double operation rounded to binary32 (exact for + - * / and sqrt because a double has more than 2 * 24 + 2 bits), and the
+-- rounding is the host's native `num.f32` (script-host numeric API, `(double)(float)x`): register(engine) binds it here.
 --
 -- The `/` operator is allowed in this file only: every line that uses it is a FLOATING POINT division the legacy code also does in
 -- floating point (marked `lint:float`). Signed integer division never appears here; it goes through ctx.idiv / ctx.mul_div.
---
--- Candidate for rathena.base / script-host (BR-RULESET-115 `num`): there is no ctx.f32() in the host API today, only the lane step
--- `f32_step(factor)`; this module is the package-local stand-in (see docs/ARCHITECTURE_PROOF.md).
 local M = {}
 
-local TWO24 = 16777216
+local f32 = nil -- engine.num.f32
+local bound = nil -- the engine.num table it came from
 
--- round a double to the nearest binary32 value (ties to even); normal range only (|x| < 2^127, no denormals needed here)
-function M.f32(x)
-	if x == 0 or x ~= x then return x end
-	local neg = x < 0
-	if neg then x = -x end
-	local m, e = math.frexp(x) -- x = m * 2^e, 0.5 <= m < 1
-	local scaled = m * TWO24 -- exact
-	local fl = math.floor(scaled)
-	local diff = scaled - fl
-	if diff > 0.5 or (diff == 0.5 and fl % 2 == 1) then fl = fl + 1 end
-	local r = math.ldexp(fl, e - 24)
-	return neg and -r or r
-end
+function M.bind(num) bound, f32 = num, num.f32 end
+function M.binding() return bound end
+function M.f32(x) return f32(x) end
 
-local f32 = M.f32
 function M.mul(a, b) return f32(a * b) end
 function M.add(a, b) return f32(a + b) end
 function M.sub(a, b) return f32(a - b) end

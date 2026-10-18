@@ -5,6 +5,7 @@
 -- Differences from the BR-RULESET-019 text are listed in docs/ARCHITECTURE_PROOF.md section 5.
 -- Magic is declared from BR-RULESET-044 only: no golden data covers it yet (marked below), so the order is unverified.
 -- Stage names are the architecture 6.4 vocabulary; the pre-renewal package registers a different ORDER over (mostly) the same names.
+-- The engine owns the stage loop (script-host pipeline.run); this package only declares the order and the stage bodies.
 local M = {}
 
 M.ORDER = {
@@ -20,10 +21,16 @@ M.ORDER = {
 	},
 }
 
+-- Stages whose bodies are registered protected: replacing, cancelling or moving them needs the host's protected-stage permission
+-- (a mod may still insert stages next to them). `init` sets up the attack and `final` closes it (BR-RULESET-001 tail).
+M.PROTECTED = { init = true, final = true }
+
+-- Declares the stage orders and registers the stage bodies. The magic order is declared only (no bodies: UNVERIFIED, see above).
 function M.register(engine)
 	for kind, order in pairs(M.ORDER) do
 		engine.pipeline.define(kind, order)
 	end
+	import("scripts/damage/weapon").register(engine)
 end
 
 return M

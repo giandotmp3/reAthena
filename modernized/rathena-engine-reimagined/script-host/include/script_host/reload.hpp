@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "script_host/event_bus.hpp"
+#include "script_host/pipeline.hpp"
 #include "script_host/sandbox.hpp"
 
 namespace script_host {
@@ -40,6 +41,10 @@ class ReloadManager {
   void set_rng(RngStreams* r) { rng_ = r; }
   EventBus& bus() { return bus_; }
   const EventBus& bus() const { return bus_; }
+  // Pipelines defined and edited by the mods' chunks. Rebuilt and validated together with the bus on every reload and
+  // committed atomically with it (a conflict or a missing stage refuses the whole reload).
+  PipelineRegistry& pipelines() { return pipes_; }
+  const PipelineRegistry& pipelines() const { return pipes_; }
 
   // Creates generation N+1 at a tick boundary. The new generation is loaded in
   // a fresh sandbox, validated against the bus, and committed atomically; on
@@ -78,6 +83,7 @@ class ReloadManager {
 
   ReloadConfig cfg_;
   EventBus bus_;
+  PipelineRegistry pipes_;
   StorageApi* storage_ = nullptr;
   RngStreams* rng_ = nullptr;
   std::uint64_t now_ms_ = 0, next_timer_ = 1, next_lease_ = 1;

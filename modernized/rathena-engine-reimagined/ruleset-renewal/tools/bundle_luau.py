@@ -25,8 +25,10 @@ def main():
              "\t\tif not f then error('import: unknown module ' .. tostring(name)) end\n\t\tc = f()\n\t\tif c == nil then c = true end\n"
              "\t\t__cache[name] = c\n\tend\n\treturn c\nend\n"]
     n = 0
-    dirs = ["scripts", "data"] if lib else DIRS  # a library bundle carries no tests and no golden data
+    dirs = ["scripts", "data"] if lib else DIRS  # a library bundle carries no tests and no golden data ...
     files = [p for d in dirs for p in sorted((ROOT / d).rglob("*.luau"))] + ([] if lib else sorted((ROOT / "build").glob("golden_*.luau")))
+    if lib:  # ... except the fake host (engine double) the package registers with, so a library caller can import("tests/support/booted")
+        files += [ROOT / "tests" / "support" / "fake_host.luau", ROOT / "tests" / "support" / "booted.luau"]
     for p in files:
         name = p.relative_to(ROOT).with_suffix("").as_posix()
         parts.append(f"__src[{name!r}] = function()\n-- {name}\n{p.read_text()}\nend\n")

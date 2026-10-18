@@ -52,3 +52,16 @@ export type Unit = {
 	skills: { [string]: number }?, bonus: { [string]: any }?, sc: { [string]: { val1: number?, val2: number?, val3: number?, val4: number? } }?,
 }
 export type WeaponResult = { damage: number, damage2: number, type: number, div: number, flag: number, dmg_lv: number }
+
+-- The engine table register(engine) receives (script-host api/engine.yaml; tests/support/fake_host.luau stands in for it in the CLI suites).
+export type StageOpts = { protected: boolean? }
+export type RunOpts = { skip: { [string]: boolean }?, lane: Lane?, view: { [string]: any }? }
+export type Engine = {
+	pipeline: {
+		define: (name: string, stages: { string }) -> (),
+		stage: (name: string, stage: string, fn: (any) -> (), opts: StageOpts?) -> (),
+		run: (name: string, ctx: any, opts: RunOpts?) -> { cancelled: boolean }?,
+	},
+	num: { f32: (x: number) -> number },
+	config: { legacy_quirks: boolean },
+}

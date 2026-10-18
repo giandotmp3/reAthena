@@ -73,6 +73,9 @@ class EventBus {
   void set_tick(std::uint64_t t) { tick_ = t; }
   void set_strict_parity(bool v) { strict_parity_ = v; cache_.clear(); }
   void set_mod_load_order(const std::string& mod, int order) { load_order_[mod] = order; cache_.clear(); }
+  // Load order set by the loader; -1 when none was set for the mod.
+  int mod_load_order(const std::string& mod) const { auto it = load_order_.find(mod); return it == load_order_.end() ? -1 : it->second; }
+  bool strict_parity() const { return strict_parity_; }
 
  private:
   struct Entry { HookSpec spec; HookFn fn; std::uint64_t seq; };

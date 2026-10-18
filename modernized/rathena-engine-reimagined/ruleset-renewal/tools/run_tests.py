@@ -41,7 +41,12 @@ def main() -> int:
     entry = "tests/golden_report" if "--report" in args else ("tests/bench_weapon" if "--bench" in args else "tests/main")
     out = ROOT / "build" / "bundle_tests.luau"
     subprocess.run([sys.executable, "-I", str(TOOLS / "bundle_luau.py"), entry, str(out)], check=True, stdout=subprocess.DEVNULL)
-    return subprocess.run([exe, str(out)], cwd=ROOT).returncode
+    rc = subprocess.run([exe, str(out)], cwd=ROOT).returncode
+    if entry == "tests/main":  # the extra suite (tests/extra.luau) runs after the main one, in its own process
+        out2 = ROOT / "build" / "bundle_extra.luau"
+        subprocess.run([sys.executable, "-I", str(TOOLS / "bundle_luau.py"), "tests/extra", str(out2)], check=True, stdout=subprocess.DEVNULL)
+        rc = rc or subprocess.run([exe, str(out2)], cwd=ROOT).returncode
+    return rc
 
 
 if __name__ == "__main__":

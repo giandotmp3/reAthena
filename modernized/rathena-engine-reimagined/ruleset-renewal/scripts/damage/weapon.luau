@@ -7,9 +7,19 @@
 --   adv_katar_mastery, res, defense, post_defense, skill_atk_bonus, element, crit_multiplier, flat_additions, card_target,
 --   div_hands, target_modifiers, map_rates, final
 --
--- The stage bodies live in M.STAGES (one function per stage name, operating on the attack state S); M.calc_attack runs the stage
--- names of the order it is given (default: pipeline.ORDER.weapon). Prelude of every attack (BR-RULESET-003/005/006, shared with
--- the pre-renewal ruleset in structure): lucky dodge, crit roll, hit roll. Stages in HIT_ONLY run only when the attack hits.
+-- The stage bodies live in M.STAGES (one function per stage name, operating on the attack state S). M.register(engine) hands them
+-- to the engine with pipeline.stage(); M.calc_attack builds S and calls pipeline.run("weapon", S, ...), which executes the
+-- EFFECTIVE order (this package's order plus whatever other mods inserted, replaced, cancelled or moved). Prelude of every attack
+-- (BR-RULESET-003/005/006, shared with the pre-renewal ruleset in structure): lucky dodge, crit roll, hit roll. Stages in
+-- HIT_ONLY are skipped when the attack does not hit.
+--
+-- legacy_quirks (cfg.legacy_quirks, default true; the host's engine.config.legacy_quirks from mod.toml [ruleset]): two legacy
+-- defects are reproduced exactly while it is true (goldens). With false the corrected behaviour applies:
+--   * a monster's critical hit multiplies ONCE by 1.4f (crit_multiplier stage, as for players); legacy also multiplies the base
+--     damage by 14/10 in battle_calc_base_damage (battle.cpp:2635), so a monster crit is x1.96
+--   * weapon_damage_rate is read from the slot of the weapon's own type; legacy indexes a 16 slot array by weapon types up to 23
+--     (pc.hpp:577), so guns and grenade launchers read arrow_addele[type - 16] instead
+-- Everything else is identical in both modes.
 --
 -- ctx interface (identical to the pre-renewal package; the host needs nothing new):
 --   ctx.rng.rnd()           -> integer in [0, 2^31-1]   legacy rnd()                       (one draw)
@@ -38,6 +48,8 @@ local C = import("scripts/damage/consts")
 local TABLES = import("data/damage_tables")
 local fp = import("scripts/damage/fp")
 local pipeline = import("scripts/pipeline")
+
+local run = nil -- engine.pipeline.run, bound by M.register
 
 local M = {}
 
@@ -231,11 +243,17 @@ function M.weapon_atk_range(watk, atk, wlv, base_stat)
 	return lo, hi
 end
 
+-- legacy_quirks of an attack: S is nil for the pure helpers called without one (they keep the legacy behaviour)
+local function legacy_quirks(S)
+	return S == nil or S.cfg == nil or S.cfg.legacy_quirks ~= false
+end
+
 -- weapon_damage_rate lookup of battle_add_weapon_damage; legacy defect: the array has 16 slots but weapon types go up to 23,
--- so types 16..23 read the following member, indexed_bonus.arrow_addele[type - 16]
-local function weapon_damage_rate(src, wtype, hand)
+-- so types 16..23 read the following member, indexed_bonus.arrow_addele[type - 16]. With legacy_quirks off every type reads
+-- the slot of its own type (the snapshot's wdr_r / wdr_l).
+local function weapon_damage_rate(src, wtype, hand, legacy)
 	local b = bonus_of(src)
-	if wtype >= C.WDR_SLOTS then return at(b.aadd_ele, wtype - C.WDR_SLOTS) end
+	if legacy and wtype >= C.WDR_SLOTS then return at(b.aadd_ele, wtype - C.WDR_SLOTS) end
 	if hand == "l" then
 		if wtype == src.wtype1 then return b.wdr_r or 0 end -- one slot per weapon type: both hands share it
 		return b.wdr_l or 0
@@ -268,7 +286,7 @@ function M.weapon_atk_part(ctx, src, tgt, hand, crit, S)
 	-- battle_add_weapon_damage: over-refine rnd, then weapon_damage_rate
 	local over = hand == "l" and (b.overrefine_l or 0) or (b.overrefine_r or 0)
 	if over ~= 0 then damage = damage + ctx.rng.rnd() % over + 1 end
-	local wdr = weapon_damage_rate(src, wtype, hand)
+	local wdr = weapon_damage_rate(src, wtype, hand, legacy_quirks(S))
 	if wdr ~= 0 then damage = damage + ctx.mul_div(damage, wdr, 100) end
 	-- battle_calc_sizefix (BR-RULESET-102): not for Weapon Perfection / no_sizefix; the table of THIS hand's weapon type
 	if not (src.no_sizefix or sc_of(src, "weaponperfection")) then
@@ -295,7 +313,9 @@ function M.mob_base_damage(ctx, src, hand, crit, S)
 		damage = atkmax
 	end
 	damage = damage + src.batk
-	if crit then damage = ctx.mul_div(damage, 14, 10) end
+	-- legacy defect (battle.cpp:2635): the base damage of a critical hit is multiplied by 14/10 here, and the crit_multiplier stage
+	-- multiplies by 1.4f again; with legacy_quirks off only that stage applies
+	if crit and legacy_quirks(S) then damage = ctx.mul_div(damage, 14, 10) end
 	return damage
 end
 
@@ -792,7 +812,7 @@ function STAGES.crit_multiplier(S)
 			mul(S.dmg, mult)
 			if S.left then mul(S.dmg2, mult) end
 		else
-			mul(S.dmg, fp.f32(1.4)) -- (the base damage of a monster crit already got x14/10: a legacy double multiplier)
+			mul(S.dmg, fp.f32(1.4)) -- (with legacy_quirks the base damage of a monster crit already got x14/10: the legacy double multiplier)
 		end
 		local cdr = tgt.kind == "pc" and (bonus_of(tgt).crit_def_rate or 0) or 0
 		if cdr ~= 0 then atk_add_rate(S, -cdr) end
@@ -868,11 +888,32 @@ function STAGES.final(S)
 end
 
 -- --------------------------------------------------------------------------------------------------------------------
--- the whole attack: battle_calc_attack(BF_WEAPON, src, tgt, 0, 0, 0)
--- opts.trace: table that receives { name, damage, damage2 } stage probes; opts.map: "normal" | "pvp" | "gvg";
--- opts.order: stage names to run (default pipeline.ORDER.weapon); opts.stages: stage bodies by name (default M.STAGES)
--- result: { damage, damage2, type, div, flag, dmg_lv }
+-- Hands the stage bodies to the engine (pipeline.stage) and binds what the stages need from it. Called by register(engine) after
+-- pipeline.define. `init` and `final` are protected: a mod needs the protected-stage permission to replace, cancel or move them.
 -- --------------------------------------------------------------------------------------------------------------------
+-- what register() bound (tests that register the package with another engine restore it afterwards)
+function M.binding() return { run = run, num = fp.binding() } end
+function M.bind(b)
+	run = b.run
+	if b.num then fp.bind(b.num) end
+end
+
+function M.register(engine)
+	fp.bind(engine.num)
+	run = engine.pipeline.run
+	for _, name in ipairs(pipeline.ORDER.weapon) do
+		engine.pipeline.stage("weapon", name, STAGES[name], { protected = pipeline.PROTECTED[name] == true })
+	end
+end
+
+-- --------------------------------------------------------------------------------------------------------------------
+-- the whole attack: battle_calc_attack(BF_WEAPON, src, tgt, 0, 0, 0)
+-- opts.trace: table that receives { name, damage, damage2 } stage probes; opts.map: "normal" | "pvp" | "gvg"
+-- result: { damage, damage2, type, div, flag, dmg_lv }; a mod that cancelled the attack (ctx:cancel from its stage) yields
+-- zero damage, dmg_lv ATK_BLOCK and `cancelled = true`
+-- --------------------------------------------------------------------------------------------------------------------
+local NO_SKIP = {}
+
 function M.calc_attack(ctx, cfg, src, tgt, opts)
 	opts = opts or ALL
 	validate(src, tgt)
@@ -895,14 +936,12 @@ function M.calc_attack(ctx, cfg, src, tgt, opts)
 		if crit then S.type, S.crit = C.DMG_CRITICAL, true end
 		S.hit = M.hit_roll(ctx, cfg, src, tgt, crit, S)
 		if not S.hit then S.dmg_lv = C.ATK_FLEE end
-		local order = opts.order or pipeline.ORDER.weapon
-		local bodies = opts.stages or STAGES
-		for _, name in ipairs(order) do
-			if S.hit or not M.HIT_ONLY[name] then
-				local fn = bodies[name]
-				if fn == nil then error({ code = "NO_STAGE_BODY", msg = "stage '" .. name .. "' has no body" }) end
-				fn(S)
-			end
+		-- the engine runs the effective order; `lane` and `view` are what stages of OTHER mods see of this attack
+		local res = run("weapon", S, { skip = S.hit and NO_SKIP or M.HIT_ONLY, lane = S.dmg, view = S })
+		if res and res.cancelled then
+			S.dmg:set(0)
+			S.dmg2:set(0)
+			return { damage = 0, damage2 = 0, type = S.type, div = S.div, flag = S.flag, dmg_lv = C.ATK_BLOCK, cancelled = true }
 		end
 	end
 	-- ---- BR-RULESET-001: total below 1 is a miss; players report a single hit

@@ -4,9 +4,11 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <type_traits>
 
 #include "script_host/ids.hpp"
 #include "script_host/numeric.hpp"
+#include "script_host/pipeline.hpp"
 
 #ifdef SCRIPT_HOST_WITH_LUAU
 #include "lua.h"
@@ -51,6 +53,7 @@ ModSandbox::ModSandbox(ModEnvironmentSpec spec, MemoryAccountant*) : spec_(std::
 ModSandbox::~ModSandbox() = default;
 RunResult ModSandbox::run(const std::string&, const std::string&) { return {RunStatus::Error, kNoLuau}; }
 std::vector<RegisteredHook> ModSandbox::take_hooks() { return {}; }
+std::vector<PipelineOp> ModSandbox::take_pipeline_ops() { return {}; }
 std::vector<RegisteredMigrate> ModSandbox::take_migrates() { return {}; }
 std::vector<std::string> ModSandbox::take_shapes() { return {}; }
 void ModSandbox::call_hook(int, HookContext&) { throw HookFailure(HookFailure::Kind::Error, kNoLuau); }
@@ -96,6 +99,7 @@ struct ModSandbox::Impl {
   lua_State* dialogue_thread = nullptr;
 
   std::vector<RegisteredHook> hooks;
+  std::vector<PipelineOp> pl_ops;
   std::vector<RegisteredMigrate> migrates;
   std::vector<std::string> shapes;
 
@@ -107,6 +111,7 @@ struct ModSandbox::Impl {
   Host& host() { return self->host_; }
   StorageApi* storage() const { return self->storage_; }
   RngStreams* rng() const { return self->rng_; }
+  PipelineRegistry* pipes() const { return self->pipes_; }
 
   Impl(ModSandbox* s, MemoryAccountant* shared)
       : self(s),
@@ -300,6 +305,12 @@ int c_f32(lua_State* L) {
   auto& c = ctx_of(L, true);
   double f = luaL_checknumber(L, 2);
   return guarded(L, [&] { c.num.f32_step(f); return 0; });
+}
+int c_view(lua_State* L) {
+  auto& c = ctx_of(L, false);
+  if (!c.view) lua_pushnil(L);
+  else push_value(L, *c.view, 0);  // a fresh copy each call: the script cannot change what other stages see
+  return 1;
 }
 int c_min1(lua_State* L) { ctx_of(L, true).num.min1(); return 0; }
 int c_cancel(lua_State* L) {
@@ -530,6 +541,435 @@ int rng_main(lua_State* L) {
   return 1;
 }
 
+// ---- num ---------------------------------------------------------------------------------------------------------------
+// num.f32(x): the nearest IEEE binary32 value as a double ((double)(float)x). Float32 +, -, * and / are num.f32(a op b).
+int nm_f32(lua_State* L) {
+  lua_pushnumber(L, f32_round(luaL_checknumber(L, 1)));
+  return 1;
+}
+
+// ---- pipeline ----------------------------------------------------------------------------------------------------------
+void need_loading(lua_State* L, const char* what) {
+  if (!impl_of(L)->loading) luaL_error(L, "%s is only available while the mod chunk loads", what);
+}
+
+std::string name_arg(lua_State* L, int i, const char* what) {
+  size_t n;
+  const char* s = luaL_checklstring(L, i, &n);
+  if (n == 0 || n > 128) luaL_argerror(L, i, (std::string(what) + " must be 1..128 characters").c_str());
+  return std::string(s, n);
+}
+
+// Hook-like ids (inserted and replacing stages) end up in "mod/id" qualified names.
+std::string hook_id_arg(lua_State* L, int i) {
+  std::string id = name_arg(L, i, "stage id");
+  if (id.find('/') != std::string::npos) luaL_argerror(L, i, "stage id may not contain '/'");
+  return id;
+}
+
+bool opts_bool(lua_State* L, int idx, const char* f) {
+  if (lua_isnoneornil(L, idx)) return false;
+  lua_getfield(L, idx, f);
+  if (!lua_isnil(L, -1) && lua_type(L, -1) != LUA_TBOOLEAN) { lua_pop(L, 1); luaL_error(L, "opts.%s must be a boolean", f); }
+  bool b = lua_toboolean(L, -1) != 0;
+  lua_pop(L, 1);
+  return b;
+}
+int opts_int(lua_State* L, int idx, const char* f) {
+  if (lua_isnoneornil(L, idx)) return 0;
+  lua_getfield(L, idx, f);
+  int v = 0;
+  if (lua_type(L, -1) == LUA_TNUMBER) {
+    double d = lua_tonumber(L, -1);
+    if (d != std::floor(d) || std::fabs(d) > 1e9) { lua_pop(L, 1); luaL_error(L, "opts.%s must be a small integer", f); }
+    v = static_cast<int>(d);
+  } else if (!lua_isnil(L, -1)) { lua_pop(L, 1); luaL_error(L, "opts.%s must be a number", f); }
+  lua_pop(L, 1);
+  return v;
+}
+void opts_check_table(lua_State* L, int idx) {
+  if (!lua_isnoneornil(L, idx) && !lua_istable(L, idx)) luaL_error(L, "opts must be a table");
+}
+
+int pl_define(lua_State* L) {
+  Impl* im = impl_of(L);
+  need_loading(L, "pipeline.define");
+  PipelineOp op;
+  op.kind = PipelineOpKind::Define;
+  op.pipeline = name_arg(L, 1, "pipeline name");
+  luaL_checktype(L, 2, LUA_TTABLE);
+  int n = lua_objlen(L, 2);
+  if (n < 1 || n > 256) luaL_argerror(L, 2, "a pipeline has 1..256 stages");
+  for (int i = 1; i <= n; ++i) {
+    lua_rawgeti(L, 2, i);
+    if (lua_type(L, -1) != LUA_TSTRING) { lua_pop(L, 1); luaL_argerror(L, 2, "stage names must be strings"); }
+    size_t l;
+    const char* s = lua_tolstring(L, -1, &l);
+    if (l == 0 || l > 128) { lua_pop(L, 1); luaL_argerror(L, 2, "stage names are 1..128 characters"); }
+    op.stages.emplace_back(s, l);
+    lua_pop(L, 1);
+  }
+  im->pl_ops.push_back(std::move(op));
+  return 0;
+}
+
+// pipeline.stage(name, stage, fn, opts?): the body of one stage of a pipeline this mod defined; opts.protected
+int pl_stage(lua_State* L) {
+  Impl* im = impl_of(L);
+  need_loading(L, "pipeline.stage");
+  PipelineOp op;
+  op.kind = PipelineOpKind::Stage;
+  op.pipeline = name_arg(L, 1, "pipeline name");
+  op.stage = name_arg(L, 2, "stage name");
+  luaL_checktype(L, 3, LUA_TFUNCTION);
+  opts_check_table(L, 4);
+  op.is_protected = opts_bool(L, 4, "protected");
+  op.ref = lua_ref(L, 3);
+  im->pl_ops.push_back(std::move(op));
+  return 0;
+}
+
+// pipeline.insert_before / insert_after (name, anchor, id, fn, opts?)
+int pl_insert_common(lua_State* L, PipelineOpKind kind, const char* fname) {
+  Impl* im = impl_of(L);
+  need_loading(L, fname);
+  PipelineOp op;
+  op.kind = kind;
+  op.pipeline = name_arg(L, 1, "pipeline name");
+  op.stage = name_arg(L, 2, "anchor stage");
+  op.id = hook_id_arg(L, 3);
+  luaL_checktype(L, 4, LUA_TFUNCTION);
+  opts_check_table(L, 5);
+  op.priority = opts_int(L, 5, "priority");
+  op.draws_main_rng = opts_bool(L, 5, "draws_main_rng");
+  op.optional = opts_bool(L, 5, "optional");
+  if (opts_bool(L, 5, "precedence")) luaL_error(L, "opts.precedence applies to replace and move, not to an inserted stage");
+  if (!lua_isnoneornil(L, 5)) {
+    std::string md = opt_string_field(L, 5, "mode");
+    if (md.empty() || md == "observe") op.mode = Mode::Observe;
+    else if (md == "modify") op.mode = Mode::Modify;
+    else luaL_error(L, "opts.mode must be observe or modify for an inserted stage");
+  }
+  op.permit_protected = im->spec().granted.count(Permission::ProtectedStages) != 0;
+  op.ref = lua_ref(L, 4);
+  im->pl_ops.push_back(std::move(op));
+  return 0;
+}
+int pl_insert_before(lua_State* L) { return pl_insert_common(L, PipelineOpKind::InsertBefore, "pipeline.insert_before"); }
+int pl_insert_after(lua_State* L) { return pl_insert_common(L, PipelineOpKind::InsertAfter, "pipeline.insert_after"); }
+
+// pipeline.replace(name, stage, id, fn, opts?)
+int pl_replace(lua_State* L) {
+  Impl* im = impl_of(L);
+  need_loading(L, "pipeline.replace");
+  PipelineOp op;
+  op.kind = PipelineOpKind::Replace;
+  op.pipeline = name_arg(L, 1, "pipeline name");
+  op.stage = name_arg(L, 2, "stage name");
+  op.id = hook_id_arg(L, 3);
+  luaL_checktype(L, 4, LUA_TFUNCTION);
+  opts_check_table(L, 5);
+  op.priority = opts_int(L, 5, "priority");
+  op.precedence = opts_bool(L, 5, "precedence");
+  op.draws_main_rng = opts_bool(L, 5, "draws_main_rng");
+  op.optional = opts_bool(L, 5, "optional");
+  op.mode = Mode::Replace;
+  op.permit_protected = im->spec().granted.count(Permission::ProtectedStages) != 0;
+  op.ref = lua_ref(L, 4);
+  im->pl_ops.push_back(std::move(op));
+  return 0;
+}
+
+// pipeline.cancel(name, stage, opts?)
+int pl_cancel(lua_State* L) {
+  Impl* im = impl_of(L);
+  need_loading(L, "pipeline.cancel");
+  PipelineOp op;
+  op.kind = PipelineOpKind::Cancel;
+  op.pipeline = name_arg(L, 1, "pipeline name");
+  op.stage = name_arg(L, 2, "stage name");
+  opts_check_table(L, 3);
+  op.optional = opts_bool(L, 3, "optional");
+  op.permit_protected = im->spec().granted.count(Permission::ProtectedStages) != 0;
+  im->pl_ops.push_back(std::move(op));
+  return 0;
+}
+
+// pipeline.move(name, stage, { before = anchor } | { after = anchor }, opts?)
+int pl_move(lua_State* L) {
+  Impl* im = impl_of(L);
+  need_loading(L, "pipeline.move");
+  PipelineOp op;
+  op.kind = PipelineOpKind::Move;
+  op.pipeline = name_arg(L, 1, "pipeline name");
+  op.stage = name_arg(L, 2, "stage name");
+  luaL_checktype(L, 3, LUA_TTABLE);
+  std::string b = opt_string_field(L, 3, "before"), a = opt_string_field(L, 3, "after");
+  if (b.empty() == a.empty()) luaL_argerror(L, 3, "give exactly one of { before = stage } or { after = stage }");
+  op.before = !b.empty();
+  op.anchor = op.before ? b : a;
+  opts_check_table(L, 4);
+  op.priority = opts_int(L, 4, "priority");
+  op.precedence = opts_bool(L, 4, "precedence");
+  op.optional = opts_bool(L, 4, "optional");
+  op.permit_protected = im->spec().granted.count(Permission::ProtectedStages) != 0;
+  im->pl_ops.push_back(std::move(op));
+  return 0;
+}
+
+// Lenient conversion of a Luau value into a read-only snapshot: functions, userdata, threads and cycles beyond the depth
+// limit are left out instead of refused (the ruleset's working state holds accumulators with methods).
+constexpr int kViewMaxNodes = 20000;
+bool to_view(lua_State* L, int idx, int depth, int& nodes, Value& out) {
+  if (idx < 0) idx = lua_gettop(L) + idx + 1;
+  switch (lua_type(L, idx)) {
+    case LUA_TBOOLEAN: out = lua_toboolean(L, idx) != 0; return true;
+    case LUA_TNUMBER: {
+      double d = lua_tonumber(L, idx);
+      if (std::isfinite(d) && d == std::floor(d) && std::fabs(d) < 9007199254740992.0) out = static_cast<std::int64_t>(d);
+      else out = d;
+      return true;
+    }
+    case LUA_TSTRING: { size_t n; const char* s = lua_tolstring(L, idx, &n); out = std::string(s, n); return true; }
+    case LUA_TTABLE: {
+      if (depth >= kMaxValueDepth) return false;
+      if (++nodes > kViewMaxNodes) luaL_error(L, "pipeline.run: opts.view is too large (more than %d values)", kViewMaxNodes);
+      auto t = std::make_shared<ValueTable>();
+      lua_pushnil(L);
+      while (lua_next(L, idx) != 0) {
+        Value v;
+        if (to_view(L, -1, depth + 1, nodes, v)) {
+          if (lua_type(L, -2) == LUA_TSTRING) {
+            size_t n;
+            const char* k = lua_tolstring(L, -2, &n);
+            t->entries[std::string(k, n)] = std::move(v);
+          } else if (lua_type(L, -2) == LUA_TNUMBER) {
+            double d = lua_tonumber(L, -2);
+            if (d == std::floor(d) && std::fabs(d) < 9007199254740992.0) t->array[static_cast<std::int64_t>(d)] = std::move(v);
+          }
+        }
+        lua_pop(L, 1);
+      }
+      out = Value{t};
+      return true;
+    }
+    default: return false;
+  }
+}
+
+// The Luau side of one pipeline.run: argument 2 is ctx, argument 3 the optional opts table.
+struct RunHost final : PipelineHost {
+  lua_State* L;
+  int ctx_idx = 2, opts_idx = 0, skip_idx = 0, lane_idx = 0, view_idx = 0;
+  explicit RunHost(lua_State* l) : L(l) {}
+
+  bool skip(const std::string& id) override {
+    if (!skip_idx) return false;
+    lua_pushlstring(L, id.data(), id.size());
+    lua_rawget(L, skip_idx);
+    bool r = lua_toboolean(L, -1) != 0;
+    lua_pop(L, 1);
+    return r;
+  }
+  void run_own(const PipelineBody& b) override {
+    lua_rawgeti(L, LUA_REGISTRYINDEX, b.ref);
+    lua_pushvalue(L, ctx_idx);
+    lua_call(L, 1, 0);  // a Luau error propagates to the caller of pipeline.run with its value intact
+  }
+  bool lane_get(std::int64_t& v) override {
+    if (!lane_idx) return false;
+    lua_pushvalue(L, lane_idx);
+    lua_getfield(L, -1, "get");
+    lua_pushvalue(L, lane_idx);
+    lua_call(L, 1, 1);
+    double d = lua_type(L, -1) == LUA_TNUMBER ? lua_tonumber(L, -1) : 0.0;
+    bool ok = lua_type(L, -1) == LUA_TNUMBER && std::isfinite(d) && d == std::floor(d) && std::fabs(d) <= 9007199254740992.0;
+    lua_pop(L, 2);
+    if (!ok) luaL_error(L, "pipeline.run: opts.lane:get() must return an integer (|v| <= 2^53)");
+    v = static_cast<std::int64_t>(d);
+    return true;
+  }
+  void lane_set(std::int64_t v) override {
+    if (std::llabs(v) > (1ll << 53)) luaL_error(L, "pipeline.run: a stage produced a lane value beyond 2^53");
+    lua_pushvalue(L, lane_idx);
+    lua_getfield(L, -1, "set");
+    lua_pushvalue(L, lane_idx);
+    lua_pushnumber(L, static_cast<double>(v));
+    lua_call(L, 2, 0);
+    lua_pop(L, 1);
+  }
+  std::shared_ptr<const Value> view() override {
+    if (!view_idx) return nullptr;
+    int nodes = 0;
+    Value v;
+    if (!to_view(L, view_idx, 0, nodes, v)) return nullptr;
+    return std::make_shared<const Value>(std::move(v));
+  }
+  void missing_body(const std::string& stage_id) override {
+    lua_newtable(L);
+    lua_pushstring(L, "NO_STAGE_BODY");
+    lua_setfield(L, -2, "code");
+    std::string m = "stage '" + stage_id + "' has no body";
+    lua_pushlstring(L, m.data(), m.size());
+    lua_setfield(L, -2, "msg");
+    lua_error(L);
+  }
+};
+
+void set_str_field(lua_State* L, const char* k, const std::string& v) {
+  lua_pushlstring(L, v.data(), v.size());
+  lua_setfield(L, -2, k);
+}
+void push_string_list(lua_State* L, const std::vector<std::string>& v) {
+  lua_createtable(L, static_cast<int>(v.size()), 0);
+  for (std::size_t i = 0; i < v.size(); ++i) {
+    lua_pushlstring(L, v[i].data(), v[i].size());
+    lua_rawseti(L, -2, static_cast<int>(i) + 1);
+  }
+}
+
+// pipeline.run(name, ctx, opts?) -> nil, or a result table when another mod's stage ran or something is worth reporting
+//   opts.skip   { [stage id] = true }  stages not to run this time (e.g. those that only apply to a connected hit)
+//   opts.lane   object with :get() / :set(n): the int64 value other mods' modify/replace stages see and change
+//   opts.view   table copied (read-only) for other mods' stages: ctx:view()
+int pl_run(lua_State* L) {
+  Impl* im = impl_of(L);
+  size_t nl;
+  const char* nm = luaL_checklstring(L, 1, &nl);
+  const std::string name(nm, nl);
+  if (lua_isnone(L, 2)) luaL_error(L, "pipeline.run(name, ctx, opts): ctx is required");
+  RunHost host(L);
+  if (!lua_isnoneornil(L, 3)) {
+    luaL_checktype(L, 3, LUA_TTABLE);
+    host.opts_idx = 3;
+    lua_getfield(L, 3, "skip");
+    if (lua_istable(L, -1)) {
+      host.skip_idx = lua_gettop(L);
+      lua_pushnil(L);  // an empty skip set (the common case) costs nothing per stage
+      if (lua_next(L, host.skip_idx) != 0) lua_pop(L, 2);
+      else host.skip_idx = 0;
+    } else if (!lua_isnil(L, -1)) {
+      luaL_error(L, "opts.skip must be a table");
+    } else {
+      lua_pop(L, 1);
+    }
+    lua_getfield(L, 3, "lane");
+    if (!lua_isnil(L, -1)) host.lane_idx = lua_gettop(L);
+    else lua_pop(L, 1);
+    lua_getfield(L, 3, "view");
+    if (lua_istable(L, -1)) host.view_idx = lua_gettop(L);
+    else if (!lua_isnil(L, -1)) luaL_error(L, "opts.view must be a table");
+    else lua_pop(L, 1);
+  }
+  PipelineRegistry* reg = im->pipes();
+  if (!reg) luaL_error(L, "pipeline.run: this state has no pipeline registry attached");
+  PipelineRunResult res;
+  std::string err;
+  try {
+    reg->run(name, im->self, host, res);
+  } catch (const LoadError& e) {
+    err = e.what();
+  }
+  if (!err.empty()) luaL_error(L, "%s", err.c_str());
+  if (!res.noteworthy()) return 0;
+  lua_newtable(L);
+  lua_pushboolean(L, res.cancelled);
+  lua_setfield(L, -2, "cancelled");
+  if (res.cancelled) {
+    set_str_field(L, "cancel_reason", res.cancel_reason);
+    set_str_field(L, "cancelled_by", res.cancelled_by);
+  }
+  push_string_list(L, res.ran);
+  lua_setfield(L, -2, "ran");
+  push_string_list(L, res.diagnostics);
+  lua_setfield(L, -2, "diagnostics");
+  push_string_list(L, res.auto_disabled);
+  lua_setfield(L, -2, "auto_disabled");
+  lua_createtable(L, static_cast<int>(res.effects.size()), 0);
+  for (std::size_t i = 0; i < res.effects.size(); ++i) {
+    lua_newtable(L);
+    set_str_field(L, "kind", res.effects[i].kind);
+    set_str_field(L, "target", res.effects[i].target);
+    set_str_field(L, "payload", res.effects[i].payload_json);
+    lua_rawseti(L, -2, static_cast<int>(i) + 1);
+  }
+  lua_setfield(L, -2, "effects");
+  lua_createtable(L, static_cast<int>(res.errors.size()), 0);
+  for (std::size_t i = 0; i < res.errors.size(); ++i) {
+    lua_newtable(L);
+    set_str_field(L, "hook", res.errors[i].hook);
+    set_str_field(L, "kind", res.errors[i].kind);
+    set_str_field(L, "message", res.errors[i].message);
+    lua_rawseti(L, -2, static_cast<int>(i) + 1);
+  }
+  lua_setfield(L, -2, "errors");
+  return 1;
+}
+
+// pipeline.describe(name) -> steps, meta: the effective order, every step with its source mod and the edits that touched it
+int pl_describe(lua_State* L) {
+  Impl* im = impl_of(L);
+  const std::string name = luaL_checkstring(L, 1);
+  PipelineRegistry* reg = im->pipes();
+  if (!reg) luaL_error(L, "pipeline.describe: this state has no pipeline registry attached");
+  PipelineInfo info;
+  std::string err;
+  try {
+    info = reg->describe(name);
+  } catch (const LoadError& e) {
+    err = e.what();
+  }
+  if (!err.empty()) luaL_error(L, "%s", err.c_str());
+  lua_createtable(L, static_cast<int>(info.steps.size()), 0);
+  for (std::size_t i = 0; i < info.steps.size(); ++i) {
+    const PipelineStepInfo& s = info.steps[i];
+    lua_newtable(L);
+    set_str_field(L, "stage", s.id);
+    set_str_field(L, "kind", s.kind);
+    set_str_field(L, "source", s.source);
+    set_str_field(L, "body_mod", s.body_mod);
+    set_str_field(L, "body_id", s.body_id);
+    set_str_field(L, "mode", s.mode);
+    lua_pushboolean(L, s.active);
+    lua_setfield(L, -2, "active");
+    lua_pushboolean(L, s.has_body);
+    lua_setfield(L, -2, "has_body");
+    lua_pushboolean(L, s.protected_stage);
+    lua_setfield(L, -2, "protected");
+    lua_pushnumber(L, s.priority);
+    lua_setfield(L, -2, "priority");
+    lua_createtable(L, static_cast<int>(s.edits.size()), 0);
+    for (std::size_t k = 0; k < s.edits.size(); ++k) {
+      lua_newtable(L);
+      set_str_field(L, "op", s.edits[k].op);
+      set_str_field(L, "mod", s.edits[k].mod);
+      set_str_field(L, "detail", s.edits[k].detail);
+      lua_rawseti(L, -2, static_cast<int>(k) + 1);
+    }
+    lua_setfield(L, -2, "edits");
+    lua_rawseti(L, -2, static_cast<int>(i) + 1);
+  }
+  lua_newtable(L);
+  set_str_field(L, "name", info.name);
+  set_str_field(L, "owner", info.owner_mod);
+  lua_pushnumber(L, static_cast<double>(info.generation));
+  lua_setfield(L, -2, "generation");
+  push_string_list(L, info.ignored);
+  lua_setfield(L, -2, "ignored");
+  return 2;
+}
+
+// pipeline.order(name) -> { active stage ids }
+int pl_order(lua_State* L) {
+  Impl* im = impl_of(L);
+  const std::string name = luaL_checkstring(L, 1);
+  PipelineRegistry* reg = im->pipes();
+  if (!reg) luaL_error(L, "pipeline.order: this state has no pipeline registry attached");
+  if (!reg->defined(name)) luaL_error(L, "pipeline '%s' is not defined", name.c_str());
+  push_string_list(L, reg->order(name));
+  return 1;
+}
+
 // ---- storage scopes -------------------------------------------------------------
 struct ScopeBox {
   int scope;
@@ -716,7 +1156,7 @@ std::string prelude(std::uint32_t max_sort) {
 
 const luaL_Reg kCtxMethods[] = {{"get", c_get}, {"get_str", c_get_str}, {"set", c_set}, {"add", c_add}, {"sub", c_sub},
                                 {"mul", c_mul}, {"mul_pct", c_mul_pct}, {"idiv", c_idiv}, {"f32_step", c_f32},
-                                {"min1", c_min1}, {"cancel", c_cancel}, {"enqueue", c_enqueue}, {nullptr, nullptr}};
+                                {"min1", c_min1}, {"cancel", c_cancel}, {"enqueue", c_enqueue}, {"view", c_view}, {nullptr, nullptr}};
 const luaL_Reg kScopeMethods[] = {{"get", sc_get}, {"set", sc_set}, {"keys", sc_keys}, {"mod", sc_mod}, {nullptr, nullptr}};
 const luaL_Reg kEvents[] = {{"on", ev_on}, {nullptr, nullptr}};
 const luaL_Reg kStorage[] = {{"character", st_character}, {"account", st_account}, {"world", st_world},
@@ -725,6 +1165,10 @@ const luaL_Reg kDialogue[] = {{"say", d_say}, {"choose", d_choose}, {"input", d_
 const luaL_Reg kTimers[] = {{"after", tm_after}, {nullptr, nullptr}};
 const luaL_Reg kDefinitions[] = {{"declare", def_declare}, {nullptr, nullptr}};
 const luaL_Reg kRng[] = {{"roll", rng_roll}, {"main", rng_main}, {nullptr, nullptr}};
+const luaL_Reg kNum[] = {{"f32", nm_f32}, {nullptr, nullptr}};
+const luaL_Reg kPipeline[] = {{"define", pl_define}, {"stage", pl_stage}, {"insert_before", pl_insert_before}, {"insert_after", pl_insert_after},
+                              {"replace", pl_replace}, {"cancel", pl_cancel}, {"move", pl_move}, {"run", pl_run},
+                              {"describe", pl_describe}, {"order", pl_order}, {nullptr, nullptr}};
 
 bool load_chunk(lua_State* th, const std::string& chunk, const std::string& src, std::string& err) {
   lua_CompileOptions opts = {};
@@ -806,6 +1250,34 @@ ModSandbox::ModSandbox(ModEnvironmentSpec spec, MemoryAccountant* shared) : spec
   reg_table(L, "timers", kTimers);
   reg_table(L, "definitions", kDefinitions);
   reg_table(L, "rng", kRng);
+  reg_table(L, "num", kNum);
+  reg_table(L, "pipeline", kPipeline);
+  {
+    // `config`: read-only host values for this mod (the manifest's [ruleset] table for a ruleset); legacy_quirks defaults to on
+    lua_newtable(L);
+    lua_pushboolean(L, 1);
+    lua_setfield(L, -2, "legacy_quirks");
+    for (auto& [k, v] : spec_.config) {
+      std::visit([&](auto&& x) {
+        using T = std::decay_t<decltype(x)>;
+        if constexpr (std::is_same_v<T, bool>) lua_pushboolean(L, x ? 1 : 0);
+        else if constexpr (std::is_same_v<T, std::int64_t>) lua_pushnumber(L, static_cast<double>(x));
+        else if constexpr (std::is_same_v<T, double>) lua_pushnumber(L, x);
+        else lua_pushlstring(L, x.data(), x.size());
+      }, v);
+      lua_setfield(L, -2, k.c_str());
+    }
+    lua_setglobal(L, "config");
+    // `engine`: the typed API as one table, handed to a package's register(engine) by a loader that asks for it
+    if (spec_.expose_engine) {
+      lua_newtable(L);
+      for (const char* g : {"events", "storage", "dialogue", "timers", "definitions", "rng", "num", "pipeline", "config"}) {
+        lua_getglobal(L, g);
+        lua_setfield(L, -2, g);
+      }
+      lua_setglobal(L, "engine");
+    }
+  }
   for (auto* g = kDialogue; g->name; ++g) { lua_pushcfunction(L, g->func, g->name); lua_setglobal(L, g->name); }
 
   luaL_sandbox(L);  // shared libraries, string metatable and globals become read-only
@@ -831,6 +1303,7 @@ void ModSandbox::reenable() {
 }
 void ModSandbox::begin_tick() { impl_->meter.begin_tick(); }
 std::vector<RegisteredHook> ModSandbox::take_hooks() { return std::exchange(impl_->hooks, {}); }
+std::vector<PipelineOp> ModSandbox::take_pipeline_ops() { return std::exchange(impl_->pl_ops, {}); }
 std::vector<RegisteredMigrate> ModSandbox::take_migrates() { return std::exchange(impl_->migrates, {}); }
 std::vector<std::string> ModSandbox::take_shapes() { return std::exchange(impl_->shapes, {}); }
 

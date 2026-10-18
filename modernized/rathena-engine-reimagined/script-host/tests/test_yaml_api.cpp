@@ -90,6 +90,33 @@ TEST("CAP-E03", "api schema: bad schemas are rejected with the reason") {
   CHECK(err("api_version: 1\nnamespaces:\n  a:\n    functions:\n      - { name: f, params: [{ name: x, type: \"{string}?\" }], returns: \"(number) -> ()\" }\n").empty());
 }
 
+TEST("CAP-E03", "api schema: values and the engine table are generated; bad values and unknown engine members are rejected") {
+  auto s = load_api_schema_yaml(
+      "api_version: 1\nnamespaces:\n  cfg:\n    values:\n      - { name: flag, type: boolean, doc: \"a flag\" }\n  fx:\n    functions:\n      - { name: f, returns: number }\nengine:\n  - cfg\n  - fx\n");
+  auto d = generate_luau_declarations(s);
+  CHECK(fx::contains(d, "declare cfg: {\n  -- a flag\n  flag: boolean,\n}"));
+  CHECK(fx::contains(d, "export type Engine = {\n  cfg: typeof(cfg),\n  fx: typeof(fx),\n}"));
+  auto err = [](const std::string& y) {
+    try { load_api_schema_yaml(y); } catch (const LoadError& e) { return std::string(e.what()); }
+    return std::string();
+  };
+  CHECK(fx::contains(err("api_version: 1\nnamespaces:\n  cfg:\n    values:\n      - { name: flag, type: Nope }\n"), "value cfg.flag uses undeclared type 'Nope'"));
+  CHECK(fx::contains(err("api_version: 1\nnamespaces:\n  cfg:\n    values:\n      - { name: a, type: boolean }\n      - { name: a, type: boolean }\n"), "duplicate value cfg.a"));
+  CHECK(fx::contains(err("api_version: 1\nnamespaces:\n  cfg:\n    functions:\n      - { name: a }\n    values:\n      - { name: a, type: boolean }\n"), "both a function and a value"));
+  CHECK(fx::contains(err("api_version: 1\nnamespaces:\n  cfg:\n    values:\n      - { name: a, type: boolean }\nengine:\n  - nope\n"), "engine lists unknown namespace 'nope'"));
+  CHECK(fx::contains(err("api_version: 1\nnamespaces:\n  cfg:\n    other: 1\n"), "needs a 'functions' list"));
+  // the shipped schema exposes the pipeline API, num.f32 and the config table, and builds the engine table from them
+  auto shipped = load_api_schema_yaml(fx::slurp(API_SCHEMA_PATH));
+  auto has_fn = [&](const std::string& ns, const std::string& name) {
+    for (auto& f : shipped.functions) if (f.ns == ns && f.name == name) return true;
+    return false;
+  };
+  for (const char* n : {"define", "stage", "insert_before", "insert_after", "replace", "cancel", "move", "run", "describe", "order"}) CHECK_MSG(has_fn("pipeline", n), n);
+  CHECK(has_fn("num", "f32"));
+  CHECK(!shipped.values.empty() && shipped.values[0].ns == "config" && shipped.values[0].name == "legacy_quirks");
+  CHECK(shipped.engine.size() >= 9);
+}
+
 TEST("CAP-E03", "engine.d.luau parses and type-checks mod snippets through Luau::Frontend") {
 #ifdef HAVE_DECL_CHECK
   int rc = std::system(("\"" DECL_CHECK_EXE "\" > /dev/null 2>&1"));

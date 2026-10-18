@@ -1,12 +1,13 @@
 add_executable(script_host_tests
   main.cpp test_domain.cpp test_numeric.cpp test_event_bus.cpp
   test_budget_sandbox.cpp test_dialogue.cpp test_reload_storage_schema.cpp
-  test_integration.cpp test_yaml_api.cpp)
+  test_integration.cpp test_yaml_api.cpp test_pipeline.cpp test_rulesets.cpp)
 target_link_libraries(script_host_tests PRIVATE script_host)
 if(NOT MSVC)
   target_compile_options(script_host_tests PRIVATE -Wall -Wextra -Werror)
 endif()
 target_compile_definitions(script_host_tests PRIVATE
+  ENGINE_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/../.."
   PROBE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../luau/sandbox_probes"
   API_SCHEMA_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../api/engine.yaml"
   API_DECL_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../api/engine.d.luau")

@@ -16,6 +16,73 @@ types:
       - { name: category, type: "string?" }
       - { name: precedence, type: "boolean?" }
       - { name: draws_main_rng, type: "boolean?" }
+  Lane:
+    fields:
+      - { name: get, type: "(Lane) -> number" }
+      - { name: set, type: "(Lane, number) -> ()" }
+  StageBodyOpts:
+    fields:
+      - { name: protected, type: "boolean?" }
+  StageOpts:
+    fields:
+      - { name: priority, type: "number?" }
+      - { name: mode, type: "string?" }
+      - { name: precedence, type: "boolean?" }
+      - { name: draws_main_rng, type: "boolean?" }
+      - { name: optional, type: "boolean?" }
+  MoveTarget:
+    fields:
+      - { name: before, type: "string?" }
+      - { name: after, type: "string?" }
+  RunOpts:
+    fields:
+      - { name: skip, type: "{ [string]: boolean }?" }
+      - { name: lane, type: "Lane?" }
+      - { name: view, type: "{ [string]: any }?" }
+  StageEffect:
+    fields:
+      - { name: kind, type: string }
+      - { name: target, type: string }
+      - { name: payload, type: string }
+  StageError:
+    fields:
+      - { name: hook, type: string }
+      - { name: kind, type: string }
+      - { name: message, type: string }
+  RunResult:
+    fields:
+      - { name: cancelled, type: boolean }
+      - { name: cancel_reason, type: "string?" }
+      - { name: cancelled_by, type: "string?" }
+      - { name: ran, type: "{string}" }
+      - { name: diagnostics, type: "{string}" }
+      - { name: auto_disabled, type: "{string}" }
+      - { name: effects, type: "{StageEffect}" }
+      - { name: errors, type: "{StageError}" }
+  StageEdit:
+    fields:
+      - { name: op, type: string }
+      - { name: mod, type: string }
+      - { name: detail, type: string }
+  StageInfo:
+    fields:
+      - { name: stage, type: string }
+      - { name: kind, type: string }
+      - { name: source, type: string }
+      - { name: body_mod, type: string }
+      - { name: body_id, type: string }
+      - { name: mode, type: string }
+      - { name: active, type: boolean }
+      - { name: has_body, type: boolean }
+      - { name: protected, type: boolean }
+      - { name: priority, type: number }
+      - { name: edits, type: "{StageEdit}" }
+  PipelineMeta:
+    fields:
+      - { name: name, type: string }
+      - { name: owner, type: string }
+      - { name: generation, type: number }
+      - { name: ignored, type: "{string}" }
   HookContext:
     methods:
       - { name: get,      returns: number, doc: "current value as a double (exact up to 2^53)" }
@@ -30,6 +97,7 @@ types:
       - { name: min1,     doc: "v = max(v, 1)" }
       - { name: cancel,   params: [{ name: reason, type: string }], doc: "pre hooks only; discards this dispatch's queued effects" }
       - { name: enqueue,  params: [{ name: kind, type: string }, { name: target, type: string }, { name: payload_json, type: "string?" }], doc: "queue a world effect; applied by native code after the stage settles" }
+      - { name: view,     returns: "{ [string]: any }?", doc: "pipeline stages: a fresh read-only copy of the snapshot the ruleset attached to pipeline.run (opts.view); nil if none" }
   StorageScope:
     methods:
       - { name: get,  params: [{ name: key, type: string }], returns: any }
@@ -72,3 +140,31 @@ namespaces:
     functions:
       - { name: roll, params: [{ name: n, type: number }], returns: number, doc: "this hook's own derived stream, 0..n-1" }
       - { name: main, params: [{ name: n, type: number }], returns: number, doc: "main stream; rejected under strict_parity" }
+  num:
+    functions:
+      - { name: f32, params: [{ name: x, type: number }], returns: number, doc: "the nearest IEEE binary32 value ((double)(float)x); float32 + - * / are num.f32(a op b)" }
+  config:
+    values:
+      - { name: legacy_quirks, type: boolean, doc: "[ruleset] legacy_quirks of the mod manifest (default true): reproduce legacy defects as-is when true, corrected behaviour when false" }
+  pipeline:
+    functions:
+      - { name: define, params: [{ name: name, type: string }, { name: stages, type: "{string}" }], doc: "declares a pipeline and its stage order (the defining mod, load time only)" }
+      - { name: stage, params: [{ name: name, type: string }, { name: stage, type: string }, { name: fn, type: "(any) -> ()" }, { name: opts, type: "StageBodyOpts?" }], doc: "registers the BODY of a stage of a pipeline this mod defined; fn receives the ctx given to pipeline.run; opts.protected" }
+      - { name: insert_before, params: [{ name: name, type: string }, { name: anchor, type: string }, { name: id, type: string }, { name: fn, type: "(HookContext) -> ()" }, { name: opts, type: "StageOpts?" }], doc: "adds stage `id` (`<mod>:<name>`) before the anchor; load time only; mode observe (default) or modify" }
+      - { name: insert_after, params: [{ name: name, type: string }, { name: anchor, type: string }, { name: id, type: string }, { name: fn, type: "(HookContext) -> ()" }, { name: opts, type: "StageOpts?" }], doc: "adds stage `id` after the anchor; stages on one anchor run by priority, mod load order, registration" }
+      - { name: replace, params: [{ name: name, type: string }, { name: stage, type: string }, { name: id, type: string }, { name: fn, type: "(HookContext) -> ()" }, { name: opts, type: "StageOpts?" }], doc: "replaces the body of a stage; two replaces of one stage are a load error unless exactly one sets precedence; protected stages need the permission" }
+      - { name: cancel, params: [{ name: name, type: string }, { name: stage, type: string }, { name: opts, type: "StageOpts?" }], doc: "skips a stage (its slot stays, so anchors keep working); protected stages need the permission" }
+      - { name: move, params: [{ name: name, type: string }, { name: stage, type: string }, { name: where, type: MoveTarget }, { name: opts, type: "StageOpts?" }], doc: "moves a stage (with the stages attached to it) before or after another; protected stages need the permission" }
+      - { name: run, params: [{ name: name, type: string }, { name: ctx, type: any }, { name: opts, type: "RunOpts?" }], returns: "RunResult?", doc: "runs the effective order (defining mod only); nil unless another mod's stage ran or something is worth reporting" }
+      - { name: describe, params: [{ name: name, type: string }], returns: "({StageInfo}, PipelineMeta)", doc: "the effective ordered list (cancelled stages included, active=false) with the source mod of every edit" }
+      - { name: order, params: [{ name: name, type: string }], returns: "{string}", doc: "ids of the active stages in run order" }
+engine:
+  - events
+  - storage
+  - dialogue
+  - timers
+  - definitions
+  - rng
+  - num
+  - pipeline
+  - config

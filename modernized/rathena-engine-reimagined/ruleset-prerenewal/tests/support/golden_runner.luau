@@ -2,6 +2,7 @@
 -- Replays golden weapon-attack cases through the Luau pipeline with the recorded RNG draws fed in order and compares
 -- damage, damage2, type, div, flag, dmg_lv and the NUMBER (and kind/bounds) of RNG draws. Stage probes are compared too
 -- but reported separately (diagnostic: they localise a mismatch, they never turn a mismatch into a match).
+import("tests/support/booted") -- CLI only: registers the package with the fake host
 local weapon = import("scripts/damage/weapon")
 local unit = import("scripts/damage/unit")
 local cfg_defaults = import("data/damage_cfg")

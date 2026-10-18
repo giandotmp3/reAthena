@@ -20,6 +20,84 @@ export type HookSpec = {
   draws_main_rng: boolean?,
 }
 
+export type Lane = {
+  get: (Lane) -> number,
+  set: (Lane, number) -> (),
+}
+
+export type StageBodyOpts = {
+  protected: boolean?,
+}
+
+export type StageOpts = {
+  priority: number?,
+  mode: string?,
+  precedence: boolean?,
+  draws_main_rng: boolean?,
+  optional: boolean?,
+}
+
+export type MoveTarget = {
+  before: string?,
+  after: string?,
+}
+
+export type RunOpts = {
+  skip: { [string]: boolean }?,
+  lane: Lane?,
+  view: { [string]: any }?,
+}
+
+export type StageEffect = {
+  kind: string,
+  target: string,
+  payload: string,
+}
+
+export type StageError = {
+  hook: string,
+  kind: string,
+  message: string,
+}
+
+export type RunResult = {
+  cancelled: boolean,
+  cancel_reason: string?,
+  cancelled_by: string?,
+  ran: {string},
+  diagnostics: {string},
+  auto_disabled: {string},
+  effects: {StageEffect},
+  errors: {StageError},
+}
+
+export type StageEdit = {
+  op: string,
+  mod: string,
+  detail: string,
+}
+
+export type StageInfo = {
+  stage: string,
+  kind: string,
+  source: string,
+  body_mod: string,
+  body_id: string,
+  mode: string,
+  active: boolean,
+  has_body: boolean,
+  protected: boolean,
+  priority: number,
+  edits: {StageEdit},
+}
+
+export type PipelineMeta = {
+  name: string,
+  owner: string,
+  generation: number,
+  ignored: {string},
+}
+
 declare class HookContext
   -- current value as a double (exact up to 2^53)
   function get(self): number
@@ -41,6 +119,8 @@ declare class HookContext
   function cancel(self, reason: string)
   -- queue a world effect; applied by native code after the stage settles
   function enqueue(self, kind: string, target: string, payload_json: string?)
+  -- pipeline stages: a fresh read-only copy of the snapshot the ruleset attached to pipeline.run (opts.view); nil if none
+  function view(self): { [string]: any }?
 end
 
 declare class StorageScope
@@ -94,4 +174,50 @@ declare rng: {
   roll: (n: number) -> number,
   -- main stream; rejected under strict_parity
   main: (n: number) -> number,
+}
+
+declare num: {
+  -- the nearest IEEE binary32 value ((double)(float)x); float32 + - * / are num.f32(a op b)
+  f32: (x: number) -> number,
+}
+
+declare config: {
+  -- [ruleset] legacy_quirks of the mod manifest (default true): reproduce legacy defects as-is when true, corrected behaviour when false
+  legacy_quirks: boolean,
+}
+
+declare pipeline: {
+  -- declares a pipeline and its stage order (the defining mod, load time only)
+  define: (name: string, stages: {string}) -> (),
+  -- registers the BODY of a stage of a pipeline this mod defined; fn receives the ctx given to pipeline.run; opts.protected
+  stage: (name: string, stage: string, fn: (any) -> (), opts: StageBodyOpts?) -> (),
+  -- adds stage `id` (`<mod>:<name>`) before the anchor; load time only; mode observe (default) or modify
+  insert_before: (name: string, anchor: string, id: string, fn: (HookContext) -> (), opts: StageOpts?) -> (),
+  -- adds stage `id` after the anchor; stages on one anchor run by priority, mod load order, registration
+  insert_after: (name: string, anchor: string, id: string, fn: (HookContext) -> (), opts: StageOpts?) -> (),
+  -- replaces the body of a stage; two replaces of one stage are a load error unless exactly one sets precedence; protected stages need the permission
+  replace: (name: string, stage: string, id: string, fn: (HookContext) -> (), opts: StageOpts?) -> (),
+  -- skips a stage (its slot stays, so anchors keep working); protected stages need the permission
+  cancel: (name: string, stage: string, opts: StageOpts?) -> (),
+  -- moves a stage (with the stages attached to it) before or after another; protected stages need the permission
+  move: (name: string, stage: string, where: MoveTarget, opts: StageOpts?) -> (),
+  -- runs the effective order (defining mod only); nil unless another mod's stage ran or something is worth reporting
+  run: (name: string, ctx: any, opts: RunOpts?) -> RunResult?,
+  -- the effective ordered list (cancelled stages included, active=false) with the source mod of every edit
+  describe: (name: string) -> ({StageInfo}, PipelineMeta),
+  -- ids of the active stages in run order
+  order: (name: string) -> {string},
+}
+
+-- the table a package's register(engine) receives (a global `engine` exists when the loader asks for it)
+export type Engine = {
+  events: typeof(events),
+  storage: typeof(storage),
+  dialogue: typeof(dialogue),
+  timers: typeof(timers),
+  definitions: typeof(definitions),
+  rng: typeof(rng),
+  num: typeof(num),
+  pipeline: typeof(pipeline),
+  config: typeof(config),
 }
