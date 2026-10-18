@@ -321,3 +321,16 @@ Both rulesets remain P0 as you decided; the sequencing makes pre-renewal the fir
 4. **Dropped for the first milestone (Q-A):** auction and battlegrounds, with the NPC corpus degrading gracefully. Confirm.
 5. **Renewal sub-flags (Q-C):** bundles by default (`ruleset.renewal`, `ruleset.prerenewal`), sub-flags as unsupported-advanced overrides. Confirm.
 6. **Legacy defects (Q-G):** ship as-is behind a `legacy_quirks` flag (default on for parity), fix later? Confirm.
+
+## 16. HITL #2 outcome (recorded 2026-10-18)
+
+The user replied "continue with your own recommendations". That is recorded as **approval of architecture v2 with my recommended answer on each §15 item**:
+
+1. Architecture v2 approved, including the one-binary topology with `--role` and isolated gateway.
+2. Native fast path = `native-defaults` plug-in the ruleset opts into; the generic core stays formula-free. Native damage stages are built only if M0(a) shows pure Luau misses the budget.
+3. Parity: bit-exact for default pipelines under `strict_parity`; third-party hooks use their own RNG streams.
+4. Auction and battlegrounds are out of the first milestone; the NPC corpus degrades gracefully.
+5. Renewal sub-flags: two bundles by default; sub-flags are unsupported advanced overrides.
+6. Legacy defects ship as-is behind a `legacy_quirks` flag (default on).
+
+Open and still needing an operator answer: Q-K (more than one map process in production?), Q-I (use of the 283 never-used commands, `query_sql`, `atcommand`, `setunitdata`), Q-H (`.` variable sharing across `duplicate()` clones), Q-J (event-queue drop contract).
