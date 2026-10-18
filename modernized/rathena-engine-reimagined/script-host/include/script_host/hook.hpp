@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -26,6 +27,8 @@ struct HookSpec {
   Phase phase = Phase::On;
   Mode mode = Mode::Observe;
   bool precedence = false;       // declared precedence for Replace conflicts
+  bool permit_protected = false; // may cancel/replace stages marked protected
+  bool draws_main_rng = false;   // declares use of the main RNG stream (rejected by strict_parity)
   std::uint64_t generation = 0;  // owner (mod, generation)
   std::string qualified() const { return mod + "/" + id; }
 };
@@ -41,7 +44,16 @@ struct HookContext {
   EffectQueue* effects = nullptr; // never applied inside the hook
   std::vector<EntityHandle> inputs;
   std::optional<std::string> cancel_reason;
+  // Set by the bus around each hook call:
+  bool read_only = false;              // Observe hooks may not change `num`
+  const HookSpec* hook = nullptr;      // the hook being run
   void cancel(std::string reason) { cancel_reason = std::move(reason); }
+};
+
+// A hook body failed in a way the host classifies (script error, budget, memory).
+struct HookFailure : std::runtime_error {
+  enum class Kind { Error, Budget, Memory, Permission } kind;
+  HookFailure(Kind k, const std::string& m) : std::runtime_error(m), kind(k) {}
 };
 
 using HookFn = std::function<void(HookContext&)>;

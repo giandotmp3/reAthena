@@ -1,6 +1,7 @@
 #pragma once
 // Ordered effect queue (BR-RULESET-116). Scripts never mutate the world during
 // a calculation; they enqueue effects that native code applies afterwards.
+#include <algorithm>
 #include <functional>
 #include <utility>
 #include <string>
@@ -22,6 +23,18 @@ class EffectQueue {
   bool empty() const { return items_.empty(); }
   const std::vector<Effect>& items() const { return items_; }
   void discard() { items_.clear(); }  // transactional rollback on cancel()
+  // Rolls back to `n` effects (used per dispatch so effects queued by an outer
+  // scope survive a cancel inside this dispatch).
+  void truncate(std::size_t n) { if (n < items_.size()) items_.resize(n); }
+  // Removes and returns the effects queued after the first `n`.
+  std::vector<Effect> take_from(std::size_t n) {
+    std::vector<Effect> out;
+    if (n < items_.size()) {
+      out.assign(std::make_move_iterator(items_.begin() + static_cast<std::ptrdiff_t>(n)), std::make_move_iterator(items_.end()));
+      items_.resize(n);
+    }
+    return out;
+  }
   std::vector<Effect> drain() { return std::exchange(items_, {}); }
 
  private:
