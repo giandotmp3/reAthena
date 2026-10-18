@@ -28,7 +28,7 @@ GOLDEN_SRC=/tmp/fuzz.jsonl.gz python3 -I tools/build_golden.py --force && LUAU=<
   `battle_calc_skill_base_damage` (`p_status p_weapon p_equip p_mastery`) and again after the card fixes and status bonuses (`c_*`), the sum, the ratio,
   the constant addition, RES, the DEF reduction, post-DEF, the element step, the crit multiplier, the target card fix, hands, map rates, final; plus
   the float32 weapon ATK range actually rolled in (`watk_mm`), the final hit rate and crit chance compared with the draw, the DEF values used, the
-  weapon elements. 29 distinct probe names; they fix the stage order of `scripts/pipeline.luau` (`tests/acceptance/weapon_golden_test.luau`).
+  weapon elements. 34 distinct probe names; they fix the stage order of `scripts/pipeline.luau` (`tests/acceptance/weapon_golden_test.luau`).
 * `map.cpp`: `golden_main()` is called after `ScriptHost::run_oninit()` (a no-op unless `RA_GOLDEN_CASES` is set).
 
 Differences from the pre-renewal hook (`golden_hook.inc`, 303 code lines, 261 of them shared with the pre-renewal one):
@@ -49,7 +49,7 @@ ratio / RES / `battle_calc_defense_reduction` (`rules::combat::apply_defense_re`
 x1.4 crit steps, `battle_calc_attack_left_right_hands`, `battle_calc_damage` and `battle_calc_gvg_damage`. Units are built field by field; no `status_calc_*` runs, so
 every number in a case is an explicit input.
 
-## Covered (8,858 cases, 59 categories)
+## Covered (8,858 cases, 65 categories)
 
 PC and mob attackers against PC and mob targets, melee, bow and gun (arrow attack, ammo present or not, cannonball), monsters with a ranged weapon; lucky dodge (flee2), crit
 (chance after target LUK and crit-defense, `critadd_race`, arrow crit), hit rate clamp (and toggled bounds), perfect hit, Vulture's Eye and Weaponry Research, crowd penalties on

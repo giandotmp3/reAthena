@@ -269,7 +269,7 @@ M0 runs **first and gates the design forks**. HITL #2 approval authorizes skelet
 2. **M2 – Script host + mods:** bus, coroutines, budgets, generations/reload, storage, loader, permissions, sandbox suite.
 3. **M3 – Pre-renewal ruleset end to end** (smaller: 1,228 skills, 527 NPC files) with the conformance suite; mob AI; migrator for `db/pre-re`.
 4. **M4 – Legacy NPC runtime** full, migrator full, save migration with dry-run.
-5. **M5 – Renewal ruleset as the architecture proof.** Exit criterion: renewal is mostly data diff plus a handful of stage overrides, with no changes to the engine or `rathena.base` mechanism. If it needs engine changes, they are design bugs to fix first.
+5. **M5 – Renewal ruleset as the architecture proof.** Exit criterion: renewal is mostly data diff plus a handful of stage overrides, with no changes to the engine or `rathena.base` mechanism. If it needs engine changes, they are design bugs to fix first. **[M5 RESULT, 2026-10-18: the second half held (no engine, script-host, mods or base change was needed) and the first half did NOT: see section 21.]**
 6. **M6 – Gateway/accounts/characters** hardening and legacy MySQL import (can run in parallel from M2).
 7. **M7 – Remaining P0 breadth,** then P1 (guilds, mail, web routes).
 
@@ -352,3 +352,20 @@ The legacy script VM runs headless here, and a 138-run comparison against `legac
 - `rathena.base` is versioned `0.1.0`; rulesets depend on `^0.1`, not `^1`. All shipped manifests now declare `engine_api = "^1"` and resolve together.
 - Mutually exclusive rulesets (`conflicts`) may share explicit legacy client ids; lookup takes the set of active mods. Other collisions remain load errors.
 - Signatures are a keyed SHA-256 MAC behind a `SignatureVerifier` seam; public-key verification (Ed25519) is not implemented.
+
+## 21. Renewal as the architecture proof: result (recorded 2026-10-18)
+
+Renewal basic weapon attack, implemented as its own package and validated against the real RENEWAL battle code: 8,858 of 8,858 golden cases match (plus 153,708 fresh-seed fuzz cases and 28 of 28 killed mutants). Measurements are in `modernized/rathena-engine-reimagined/ruleset-renewal/docs/ARCHITECTURE_PROOF.md`.
+
+**What held:** the mechanism is ruleset-agnostic. Renewal needed **zero changes** to `engine-core`, `script-host`, `mods` or `rathena.base`; it uses the same ctx interface and `pipeline.define`. Both packages load through the real resolver, and the resolver refuses them together.
+
+**What did not hold:** "renewal is mostly a data diff plus a few stage overrides." For the weapon pipeline only 34% of the pipeline code is shared with pre-renewal (284 of 824 lines). Of 24 renewal stages, 3 are identical, 9 have the same name with different logic, 10 are new, and none is data-only; 8 of the 14 common stages run in a different order. The data differences (184 of 400 element cells, 2 of 24 size rows, a few constants) sit inside overridden stages.
+
+**Decision:** keep two full, separate ruleset packages, which is what the original vision asked for ("two separate packages instead of the RENEWAL compile flag"). Do not try to factor a common pipeline into `rathena.base`; it can host only about 38 lines of mechanism-level helpers. Shared test support (77%) and tooling (71%) are the real overlap and belong in shared tooling, not in the rulesets. Expressing renewal as a delta over PRE with the mod-facing edit API would take 23 operations (3 `cancel`, 12 `insert_after`, 8 `replace`), which is possible but not a simplification.
+
+**Design findings to act on:**
+1. The pipeline API has no call to register stage bodies (each ruleset runs its own loop) and no `move` operation.
+2. float32 needs a native `num.f32` (28 lines of workaround in the package today).
+3. `legacy_quirks` is read by nothing; two legacy defects ship unconditionally: the doubled monster crit multiplier and the `weapon_damage_rate[16]` aliasing (`pc.hpp:577`).
+4. Three latent gaps in the PRE package that PRE goldens never exercise: no `weapon_damage_rate`, no monster ranged flag, no Weaponry Research hit bonus.
+5. BR_RULESET corrections (RE order of target cards, crit, RES, weapon roll draws): `ruleset-renewal/docs/BR_RULESET_CORRECTIONS.md`.

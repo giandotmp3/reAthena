@@ -25,7 +25,7 @@ parts, P.ATK, RES, a float32 weapon roll, element per part, cards per part, crit
 * `scripts/damage/fp.luau` (28 lines): IEEE helpers for the places where the legacy code computes in `float` (weapon ATK variance, P.ATK and crit rate conversions, RES narrowing, the crit multiplier).
 * `scripts/formulas.luau`: the entry points `res_reduction`, `crit_damage`, `weapon_atk_range` (backed by the same code as the stages); the formulas without golden data still raise `NotImplemented`.
 * `conformance/golden_gen/` + `conformance/golden/weapon_re.jsonl.gz`: the renewal golden generator and its 8,858 recorded cases (README there).
-* `tests/`: Luau suite (111 tests), Python wrapper (49 tests), `tools/`: bundler, lint, `diff_report.py`, `mutation_check.py`, `trace_case.sh`.
+* `tests/`: Luau suite (111 tests), Python wrapper (50 tests), `tools/`: bundler, lint, `diff_report.py`, `mutation_check.py`, `trace_case.sh`.
 
 ## 3. Validation
 
@@ -36,9 +36,9 @@ parts, P.ATK, RES, a float32 weapon roll, element per part, cards per part, crit
 | Fresh-seed fuzz (`--seed N --scale 3`, 6 seeds, never committed) | 6 x 25,618 = 153,708 cases, 0 mismatches |
 | Reproducible generator | `build.sh` from scratch + `gen_cases.py` produced a byte-identical `weapon_re.jsonl.gz` |
 | Mutation check (`tools/mutation_check.py`) | 28 single-expression mutants, all killed (from 1 to 6,681 cases differ); the float32 evaluation of the weapon ATK range is an *equivalent* mutant (verified: float32 and double truncate identically for every weapon ATK 1..400, refine 0..60, level 1..4, stat 1..130) |
-| Three mutation survivors found on the way | stage order crit-vs-element, ratio-vs-crit-rate and mastery-vs-P.ATK was not pinned by the first 8,308 cases; 550 interaction cases were added (`rates_with_ratio`, `element_mob_crit`, `element_pc_crit`, `status_atk_cap`, `cards_mastery_status`) and the mutants now die |
+| Mutation survivors found on the way | four non-equivalent mutants survived the first 8,308 cases (stage order crit-vs-element and ratio-vs-crit-rate, the ATK% 65535 cap, the element step of the mastery card fix); 550 interaction cases were added (`rates_with_ratio`, `element_mob_crit`, `element_pc_crit`, `status_atk_cap`, `cards_mastery_status`) and the mutants now die |
 | Worked examples of BR_RULESET section 7 (renewal branches) | E-1 RE 1650, E-2 840 / 912, E-3 1380, E-9 [120, 160], crit 1400 / 1770: reproduced by the **legacy code** and by the Luau pipeline |
-| Speed | replay of the 8,858 cases 0.37 s (42 us per case including comparison); 26.8 us per attack in the pure-Luau fake ctx |
+| Speed | replay of the 8,858 cases about 0.4 s (about 45 us per case including the comparison); about 25 us per attack in the pure-Luau fake ctx |
 
 ## 4. (a) How much is identical to pre-renewal
 
@@ -53,8 +53,8 @@ From `PIPELINE_DIFF.md` (difflib matching lines of non-blank, non-comment lines)
 | tools | 4 | 163 | 147 | 105 | 71 % |
 | golden generator | 6 | 808 | 1000 | 595 | 60 % |
 
-Functions of `weapon.luau` (same-name comparison): 19 identical (96 lines), 11 with different logic (204 lines), 35 only in renewal (394 lines, of which 22 are the stage bodies that
-pre-renewal keeps inline in `calc_attack`), 11 only in pre-renewal (140 lines). About 55 of the 394 renewal-only lines are features that also exist in the legacy *pre-renewal* code path but
+Functions of `weapon.luau` (same-name comparison): 19 identical (96 lines), 11 with different logic (204 lines), 35 only in renewal (394 lines, of which 24 functions / 238 lines are the stage bodies that
+pre-renewal keeps inline in `calc_attack`, a 96-line function), 11 only in pre-renewal (140 lines). About 50 of the 394 renewal-only lines are features that also exist in the legacy *pre-renewal* code path but
 that the pre-renewal package does not implement (mastery ATK, `weapon_damage_rate`, monster ranged flag, Weaponry Research hit bonus, `arrow_ele`, `damagetaken`): the renewal package covers a wider
 input space, so its sharing percentage is slightly pessimistic; adding those to pre-renewal would move it to about 40 %, not to "mostly".
 
@@ -93,7 +93,7 @@ derived as forbidden names (`mods_tool check-base --ruleset ruleset-renewal --ru
 3. **float32 is not in the ctx.** The host has the lane method `f32_step(factor)` (one `(int64)((float)v * (float)factor)` step). Renewal needs seven other float32 operations (variance, base-stat bonus,
    `(float)` of a divided integer for P.ATK and crit rate, the RES narrowing to float, the float32 multiplier itself). They are written in 28 lines in `scripts/damage/fp.luau` with pure arithmetic.
    `fp.f32` (round to binary32) is exactly the primitive a `num.f32(x)` in script-host / rathena.base would provide.
-4. **`legacy_quirks` is declared in the manifest but no code reads it.** Two reproduced defects ship unconditionally: the doubled monster crit multiplier (x14/10 in the base damage, x1.4 after DEF; `battle.cpp:2636`, `5686`) and the
+4. **`legacy_quirks` is declared in the manifest but no code reads it.** Two reproduced defects ship unconditionally: the doubled monster crit multiplier (x14/10 in the base damage, x1.4 after DEF; `battle.cpp:2635`, `5679-5683`) and the
    `weapon_damage_rate[16]` array indexed by weapon type up to 23 (`pc.hpp:577`: gun types read `arrow_addele[type-16]`). The ruleset needs the flag in its `cfg`.
 5. **Shared code is not a base-package question yet.** See section 8.
 
@@ -132,6 +132,6 @@ reflect / absorb / devotion, PK and battleground rates, `ksprotection`, item scr
     conformance/golden_gen/build.sh $SCRATCH/golden-re                    # ~5 min, renewal build of a copy of the tree
     python3 -I conformance/golden_gen/gen_cases.py --server $SCRATCH/golden-re/rA --dump $SCRATCH/dump.txt
     LUAU=<luau> python3 -I tools/run_tests.py [--report | --bench]       # Luau suite, 111 tests
-    LUAU=<luau> python3 -m unittest discover -s tests                     # Python wrapper, 49 tests
+    LUAU=<luau> python3 -m unittest discover -s tests                     # Python wrapper, 50 tests
     LUAU=<luau> python3 -I tools/mutation_check.py                        # 28 mutants
     python3 -I tools/diff_report.py                                       # regenerates PIPELINE_DIFF.md / pipeline_diff.json
