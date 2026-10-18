@@ -1,4 +1,4 @@
---!strict-compatible
+--!nonstrict
 -- PROVISIONAL starter statuses (named fields replace val1..val4; BR-RULESET-051/065).
 local c = import("scripts/contrib")
 local P = "ruleset.prerenewal:status/"

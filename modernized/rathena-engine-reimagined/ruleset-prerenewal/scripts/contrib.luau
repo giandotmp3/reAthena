@@ -1,4 +1,4 @@
---!strict-compatible
+--!nonstrict
 -- Declarative stat-contribution constructors (architecture 6.5). Aggregation order
 -- per attribute is owned by the engine `attrs` module; this package only declares.
 local M = {}

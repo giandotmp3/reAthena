@@ -1,4 +1,4 @@
---!strict-compatible
+--!nonstrict
 -- PROVISIONAL partial tables; replaced by rathena-migrate output.
 return {
 	-- attack element -> defender element -> level-1 percent (fragment only)

@@ -1,4 +1,4 @@
---!strict-compatible
+--!nonstrict
 -- Test entry. Run by tools/run_tests.py locally and by rathena-sim in CI.
 -- Returns a process exit code (0 = success).
 local T = import("tests/support/harness")

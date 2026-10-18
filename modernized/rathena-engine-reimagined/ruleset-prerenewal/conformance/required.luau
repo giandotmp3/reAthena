@@ -1,4 +1,4 @@
---!strict-compatible
+--!nonstrict
 -- Rule IDs assigned to ruleset-prerenewal: BR-RULESET rules marked PRE or B
 -- (RE-only rules 009, 010, 011, 019, 025, 034, 054 excluded), plus the
 -- ruleset-side contract rules 111, 112, 116-119. Rules 113-115 belong to

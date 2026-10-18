@@ -1,4 +1,4 @@
---!strict-compatible
+--!nonstrict
 -- Minimal test harness. Statuses: PASS, FAIL, XFAIL (expected failure observed),
 -- XPASS (expected failure that passed: counts as a failure, remove the marker).
 local T = {}

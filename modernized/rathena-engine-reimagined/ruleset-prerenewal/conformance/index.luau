@@ -1,4 +1,4 @@
---!strict-compatible
+--!nonstrict
 -- BR-RULESET-119: conformance suite index, keyed by BR-RULESET ID.
 local M = {}
 

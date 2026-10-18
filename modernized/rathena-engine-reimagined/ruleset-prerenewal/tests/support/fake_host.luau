@@ -1,4 +1,4 @@
---!strict-compatible
+--!nonstrict
 -- Recording fake of the engine API used by package registration tests.
 return function()
 	local log = { pipelines = {}, status = {}, skill = {}, item = {}, native = {} }

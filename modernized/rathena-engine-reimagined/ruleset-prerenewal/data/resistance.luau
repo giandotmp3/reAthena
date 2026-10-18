@@ -1,4 +1,4 @@
---!strict-compatible
+--!nonstrict
 -- PRE resistance descriptors (BR-RULESET-053). Stat names only, formulas live in scripts.
 -- PROVISIONAL starter set; migrator supplies the full table.
 return {

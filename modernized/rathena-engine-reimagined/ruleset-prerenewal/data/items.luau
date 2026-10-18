@@ -1,4 +1,4 @@
---!strict-compatible
+--!nonstrict
 -- PROVISIONAL starter items. equip_bonus is a compiled bonus-delta list (BR-RULESET-112),
 -- never live memory writes. Critical is scaled x10 (BR-RULESET-100).
 local P = "ruleset.prerenewal:item/"

@@ -1,4 +1,4 @@
---!strict-compatible
+--!nonstrict
 -- BR-RULESET-118: ruleset package manifest. Values mirror mod.toml [ruleset].
 -- Battle-config defaults are the documented conf/battle tunables, as data.
 local M = {}

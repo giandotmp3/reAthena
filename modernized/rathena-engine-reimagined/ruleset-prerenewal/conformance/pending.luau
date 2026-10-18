@@ -1,4 +1,4 @@
---!strict-compatible
+--!nonstrict
 -- Rule IDs whose acceptance tests are expected-failure (not yet implemented).
 -- Remove an ID here when its rule function lands; an XPASS fails the run.
 return {

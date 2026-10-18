@@ -1,4 +1,4 @@
---!strict-compatible
+--!nonstrict
 -- Acceptance tests for group 'skill', one per BR-RULESET rule, tagged with the rule ID.
 -- Rules listed in conformance/pending.luau are expected-failure (strict: XPASS fails the run).
 local T = import("tests/support/harness")

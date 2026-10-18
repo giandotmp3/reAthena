@@ -1,4 +1,4 @@
---!strict-compatible
+--!nonstrict
 -- Domain model validators for ruleset definitions. Pure functions, no engine calls.
 local M = {}
 

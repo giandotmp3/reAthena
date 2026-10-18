@@ -1,4 +1,4 @@
---!strict-compatible
+--!nonstrict
 -- PROVISIONAL starter skills; per-level arrays follow BR-RULESET-078 shape.
 -- Hooks reference formulas by name so behavior stays in scripts/rules.
 local P = "ruleset.prerenewal:skill/"

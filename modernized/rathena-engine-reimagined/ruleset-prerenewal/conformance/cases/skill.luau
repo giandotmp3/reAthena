@@ -1,4 +1,4 @@
---!strict-compatible
+--!nonstrict
 -- Conformance cases for group 'skill'. One entry per assigned BR-RULESET rule.
 -- expected == nil means the expected value must still be captured from a
 -- RATHENA_GOLDEN_TRACE recording (see conformance/golden/README.md); such a case

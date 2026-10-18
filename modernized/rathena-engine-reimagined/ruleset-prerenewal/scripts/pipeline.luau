@@ -1,4 +1,4 @@
---!strict-compatible
+--!nonstrict
 -- Pre-renewal pipeline stage order (BR-RULESET-018 weapon, BR-RULESET-044 magic).
 -- Order is registered per ruleset because pre-renewal and renewal differ in order,
 -- not only in constants. Stage bodies are native-defaults stages or Luau references

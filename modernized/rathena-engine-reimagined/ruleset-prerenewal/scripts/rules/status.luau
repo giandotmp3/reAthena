@@ -1,4 +1,4 @@
---!strict-compatible
+--!nonstrict
 -- Rule functions for group 'status'. Each rNNN takes the case `given` table and returns
 -- the outcome table. Unimplemented rules raise NOT_IMPLEMENTED (expected-failure
 -- acceptance tests, tagged with the rule ID, track them).

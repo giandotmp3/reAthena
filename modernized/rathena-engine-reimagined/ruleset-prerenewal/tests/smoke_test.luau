@@ -1,4 +1,4 @@
---!strict-compatible
+--!nonstrict
 -- Non-rule smoke tests: package registration and domain validators.
 local T = import("tests/support/harness")
 local fake = import("tests/support/fake_host")

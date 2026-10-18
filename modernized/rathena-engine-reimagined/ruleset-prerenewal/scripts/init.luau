@@ -1,4 +1,4 @@
---!strict-compatible
+--!nonstrict
 -- Package entry point. The mod loader calls register(engine) once per generation.
 -- `engine` is the typed API from api/*.yaml (pipeline, status, skill, item).
 local M = {}
