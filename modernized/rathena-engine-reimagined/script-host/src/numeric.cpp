@@ -6,7 +6,10 @@
 namespace script_host {
 
 namespace {
-using i128 = __int128;
+#ifndef __SIZEOF_INT128__
+#error "numeric.cpp needs a 128-bit integer (GCC/Clang); a portable fallback is not implemented"
+#endif
+__extension__ typedef __int128 i128;
 std::int64_t narrow(i128 v, const char* what) {
   if (v > std::numeric_limits<std::int64_t>::max() || v < std::numeric_limits<std::int64_t>::min())
     throw std::overflow_error(std::string("int64 overflow in ") + what);

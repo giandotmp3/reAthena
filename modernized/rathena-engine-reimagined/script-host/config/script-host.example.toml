@@ -12,7 +12,7 @@ strike_window_ticks       = 3000     # 60 s at 20 ms
 
 [memory]
 default_mod_cap_bytes     = 33554432 # 32 MiB per mod
-accounting                = "allocator_tags"   # fallback: "per_mod_state"
+accounting                = "per_mod_state"    # one lua_State + limiting allocator per mod (M0(c))
 
 [dialogue]
 idle_timeout_ms           = 300000

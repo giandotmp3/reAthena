@@ -17,7 +17,9 @@ local T = {}
 
 -- core VM operations that the legacy side does not record either (they are compiled to jumps / locals there)
 local SKIP = { set = true, setr = true, jump_zero = true, ["goto"] = true, callsub = true, callfunc = true, ["return"] = true,
-	getarg = true, getargcount = true, ["end"] = true }
+	getarg = true, getargcount = true, ["end"] = true, getelementofarray = true }
+-- commands that block: the legacy hook records them when they are called, before the client answers
+local PRE = { next = true, close2 = true, sleep = true, sleep2 = true }
 
 local function fmtStr(s: string): string
 	local out = { '"' }
@@ -101,8 +103,16 @@ local function traced(cmdTable)
 				local n = select("#", ...)
 				local args = table.pack(...)
 				local ok, r
+				local lineIdx
+				if PRE[name] then lineIdx = #st.replayOut + 1; st.replayOut[lineIdx] = name .. "(" .. table.concat((function() local t = {} for i = 1, n do t[i] = fmtVal(args[i]) end return t end)(), ",") .. ")" end
 				if name == "rand" then
 					ok, r = true, scriptedRand(st.env, ...)
+				elseif name == "gettime" then
+					local a = ...
+					ok, r = true, (a >= 1 and a <= 8) and ({ 56, 34, 12, 0, 18, 10, 2026, 291 })[a] or -1
+				elseif name == "gettimetick" then
+					local a = ...
+					ok, r = true, a == 0 and 1000000 or a == 1 and 1792326896 or a == 2 and 45296 or 0
 				else
 					ok, r = pcall(h, st, ...)
 				end
@@ -110,7 +120,7 @@ local function traced(cmdTable)
 				for i = 1, n do parts[i] = fmtVal(args[i]) end
 				local line = name .. "(" .. table.concat(parts, ",") .. ")"
 				if ok and r ~= nil and type(r) ~= "table" then line ..= " -> " .. fmtVal(r) end
-				st.replayOut[#st.replayOut + 1] = line
+				if not lineIdx then st.replayOut[#st.replayOut + 1] = line end
 				if not ok then error(r, 0) end
 				return r
 			end
@@ -164,9 +174,9 @@ local PARAMS = { "zeny", "baselevel", "joblevel", "class", "statuspoint", "skill
 
 local function newPlayer(cfg, map)
 	local p = W.newPlayer("poor")
-	p.name = cfg.name or "Tester"; p.party = ""; p.guild = ""; p.map = map
+	p.name = cfg.name or "Tester"; p.party = ""; p.guild = ""; p.map = (map == "-") and "prontera" or map
 	for k in p.params do p.params[k] = 0 end
-	p.params.baselevel = 1; p.params.joblevel = 1; p.params.sex = 1
+	p.params.baselevel = 1; p.params.joblevel = 1; p.params.sex = 1; p.params.maxweight = 20000 -- as the legacy synthetic player
 	for _, k in PARAMS do if cfg[k] then p.params[k] = cfg[k] end end
 	if cfg.sex then p.params.sex = cfg.sex end
 	p.defaultItemCount = 0
@@ -196,6 +206,7 @@ function T.loadNpc(path: string, npcName: string)
 			if not prog then return nil, "lower:" .. tostring(lerr.cause) end
 			prog.baseLine = C.ds.lineof(text, d.pos)
 			local map = string.match(d.w1 or "", "^([^,]*)") or "prontera"
+			
 			return prog, map
 		end
 	end
@@ -216,7 +227,7 @@ function T.runCase(case)
 	local env = W.newEnv(registry.funcs, 12345)
 	local npcVars = {}
 	env.npcvars[prog.name] = npcVars
-	local npc = { vars = npcVars, name = prog.name, map = map }
+	local npc = { vars = npcVars, name = prog.name, map = (map == "-") and "" or map }
 	local function mkState(player, out)
 		local st = I.newState{ player = player, env = env, npc = npc, commands = TRACED_EXT, unsupported = softHandler,
 			counts = {}, limit = 500000, glimit = 2048 }
@@ -241,7 +252,9 @@ function T.runCase(case)
 	local before = snapshot(player, npcVars, env)
 	local lines = {}
 	local st = mkState(player, lines)
-	local co = I.spawn(st, prog, 1, {})
+	local entry = 1
+	if case.label then entry = prog.labels[string.lower(case.label)]; if not entry then return { "#end label-not-found" }, nil, prog end end
+	local co = I.spawn(st, prog, entry, {})
 	local answers = case.answers or {}
 	local ai = 0
 	local cap = case.cap or 60

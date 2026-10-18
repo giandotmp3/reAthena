@@ -2,6 +2,7 @@
 // Tiny dependency-free test harness with rule-ID tags and strict expected-failure.
 //   TEST(rule, name)     must pass
 //   PENDING(rule, name)  expected failure until the rule is implemented; XPASS fails the run
+//   LUAU_TEST / LUAU_PENDING  same, but reported SKIP (not pass/fail) when the build has no Luau VM
 #include <cstdio>
 #include <cstring>
 #include <functional>
@@ -29,6 +30,15 @@ struct Reg {
 struct Failure : std::runtime_error {
   using std::runtime_error::runtime_error;
 };
+// Thrown by tests that need a capability the build lacks; counted as skipped.
+struct Skip : std::runtime_error {
+  using std::runtime_error::runtime_error;
+};
+inline void require_luau() {
+#ifndef SCRIPT_HOST_WITH_LUAU
+  throw Skip("Luau VM not linked (set LUAU_ROOT / RATHENA_LUAU_ROOT and rebuild)");
+#endif
+}
 
 template <class A, class B>
 void check_eq(const A& a, const B& b, const char* ea, const char* eb, const char* file, int line) {
@@ -43,13 +53,17 @@ inline int run(int argc, char** argv) {
   std::string tag;
   for (int i = 1; i + 1 < argc; ++i)
     if (!std::strcmp(argv[i], "--tag")) tag = argv[i + 1];
-  int pass = 0, xfail = 0, fail = 0;
+  int pass = 0, xfail = 0, fail = 0, skipped = 0;
   for (auto& c : cases()) {
     if (!tag.empty() && c.rule != tag) continue;
     bool ok = true;
     std::string why;
     try {
       c.fn();
+    } catch (const Skip& e) {
+      ++skipped;
+      std::printf("[ SKIP  ] %s %s: %s\n", c.rule.c_str(), c.name.c_str(), e.what());
+      continue;
     } catch (const std::exception& e) {
       ok = false;
       why = e.what();
@@ -59,7 +73,7 @@ inline int run(int argc, char** argv) {
     else if (!ok) { ++xfail; std::printf("[ XFAIL ] %s %s\n", c.rule.c_str(), c.name.c_str()); }
     else { ++fail; std::printf("[ XPASS ] %s %s: remove PENDING marker\n", c.rule.c_str(), c.name.c_str()); }
   }
-  std::printf("%d passed, %d expected-failures, %d unexpected\n", pass, xfail, fail);
+  std::printf("%d passed, %d expected-failures, %d unexpected, %d skipped\n", pass, xfail, fail, skipped);
   return fail == 0 ? 0 : 1;
 }
 
@@ -73,6 +87,15 @@ inline int run(int argc, char** argv) {
   static void MT_CAT(mt_fn_, __LINE__)()
 #define TEST(rule, name) MT_DEF(rule, name, false)
 #define PENDING(rule, name) MT_DEF(rule, name, true)
+// Luau-dependent variants: the body is wrapped so a build without the VM skips it.
+#define MT_DEF_L(rule, name, pending)                                                                  \
+  static void MT_CAT(mt_body_, __LINE__)();                                                            \
+  static void MT_CAT(mt_fn_, __LINE__)() { mt::require_luau(); MT_CAT(mt_body_, __LINE__)(); }         \
+  static mt::Reg MT_CAT(mt_reg_, __LINE__)(rule, name, pending, &MT_CAT(mt_fn_, __LINE__));           \
+  static void MT_CAT(mt_body_, __LINE__)()
+#define LUAU_TEST(rule, name) MT_DEF_L(rule, name, false)
+#define LUAU_PENDING(rule, name) MT_DEF_L(rule, name, true)
 #define CHECK_EQ(a, b) mt::check_eq((a), (b), #a, #b, __FILE__, __LINE__)
+#define CHECK_MSG(c, msg) do { if (!(c)) throw mt::Failure(std::string(__FILE__) + ":" + std::to_string(__LINE__) + ": CHECK(" #c ") " + std::string(msg)); } while (0)
 #define CHECK(c) do { if (!(c)) throw mt::Failure(std::string(__FILE__) + ":" + std::to_string(__LINE__) + ": CHECK(" #c ")"); } while (0)
 #define CHECK_THROWS(expr) do { bool t_ = false; try { (void)(expr); } catch (...) { t_ = true; } if (!t_) throw mt::Failure(std::string(__FILE__) + ":" + std::to_string(__LINE__) + ": expected throw: " #expr); } while (0)

@@ -27,10 +27,10 @@ The generic core (`engine-core`, `netproto`, `persistence`, `gateway`, `script-h
 
 | Unit | Stack | Responsibility | Tests: pass / expected-failure |
 |---|---|---|---|
-| `engine-core/` | C++20, CMake | ECS, attrs, grid, A*, tick/timers, movement hooks, instances | 13 / 30 |
+| `engine-core/` | C++20, CMake | ECS, attrs, grid, A* (differentially tested vs legacy), tick/timers, movement hooks, instances. **Implemented** | 72 / 0 |
 | `native-defaults/` | C++20 + Luau refs | Opt-in named native stages, default mob AI, differential tests | 16 / 26 |
 | `netproto/` | C++20 + YAML spec + codegen | Packet spec, generated codecs, gating, obfuscation, fuzz targets | 40 / 12 |
-| `script-host/` | C++20 + Luau (M0 host in `tooling/m0` is the seed) | VM, bus, coroutines, budgets, reload generations, storage API, `.d.luau` generation | 9 / 41 |
+| `script-host/` | C++20 + Luau 0.690 (`RATHENA_LUAU_ROOT`) | Per-mod states, bus, coroutines, budgets, reload generations, storage, numerics, `.d.luau` generation. **Implemented** (54 tests skip without Luau) | 136 / 1 |
 | `persistence/` | C++20 + GoogleTest | Generic records and KV, write-behind, WAL, id_map, quotas | 7 / 34 skipped |
 | `gateway/` | C++20 | Login, tickets, char-select plumbing, seams, `--role` | 25 / 68 |
 | `mods/` | C++20 + `base/` Luau | Loader, manifest, permissions, ID registry, `rathena.base` | 10 / 36 |
@@ -39,7 +39,7 @@ The generic core (`engine-core`, `netproto`, `persistence`, `gateway`, `script-h
 | `legacy-npc/` | C++20 + Luau | `.txt` parser, AST, Luau-hosted interpreter, `legacy.*` commands | 16 / 18 |
 | `tooling/` | C++20 | `rathena-sim`, `rathena-migrate`, `rathena-migrate-saves`, `rathena-pack`, M0 benchmarks | 17 / 21 |
 
-**Totals: 178 passing, 411 expected-failure or skipped, 0 failing, 0 unexpected passes.** An expected-failure test that starts passing fails the run, so the pending set can only shrink deliberately. Pending tests are tagged with their rule ID.
+**Totals (after engine-core and script-host were implemented): 178 - 13 - 9 + 72 + 136 = 364 passing, 411 - 30 - 41 + 1 = 341 expected-failure or skipped, 0 failing, 0 unexpected passes.** An expected-failure test that starts passing fails the run, so the pending set can only shrink deliberately. Pending tests are tagged with their rule ID.
 
 ## How to run tests
 
@@ -63,7 +63,9 @@ Real Luau 0.690; code in `tooling/m0/`, report `analysis/rathena/M0_RESULTS.md`.
 - **Numerics:** `ctx` int64/f32 methods reproduce 17/17 worked examples. Ruleset code must not use `//` or `/` on signed values (Luau floors, legacy truncates); add the lint when `ruleset-*` packages are implemented.
 - **Still unmeasured:** real PRE/RE pipelines against golden traces, cross-state call cost, reload with live coroutines, the compact AST cache.
 
-Next work, in order: (1) legacy-VM record/replay harness (precondition for the NPC layer); (2) `script-host` implemented with the M0 host as its starting point; (3) `engine-core` and `netproto` implementation behind their pending tests; (4) `rathena-migrate` for `db/pre-re`, then pre-renewal pipeline vs golden traces; (5) renewal as the architecture proof.
+Done since M0: `engine-core` (all 30 pending tests; 2 test expectations corrected against legacy, see git log) and `script-host` (40 of 41; not done: per-tick degradation, slow-hook log, mod kill switch, cross-mod `exports`/`import`, lazy entity handles).
+
+Next work, in order: (1) legacy-VM record/replay harness (precondition for the NPC layer; in progress under `tooling/m0/replay/`); (2) `netproto` implementation behind its pending tests; (4) `rathena-migrate` for `db/pre-re`, then pre-renewal pipeline vs golden traces; (5) renewal as the architecture proof.
 
 ## Decisions in force (HITL #1 and #2)
 

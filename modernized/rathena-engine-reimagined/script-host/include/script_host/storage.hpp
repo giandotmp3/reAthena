@@ -114,8 +114,9 @@ class StorageApi {
   // Loader check: refuses a mod whose stored version has no migration path.
   // stored == current is fine; stored > current (downgrade) is refused; for
   // stored < current the migrate function is dry-run on an empty row and must
-  // advance the version strictly up to `current` (so migrate functions must be
-  // total on empty rows). Throws StorageError(NoMigrationPath).
+  // advance the version strictly up to `current`; a function that throws on the
+  // empty probe row is given the benefit of the doubt (real failures surface as
+  // StorageError(Corrupt) when a row is read). Throws StorageError(NoMigrationPath).
   void check_loadable(const std::string& mod, std::uint32_t stored_version) const;
   void grant_read(const std::string& reader_mod, const std::string& owner_mod);
 

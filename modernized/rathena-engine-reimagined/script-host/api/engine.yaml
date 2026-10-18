@@ -1,18 +1,52 @@
-# Typed API schema: single source for C++ bindings and engine.d.luau.
-# Generated files are never edited by hand.
+# Typed API schema: single source for C++ binding tables and engine.d.luau.
+# Generated files are never edited by hand: run the `generate_api` CMake target
+# (or `gen_api api/engine.yaml --luau api/engine.d.luau`) after editing.
 api_version: 1
+types:
+  Character: { opaque: true }
+  Account: { opaque: true }
+  HookSpec:
+    fields:
+      - { name: id, type: string }
+      - { name: priority, type: "number?" }
+      - { name: after, type: "{string}?" }
+      - { name: before, type: "{string}?" }
+      - { name: phase, type: "string?" }
+      - { name: mode, type: "string?" }
+      - { name: category, type: "string?" }
+      - { name: precedence, type: "boolean?" }
+      - { name: draws_main_rng, type: "boolean?" }
+  HookContext:
+    methods:
+      - { name: get,      returns: number, doc: "current value as a double (exact up to 2^53)" }
+      - { name: get_str,  returns: string, doc: "current value as an exact int64 decimal string" }
+      - { name: set,      params: [{ name: v, type: number }] }
+      - { name: add,      params: [{ name: d, type: number }] }
+      - { name: sub,      params: [{ name: d, type: number }] }
+      - { name: mul,      params: [{ name: m, type: number }] }
+      - { name: mul_pct,  params: [{ name: pct, type: number }], doc: "v = v * pct / 100 in int64, truncating" }
+      - { name: idiv,     params: [{ name: d, type: number }], doc: "truncating toward zero, unlike Luau //" }
+      - { name: f32_step, params: [{ name: factor, type: number }], doc: "v = (int64)((float)v * (float)factor)" }
+      - { name: min1,     doc: "v = max(v, 1)" }
+      - { name: cancel,   params: [{ name: reason, type: string }], doc: "pre hooks only; discards this dispatch's queued effects" }
+      - { name: enqueue,  params: [{ name: kind, type: string }, { name: target, type: string }, { name: payload_json, type: "string?" }], doc: "queue a world effect; applied by native code after the stage settles" }
+  StorageScope:
+    methods:
+      - { name: get,  params: [{ name: key, type: string }], returns: any }
+      - { name: set,  params: [{ name: key, type: string }, { name: value, type: any }], doc: "nil erases the key" }
+      - { name: keys, returns: "{string}" }
+      - { name: mod,  params: [{ name: mod_id, type: string }], returns: StorageScope, doc: "read another mod's namespace (needs storage.read:<mod>)" }
 namespaces:
   storage:
     functions:
-      - name: character
-        params: [{ name: ch, type: Character }]
-        returns: StorageScope
-      - name: account
-        params: [{ name: acc, type: Account }]
-        returns: StorageScope
-      - name: world
-        params: []
-        returns: StorageScope
+      - { name: character, params: [{ name: ch, type: "Character | string | number" }], returns: StorageScope }
+      - { name: account,   params: [{ name: acc, type: "Account | string | number" }], returns: StorageScope, doc: "needs the storage.account permission" }
+      - { name: world,     returns: StorageScope }
+      - name: migrate
+        params:
+          - { name: current_version, type: number }
+          - { name: fn, type: "(number, any) -> (number, any)" }
+        doc: "fn(from_version, value) returns new_version, new_value; chained until current_version"
   events:
     functions:
       - name: on
@@ -20,17 +54,21 @@ namespaces:
           - { name: event, type: string }
           - { name: spec, type: HookSpec }
           - { name: fn, type: "(HookContext) -> ()" }
-        returns: "()"
+        doc: "only while the mod chunk loads"
   dialogue:
+    also_global: true
     functions:
-      - { name: say,    params: [{ name: text, type: string }], returns: "()" }
-      - { name: choose, params: [{ name: options, type: "{string}" }], returns: number }
+      - { name: say,    params: [{ name: text, type: string }] }
+      - { name: choose, params: [{ name: options, type: "{string}" }], returns: number, doc: "returns the 1-based index the client picked" }
       - { name: input,  params: [{ name: prompt, type: string }], returns: string }
-      - { name: wait,   params: [{ name: ms, type: number }], returns: "()" }
-types:
-  HookContext:
-    methods:
-      - { name: cancel,  params: [{ name: reason, type: string }], returns: "()" }
-      - { name: mul_pct, params: [{ name: pct, type: number }], returns: "()" }
-      - { name: idiv,    params: [{ name: d, type: number }], returns: "()" }
-      - { name: f32_step, params: [{ name: factor, type: number }], returns: "()" }
+      - { name: wait,   params: [{ name: ms, type: number }], doc: "resumes on a timer, not a packet" }
+  timers:
+    functions:
+      - { name: after, params: [{ name: ms, type: number }, { name: fn, type: "() -> ()" }], doc: "owned by (mod, generation); cancelled on reload" }
+  definitions:
+    functions:
+      - { name: declare, params: [{ name: id, type: string }, { name: fields, type: "{string}" }], doc: "declares a definition shape; a change at reload needs a restart" }
+  rng:
+    functions:
+      - { name: roll, params: [{ name: n, type: number }], returns: number, doc: "this hook's own derived stream, 0..n-1" }
+      - { name: main, params: [{ name: n, type: number }], returns: number, doc: "main stream; rejected under strict_parity" }

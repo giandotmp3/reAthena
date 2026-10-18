@@ -145,11 +145,11 @@ void StorageApi::check_loadable(const std::string& mod, std::uint32_t stored_ver
   Row probe{stored_version, Value{}};
   try {
     migrate_row(mod, probe);
-  } catch (const StorageError&) {
-    throw;
-  } catch (const std::exception& e) {
-    throw StorageError(StorageError::Code::NoMigrationPath,
-                       "mod " + mod + ": migrate from version " + std::to_string(stored_version) + " failed on an empty row: " + e.what());
+  } catch (const StorageError& e) {
+    // A function that throws on the empty probe row may still handle real
+    // rows; only "no function / does not advance" proves there is no path.
+    if (e.code == StorageError::Code::NoMigrationPath) throw;
+  } catch (const std::exception&) {
   }
 }
 

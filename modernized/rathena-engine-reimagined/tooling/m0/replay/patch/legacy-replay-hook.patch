@@ -1,0 +1,464 @@
+--- a/src/map/script.cpp
++++ b/src/map/script.cpp
+@@ -10,6 +10,7 @@
+ #include "script.hpp"
+ 
+ #include <cerrno>
++#include <string>
+ #include <cmath>
+ #include <csetjmp>
+ #include <cstdlib> // atoi, strtol, strtoll, exit
+@@ -4085,10 +4086,18 @@
+ }
+ 
+ 
++// replay hook (tooling/m0/replay): see replay_hook.inc
++static bool g_replay_on = false;
++static bool replay_pre( struct script_state* st, int32 func, std::string& line );
++static void replay_post( struct script_state* st, int32 func, int32 rc, const std::string& line );
++
+ /// Executes a buildin command.
+ /// Stack: C_NAME(<command>) C_ARG <arg0> <arg1> ... <argN>
+ int32 run_func(struct script_state *st)
+ {
++	std::string replay_line;
++	bool replay_rec = false;
++	int32 replay_rc = 0;
+ 	struct script_data* data;
+ 	int32 i,start_sp,end_sp,func;
+ 
+@@ -4131,7 +4140,12 @@
+ 		}
+ #endif
+ 
+-		if (str_data[func].func(st) == SCRIPT_CMD_FAILURE) {
++		if( g_replay_on )
++			replay_rec = replay_pre( st, func, replay_line );
++		replay_rc = str_data[func].func(st);
++		if( replay_rec )
++			replay_post( st, func, replay_rc, replay_line );
++		if (replay_rc == SCRIPT_CMD_FAILURE) {
+ 			//Report error
+ 			ShowWarning("Script command '%s' returned failure.\n", get_str(func));
+ 			script_reportsrc(st);
+@@ -28672,3 +28686,5 @@
+ 
+ 	{nullptr,nullptr,nullptr},
+ };
++
++#include "replay_hook.inc" // tooling/m0/replay: record/replay conformance hook (copy-only patch)
+--- a/src/map/map.cpp
++++ b/src/map/map.cpp
+@@ -52,6 +52,7 @@
+ #include "pet.hpp"
+ #include "quest.hpp"
+ #include "script_host.hpp"
++void replay_main(); // tooling/m0/replay
+ #include "storage.hpp"
+ #include "trade.hpp"
+ 
+@@ -5425,6 +5426,7 @@
+ 	do_init_buyingstore();
+ 
+ 	ScriptHost::run_oninit();	// Init npcs (OnInit)
++	::replay_main(); // tooling/m0/replay (no-op unless RA_REPLAY_NPC is set)
+ 
+ 	if (battle_config.pk_mode)
+ 		ShowNotice("Server is running on '" CL_WHITE "PK Mode" CL_RESET "'.\n");
+--- a/src/map/clif.cpp
++++ b/src/map/clif.cpp
+@@ -87,6 +87,7 @@
+ 
+ #include "clif_obfuscation.hpp"
+ static bool clif_session_isValid( const map_session_data* sd );
++extern bool replay_active(); // tooling/m0/replay
+ static void clif_loadConfirm( map_session_data *sd );
+ static void clif_favorite_item( map_session_data& sd, uint16 index );
+ 
+@@ -2476,6 +2477,7 @@
+ /// - if set to clear on next mes, clear contents
+ /// - append this text
+ void clif_scriptmes( const map_session_data& sd, uint32 npcid, const char *mes ){
++	if( replay_active() ) return; // tooling/m0/replay: no client attached
+ 	PACKET_ZC_SAY_DIALOG* p = reinterpret_cast<PACKET_ZC_SAY_DIALOG*>( packet_buffer );
+ 
+ 	int16 length = (int16)( strlen( mes ) + 1 );
+@@ -2500,6 +2502,7 @@
+ /// - set to clear on next mes
+ /// - remove 'next' button
+ void clif_scriptnext( const map_session_data& sd, uint32 npcid ){
++	if( replay_active() ) return; // tooling/m0/replay: no client attached
+ 	PACKET_ZC_WAIT_DIALOG p = {};
+ 
+ 	p.PacketType = HEADER_ZC_WAIT_DIALOG;
+@@ -2525,6 +2528,7 @@
+ /// - close the menu window
+ /// - 0146 <npcid of dialog window>.L
+ void clif_scriptclose( const map_session_data& sd, uint32 npcid ){
++	if( replay_active() ) return; // tooling/m0/replay: no client attached
+ 	PACKET_ZC_CLOSE_DIALOG packet{};
+ 
+ 	packet.packetType = HEADER_ZC_CLOSE_DIALOG;
+@@ -2541,6 +2545,7 @@
+  * @param npcid : npc gid to close
+  */
+ void clif_scriptclear( const map_session_data& sd, int32 npcid ){
++	if( replay_active() ) return; // tooling/m0/replay: no client attached
+ 	PACKET_ZC_CLEAR_DIALOG p = {};
+ 
+ 	p.packetType = HEADER_ZC_CLEAR_DIALOG;
+@@ -2636,6 +2641,7 @@
+ ///    Which suggests their have intertwined behavior. (probably the mouse targeting)
+ /// TODO investigate behavior of other windows [FlavioJS]
+ void clif_scriptmenu( map_session_data& sd, uint32 npcid, const char* mes ){
++	if( replay_active() ) return; // tooling/m0/replay: no client attached
+ 	block_list *bl = nullptr;
+ 	
+ 	if (!sd.state.using_fake_npc && (npcid == fake_nd->id || ((bl = map_id2bl(npcid)) && (bl->m!=sd.m ||
+@@ -2670,6 +2676,7 @@
+ ///     - 0143 <npcid of inputnum window>.L <atoi(text)>.L
+ ///   - close inputnum window
+ void clif_scriptinput( map_session_data& sd, uint32 npcid ){
++	if( replay_active() ) return; // tooling/m0/replay: no client attached
+ 	block_list *bl = nullptr;
+ 
+ 	if (!sd.state.using_fake_npc && (npcid == fake_nd->id || ((bl = map_id2bl(npcid)) && (bl->m!=sd.m ||
+@@ -2698,6 +2705,7 @@
+ ///     - 01d5 <packetlen>.W <npcid of inputstr window>.L <text>.?B
+ ///   - close inputstr window
+ void clif_scriptinputstr( map_session_data& sd, uint32 npcid ){
++	if( replay_active() ) return; // tooling/m0/replay: no client attached
+ 	block_list *bl = nullptr;
+ 
+ 	if (!sd.state.using_fake_npc && (npcid == fake_nd->id || ((bl = map_id2bl(npcid)) && (bl->m!=sd.m ||
+--- /dev/null
++++ b/src/map/replay_hook.inc
+@@ -0,0 +1,328 @@
++// Record/replay conformance hook for the legacy script VM (tooling/m0/replay).
++// NOT part of the legacy build: applied only to a COPY of the source tree by replay/build_legacy.sh.
++// Included at the very end of script.cpp so it can see the file-static VM state (str_data, buildin_func, st_db).
++//
++// Activation: environment variable RA_REPLAY_NPC=<npc name>. Nothing here runs without it.
++//   RA_REPLAY_NPC      unique NPC name (e.g. "Gatekeeper#1" or exname)
++//   RA_REPLAY_ANSWERS  file: one answer per line for menu/select/prompt (1-based, 0 = cancel, >n = last option)
++//                      and input/inputstr (number or text); exhausted -> select 1, input 1 / "test"
++//   RA_REPLAY_PLAYER   file: key=value (name, class, sex, baselevel, joblevel, zeny, group)
++//   RA_REPLAY_TRACE    output file (trace format: see replay/TRACE_FORMAT.md)
++//   RA_REPLAY_LABEL    optional entry label (default: script start)
++//   RA_REPLAY_CAP      max blocking interactions (default 60)
++//
++// The hook (1) runs the NPC script for a synthetic player exactly as npc_click() would
++// (run_script -> RERUNLINE/STOP/CLOSE continuations exactly as npc_scriptcont() does, minus the
++// client checks), and (2) records every buildin call from run_func() for that script only
++// (st->oid == the NPC, st->rid == the synthetic player): name, evaluated arguments, pushed return.
++
++#include <string>
++#include <vector>
++#include <algorithm>
++#include <map>
++
++bool replay_active(){ return g_replay_on; }
++static int32 g_replay_oid = 0, g_replay_rid = 0, g_replay_root_id = 0;
++static FILE* g_replay_fp = nullptr;
++static uint64 g_replay_rand_n = 0;
++
++static std::string replay_fmt_str( const char* s ){
++	std::string o = "\"";
++	for( ; s != nullptr && *s; ++s ){
++		unsigned char c = (unsigned char)*s;
++		if( c == '\\' ) o += "\\\\";
++		else if( c == '"' ) o += "\\\"";
++		else if( c == '\n' ) o += "\\n";
++		else if( c == '\r' ) o += "\\r";
++		else if( c == '\t' ) o += "\\t";
++		else if( c < 0x20 || c == 0x7f ){ char b[8]; snprintf( b, sizeof(b), "\\x%02x", c ); o += b; }
++		else o += (char)c;
++	}
++	return o + "\"";
++}
++
++static std::string replay_lower( const char* s ){
++	std::string o( s );
++	for( char& c : o ) if( c >= 'A' && c <= 'Z' ) c = (char)( c - 'A' + 'a' );
++	return o;
++}
++
++// canonical variable reference name: lower-case, "[idx]" only for idx != 0
++static std::string replay_refname( const script_data* d ){
++	std::string n = replay_lower( reference_getname( d ) );
++	uint32 idx = reference_getindex( d );
++	if( idx != 0 ){ char b[24]; snprintf( b, sizeof(b), "[%u]", idx ); n += b; }
++	return n;
++}
++
++// Format one evaluated stack value. as_ref: the buildin's argument spec says 'r' (reference) -> keep the name.
++static std::string replay_fmt_data( struct script_state* st, const script_data* d0, bool as_ref ){
++	script_data d = *d0; // evaluate a copy: the VM's own get_val() later sees the untouched original
++	if( d.type == C_NAME && as_ref )
++		return "&" + replay_refname( &d );
++	if( d.type == C_POS || d.type == C_USERFUNC_POS )
++		return "@label";
++	if( d.type == C_NAME )
++		get_val( st, &d );
++	if( d.type == C_INT ){
++		char b[32]; snprintf( b, sizeof(b), "%lld", (long long)d.u.num ); return b;
++	}
++	if( d.type == C_STR || d.type == C_CONSTSTR )
++		return replay_fmt_str( d.u.str );
++	return "<type" + std::to_string( (int)d.type ) + ">";
++}
++
++static bool replay_skip_name( const std::string& n ){
++	static const char* skip[] = { "set", "setr", "jump_zero", "goto", "callsub", "callfunc", "return", "getarg", "getargcount", "end", nullptr };
++	for( int i = 0; skip[i]; i++ ) if( n == skip[i] ) return true;
++	return false;
++}
++
++// Returns true when this call must be recorded; fills `line` with "name(args)".
++static bool replay_pre( struct script_state* st, int32 func, std::string& line ){
++	if( st->oid != g_replay_oid || st->rid != g_replay_rid ) return false;
++	if( g_replay_root_id == 0 ) g_replay_root_id = st->id;
++	if( st->id != g_replay_root_id ) return false; // other scripts of the same NPC (events) are not part of the trace
++	std::string name = replay_lower( get_str( func ) );
++	if( replay_skip_name( name ) ) return false;
++	const char* spec = buildin_func[str_data[func].val].arg;
++	size_t speclen = spec ? strlen( spec ) : 0;
++	line = name + "(";
++	int32 last = script_lastdata( st );
++	if( name == "menu" ){ // label form: record only the visible option texts, labels dropped
++		bool first = true;
++		for( int32 i = 2; i < last; i += 2 ){
++			script_data d = st->stack->stack_data[st->start + i]; get_val( st, &d );
++			if( d.type != C_STR && d.type != C_CONSTSTR ) continue;
++			std::string s = d.u.str; size_t p = 0;
++			for( ;; ){
++				size_t q = s.find( ':', p );
++				std::string piece = s.substr( p, q == std::string::npos ? std::string::npos : q - p );
++				if( !piece.empty() ){ if( !first ) line += ","; first = false; line += replay_fmt_str( piece.c_str() ); }
++				if( q == std::string::npos ) break;
++				p = q + 1;
++			}
++		}
++		line += ")";
++		return true;
++	}
++	for( int32 i = 2; i <= last; i++ ){
++		char t = 0;
++		size_t k = (size_t)( i - 2 );
++		if( k < speclen && spec[k] != '?' && spec[k] != '*' ) t = spec[k];
++		else {
++			size_t j = std::min( k, speclen ); // marker or past the end: the nearest typed char before it
++			while( j > 0 && ( spec[j-1] == '?' || spec[j-1] == '*' ) ) j--;
++			t = j > 0 ? spec[j-1] : 0;
++		}
++		if( i > 2 ) line += ",";
++		line += replay_fmt_data( st, &st->stack->stack_data[st->start + i], t == 'r' );
++	}
++	line += ")";
++	return true;
++}
++
++static void replay_post( struct script_state* st, int32 func, int32 rc, const std::string& line ){
++	if( st->state == RERUNLINE ) return; // blocked: recorded when it completes (re-run)
++	std::string name = replay_lower( get_str( func ) );
++	std::string out = line;
++	if( st->stack->sp > st->end ){
++		script_data* top = &st->stack->stack_data[st->stack->sp - 1];
++		if( name == "rand" && top->type == C_INT ){ // scripted RNG: identical sequence on both sides
++			int64 a = 0, b = 0; int32 n = st->end - st->start - 2;
++			script_data d0 = st->stack->stack_data[st->start + 2]; get_val( st, &d0 ); a = d0.u.num;
++			if( n >= 2 ){ script_data d1 = st->stack->stack_data[st->start + 3]; get_val( st, &d1 ); b = d1.u.num; }
++			uint64 r = ( 1103515245ULL * ( ++g_replay_rand_n ) + 12345ULL ) % 2147483648ULL;
++			int64 v;
++			if( n >= 2 ){ if( b < a ) std::swap( a, b ); v = a + (int64)( r % (uint64)( b - a + 1 ) ); }
++			else v = a <= 0 ? 0 : (int64)( r % (uint64)a );
++			top->u.num = v;
++		}
++		out += " -> " + replay_fmt_data( st, top, false );
++	}
++	if( rc == SCRIPT_CMD_FAILURE ) out += " !F";
++	if( g_replay_fp ) fprintf( g_replay_fp, "%s\n", out.c_str() );
++}
++
++// ---- end-of-run state dump ---------------------------------------------------------------------
++typedef std::map<std::string,std::string> replay_snap;
++static void replay_dump_regs( replay_snap& out, const char* tag, DBMap* vars, int kind /* 0 char regs, 1 npc-local, 2 mapreg */ ){
++	if( vars == nullptr ) return;
++	DBIterator* it = db_iterator( vars );
++	DBKey key;
++	for( DBData* d = it->first( it, &key ); dbi_exists( it ); d = it->next( it, &key ) ){
++		int64 uid = key.i64;
++		const char* name = get_str( script_getvarid( uid ) );
++		uint32 idx = script_getvaridx( uid );
++		std::string nm = replay_lower( name );
++		if( idx != 0 ){ char b[24]; snprintf( b, sizeof(b), "[%u]", idx ); nm += b; }
++		std::string val;
++		bool isstr = name[strlen( name ) - 1] == '$';
++		if( kind == 2 ){
++			mapreg_save* m = (mapreg_save*)db_data2ptr( d );
++			if( m == nullptr ) continue;
++			if( m->is_string ) val = replay_fmt_str( m->u.str ); else { char b[32]; snprintf( b, sizeof(b), "%lld", (long long)m->u.i ); val = b; }
++		}else{
++			char p0 = name[0];
++			bool raw = kind == 1 || p0 == '.' || p0 == '\'' || ( p0 == '@' && !isstr ); // stored as plain int64 / char*
++			if( isstr ){
++				const char* s = raw ? (const char*)db_data2ptr( d ) : ( (script_reg_str*)db_data2ptr( d ) )->value;
++				val = replay_fmt_str( s ? s : "" );
++			}else{
++				long long v = raw ? (long long)db_data2i64( d ) : (long long)( (script_reg_num*)db_data2ptr( d ) )->value;
++				char b[32]; snprintf( b, sizeof(b), "%lld", v ); val = b;
++			}
++		}
++		out[std::string( tag ) + nm] = val;
++	}
++	dbi_destroy( it );
++}
++
++static replay_snap replay_snapshot( map_session_data* sd, npc_data* nd ){
++	replay_snap m;
++	replay_dump_regs( m, "", sd->regs.vars, 0 );        // character / account / temp ('@') variables
++	replay_dump_regs( m, "", regs.vars, 2 );             // '$' and '$@'
++	if( nd->u.scr.script ) replay_dump_regs( m, "", nd->u.scr.script->local.vars, 1 ); // '.' variables of this NPC
++	return m;
++}
++
++static std::string replay_getenv( const char* k ){ const char* v = getenv( k ); return v ? v : ""; }
++
++static std::vector<std::string> replay_read_lines( const std::string& path ){
++	std::vector<std::string> v;
++	if( path.empty() ) return v;
++	FILE* f = fopen( path.c_str(), "rb" );
++	if( !f ) return v;
++	char buf[4096];
++	while( fgets( buf, sizeof(buf), f ) ){
++		std::string s = buf;
++		while( !s.empty() && ( s.back() == '\n' || s.back() == '\r' ) ) s.pop_back();
++		v.push_back( s );
++	}
++	fclose( f );
++	return v;
++}
++
++// Called from map.cpp right after ScriptHost::run_oninit().
++void replay_main(){
++	std::string npcname = replay_getenv( "RA_REPLAY_NPC" );
++	if( npcname.empty() ) return;
++	std::string tracepath = replay_getenv( "RA_REPLAY_TRACE" );
++	g_replay_fp = fopen( tracepath.c_str(), "wb" );
++	if( !g_replay_fp ){ ShowError( "replay: cannot open trace file '%s'\n", tracepath.c_str() ); return; }
++	npc_data* nd = npc_name2id( npcname.c_str() );
++	if( nd == nullptr || nd->subtype != NPCTYPE_SCRIPT ){
++		fprintf( g_replay_fp, "#end npc-not-found\n" ); fclose( g_replay_fp ); g_replay_fp = nullptr; return;
++	}
++	std::vector<std::string> answers = replay_read_lines( replay_getenv( "RA_REPLAY_ANSWERS" ) );
++	size_t ai = 0;
++	auto next_answer = [&]( std::string& out ) -> bool {
++		while( ai < answers.size() ){
++			std::string s = answers[ai++];
++			if( s.empty() || s[0] == '#' ) continue;
++			out = s; return true;
++		}
++		return false;
++	};
++	int32 cap = atoi( replay_getenv( "RA_REPLAY_CAP" ).c_str() ); if( cap <= 0 ) cap = 60;
++
++	// ---- the synthetic player ----------------------------------------------------------------
++	map_session_data* sd;
++	CREATE( sd, map_session_data, 1 );
++	new( sd ) map_session_data();
++	sd->fd = 0;
++	if( session_isValid( 0 ) ) session[0]->flag.eof = 1; // clif_* helpers treat fd 0 as disconnected: nothing is sent
++	sd->type = BL_PC; sd->id = 150000;
++	int16 pm = nd->m >= 0 ? nd->m : map_mapname2mapid( "prontera" ); // floating NPCs ('-') have no map
++	sd->m = pm; sd->x = nd->m >= 0 ? nd->x : 150; sd->y = nd->m >= 0 ? nd->y : 150;
++	sd->mapindex = map_getmapdata( pm )->index;
++	sd->state.active = 1;
++	sd->status.account_id = 2000000; sd->status.char_id = 150000;
++	safestrncpy( sd->status.name, "Tester", sizeof( sd->status.name ) );
++	sd->status.sex = SEX_MALE; sd->status.base_level = 1; sd->status.job_level = 1; sd->status.zeny = 0;
++	sd->weight = 0; sd->max_weight = 20000;
++	sd->inventory.max_amount = MAX_INVENTORY; sd->inventory.type = TABLE_INVENTORY;
++	sd->vars_ok = true;
++	sd->regs.vars = i64db_alloc( DB_OPT_BASE ); sd->regs.arrays = nullptr; // as pc_authok() does
++	sd->group_id = 0;
++	sd->status.inventory_slots = INVENTORY_BASE_SIZE;
++	for( const std::string& l : replay_read_lines( replay_getenv( "RA_REPLAY_PLAYER" ) ) ){
++		size_t eq = l.find( '=' ); if( eq == std::string::npos || l[0] == '#' ) continue;
++		std::string k = l.substr( 0, eq ), v = l.substr( eq + 1 );
++		if( k == "name" ) safestrncpy( sd->status.name, v.c_str(), sizeof( sd->status.name ) );
++		else if( k == "class" ) sd->status.class_ = atoi( v.c_str() );
++		else if( k == "sex" ) sd->status.sex = atoi( v.c_str() ) ? SEX_MALE : SEX_FEMALE;
++		else if( k == "baselevel" ) sd->status.base_level = atoi( v.c_str() );
++		else if( k == "joblevel" ) sd->status.job_level = atoi( v.c_str() );
++		else if( k == "zeny" ) sd->status.zeny = atoi( v.c_str() );
++		else if( k == "group" ) sd->group_id = atoi( v.c_str() );
++	}
++	pc_group_pc_load( sd ); // sd->group from sd->group_id (getgmlevel & co)
++	map_addiddb( sd );
++
++	replay_snap before = replay_snapshot( sd, nd );
++	g_replay_oid = nd->id; g_replay_rid = sd->id; g_replay_root_id = 0; g_replay_on = true;
++
++	std::string reason = "end";
++	int32 inter = 0;
++	int32 startpos = 0;
++	std::string label = replay_getenv( "RA_REPLAY_LABEL" );
++	if( !label.empty() ){
++		startpos = -1;
++		for( int32 i = 0; i < nd->u.scr.label_list_num; i++ )
++			if( !strcasecmp( nd->u.scr.label_list[i].name, label.c_str() ) ){ startpos = nd->u.scr.label_list[i].pos; break; }
++		if( startpos < 0 ){ g_replay_on = false; fprintf( g_replay_fp, "#end label-not-found\n" ); fclose( g_replay_fp ); g_replay_fp = nullptr; return; }
++	}
++	run_script( nd->u.scr.script, startpos, sd->id, nd->id );
++	while( g_replay_root_id != 0 && ( idb_get( st_db, g_replay_root_id ) != nullptr ) ){
++		script_state* st = (script_state*)idb_get( st_db, g_replay_root_id );
++		if( ++inter > cap ){ reason = "cap"; break; }
++		if( st->sleep.timer != INVALID_TIMER ){ // sleep: fire the timer body synchronously
++			run_script_timer( st->sleep.timer, gettick(), st->sleep.charid, (intptr_t)st );
++			continue;
++		}
++		if( st->state == CLOSE ){ st->state = END; run_script_main( st ); continue; }
++		if( st->state == STOP ){ st->state = RUN; run_script_main( st ); continue; }
++		if( st->state == RERUNLINE ){
++			std::string fn = replay_lower( st->funcname ? st->funcname : "" );
++			std::string a;
++			bool have = next_answer( a );
++			if( fn == "select" || fn == "menu" || fn == "prompt" ){
++				int32 n = sd->npc_menu, pick = have ? atoi( a.c_str() ) : 1;
++				if( pick <= 0 ) sd->npc_menu = 0xff; // cancel
++				else sd->npc_menu = std::min( pick, n );
++			}else if( fn == "input" ){
++				script_data* v = &st->stack->stack_data[st->start + 2];
++				if( is_string_variable( reference_getname( v ) ) ){
++					safestrncpy( sd->npc_str, have ? a.c_str() : "test", sizeof( sd->npc_str ) );
++				}else sd->npc_amount = have ? atoi( a.c_str() ) : 1;
++			}else{ reason = "blocked:" + fn; break; }
++			run_script_main( st );
++			continue;
++		}
++		reason = "state:" + std::to_string( (int)st->state ); break;
++	}
++	if( reason == "end" && g_replay_root_id != 0 && ( idb_get( st_db, g_replay_root_id ) != nullptr ) ) reason = "alive";
++	g_replay_on = false;
++
++	// ---- final state -------------------------------------------------------------------------------
++	std::vector<std::string> state;
++	{
++		replay_snap after = replay_snapshot( sd, nd );
++		for( auto& kv : after ){ auto it = before.find( kv.first ); if( it == before.end() || it->second != kv.second ) state.push_back( "=" + kv.first + "=" + kv.second ); }
++		for( auto& kv : before ) if( after.find( kv.first ) == after.end() ) state.push_back( "=" + kv.first + "=<unset>" );
++	}
++	const struct { const char* n; int64 v; } params[] = {
++		{ "zeny", sd->status.zeny }, { "baselevel", sd->status.base_level }, { "joblevel", sd->status.job_level },
++		{ "class", sd->status.class_ }, { "statuspoint", sd->status.status_point }, { "skillpoint", sd->status.skill_point },
++		{ "baseexp", (int64)sd->status.base_exp }, { "jobexp", (int64)sd->status.job_exp }, { "karma", sd->status.karma }, { "manner", sd->status.manner },
++	};
++	for( auto& p : params ) if( p.v != 0 ) state.push_back( std::string( "%" ) + p.n + "=" + std::to_string( (long long)p.v ) );
++	for( int i = 0; i < MAX_INVENTORY; i++ )
++		if( sd->inventory.u.items_inventory[i].nameid && sd->inventory.u.items_inventory[i].amount )
++			state.push_back( "+item " + std::to_string( (unsigned long long)sd->inventory.u.items_inventory[i].nameid ) + "=" + std::to_string( sd->inventory.u.items_inventory[i].amount ) );
++	std::sort( state.begin(), state.end() );
++	fprintf( g_replay_fp, "#end %s\n", reason.c_str() );
++	for( const std::string& s : state ) fprintf( g_replay_fp, "%s\n", s.c_str() );
++	fclose( g_replay_fp ); g_replay_fp = nullptr;
++}
