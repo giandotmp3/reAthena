@@ -26,6 +26,7 @@ ap.add_argument('--legacy', required=True)
 ap.add_argument('--luau', required=True)
 ap.add_argument('--out', required=True)
 ap.add_argument('--examples', type=int, default=5)
+ap.add_argument('--tag', default='')
 args = ap.parse_args()
 
 # commands whose result depends on world data the Luau harness does not model (items, mobs, DB constants, clock, player)
@@ -217,17 +218,18 @@ def main():
         for i, m in enumerate(mm):
             m['cascade'] = (m is not root) and (root is not None)
             by_kind[m['kind']] += 1
-            if len(examples[m['kind']]) < 40: examples[m['kind']].append(dict(m, case=c['id'], npc=c['npc'], file=c['path']))
+            if len(examples[m['kind']]) < 40: examples[m['kind']].append(dict(m, case=c['id'], npc=c['npc'], file=c['path'], line=c.get('line')))
         if root:
             root_kind[root['kind']] += 1
             root['attr'] = root_cause(root, False)
             root_attr[(root['kind'], root['attr'])] += 1
             root_examples[root['kind']].append(dict(root, case=c['id'], npc=c['npc'], file=c['path'], category=c['category']))
-        res.append(dict(id=c['id'], npc=c['npc'], file=c['path'], category=c['category'], strict_pass=strict_pass, fmt_pass=fmt_pass,
+        inter = sum(1 for x in L['calls'] if x['name'] in ('select', 'menu', 'prompt', 'input', 'next', 'close2', 'sleep', 'sleep2'))
+        res.append(dict(id=c['id'], npc=c['npc'], file=c['path'], line=c.get('line'), interactions=inter, category=c['category'], strict_pass=strict_pass, fmt_pass=fmt_pass,
                         legacy_calls=len(L['calls']), luau_calls=len(U['calls']), legacy_end=L['end'], luau_end=U['end'],
                         mismatches=len(mm), root=root and dict(kind=root['kind'], cmd=root['cmd'], detail=root['detail'], attr=root.get('attr'),
                         legacy=root['legacy'], luau=root['luau'])))
-    json.dump(dict(cases=res, by_kind=by_kind, root_kind=root_kind), open(os.path.join(args.out, 'results.json'), 'w'), indent=1, default=dict)
+    json.dump(dict(cases=res, by_kind=by_kind, root_kind=root_kind), open(os.path.join(args.out, 'results%s.json' % args.tag), 'w'), indent=1, default=dict)
     # ---- report ----
     out = []
     P = out.append
@@ -238,6 +240,9 @@ def main():
     P('pass modulo formatting-only differences:    %d / %d = %.1f%%' % (fp, n, 100 * fp / max(1, n)))
     calls_l = sum(r['legacy_calls'] for r in res)
     P('legacy host calls recorded: %d   legacy_interp: %d' % (calls_l, sum(r['luau_calls'] for r in res)))
+    P('cases with >= 1 blocking interaction (next/select/menu/input/...): %d; ended by the interaction cap: %d; median legacy calls per case: %d' % (
+        sum(1 for r in res if r['interactions']), sum(1 for r in res if r['legacy_end'] == 'cap'), sorted(r['legacy_calls'] for r in res)[len(res) // 2]))
+    P('strict passes that are non-trivial (>= 5 legacy calls and >= 1 interaction): %d' % sum(1 for r in res if r['strict_pass'] and r['legacy_calls'] >= 5 and r['interactions']))
     # per NPC: all 3 variants pass
     per_npc = collections.defaultdict(list)
     for r in res: per_npc[r['npc']].append(r['strict_pass'])
@@ -270,14 +275,14 @@ def main():
             key = (e['cmd'], e['file'])
             if key in seen: continue
             seen.add(key)
-            P('  [%s] %s  (NPC "%s"; legacy trace line %s, luau trace line %s)' % (e['case'], e['file'], e['npc'], e['legacy_line'], e['luau_line']))
+            P('  [%s] %s:%s  (NPC "%s"; legacy trace line %s, luau trace line %s)' % (e['case'], e['file'], e['line'], e['npc'], e['legacy_line'], e['luau_line']))
             P('      %s' % e['detail'])
             if e['legacy']: P('      legacy: %s' % e['legacy'][:300])
             if e['luau']: P('      luau  : %s' % e['luau'][:300])
             shown += 1
             if shown >= args.examples: break
-    open(os.path.join(args.out, 'report.txt'), 'w').write('\n'.join(out) + '\n')
-    json.dump({k: v[:60] for k, v in root_examples.items()}, open(os.path.join(args.out, 'root_examples.json'), 'w'), indent=1)
+    open(os.path.join(args.out, 'report%s.txt' % args.tag), 'w').write('\n'.join(out) + '\n')
+    json.dump({k: v[:60] for k, v in root_examples.items()}, open(os.path.join(args.out, 'root_examples%s.json' % args.tag), 'w'), indent=1)
     print('\n'.join(out[:40]))
 
 main()

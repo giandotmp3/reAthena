@@ -65,3 +65,20 @@ Caveat: several example checks are arithmetic on the spec's own formulas, so thi
 ## What M0 did not cover
 
 - Real PRE/RE pipelines and golden traces; cross-state call cost between mod states; `lua_State` snapshotting for reload; multi-client packet handling; PostgreSQL write-behind under load; the compact on-disk AST cache; legacy-VM record/replay.
+
+## Addendum: legacy-VM record/replay (2026-10-18)
+
+Code and reports: `modernized/rathena-engine-reimagined/tooling/m0/replay/` (the recording hook is a **patch applied to a copy of the legacy tree**; the repo's legacy sources are not modified). The legacy `map-server` builds and runs scripts headless in this container (SQLite backend, no MySQL needed); its own `tools/ci/script_corpus.sh` passed 11/11 first.
+
+**Method:** 46 NPCs from 45 files (10 simple dialogue, 10 callsub/goto, 10 switch/menu, 10 array/string, the five M0 worst-case files), each run three ways (138 runs) on both the real VM and `legacy_interp` with identical scripted answers, player profile, `rand()`/`gettime()`, integer constants dumped from the real VM, and start state. Traces compare ordered `(command, evaluated args, return)` plus final variable state.
+
+| Mode | Strict trace + end-state equality |
+|---|---|
+| `legacy_interp` unchanged | 94 / 138 (68.1%), 27 / 46 NPCs |
+| operands of `&&`, `\|\|`, `?:` all evaluated | 102 / 138 (73.9%), 31 / 46 NPCs |
+
+Of the 44 failing runs: **11 interpreter bugs** (8 from short-circuiting, 3 from statements between `switch (...) {` and the first `case`), **30 missing world state** (item names, equip queries, mobs, shops, instances, castles, positions), **3 missing commands** (`getpartnerid`).
+
+**Correction to M0(b) and to my earlier text:** the legacy VM does **not** short-circuit. `C_LAND`, `C_LOR` and `C_OP3` are ordinary stack operations in `run_script_main` (`script.cpp:4452-4461`, `op_2`/`op_3`), so every operand is evaluated, including calls with side effects. The interpreter must do the same. Consequences: (1) the 111 `callsub`/`callfunc` calls inside `?:`/`&&`/`||` **can be hoisted** after all, which removes the host-stack-recursion limit risk raised in M0(b); (2) `legacy_interp` must evaluate all operands by default; (3) statements before the first `case` execute; (4) legacy `switch` leaves `$@__SWn_VAL` globals behind (reproduce for parity or document the deviation).
+
+Not covered by the replay: timers, events, `OnInit` order, `sleep` timing, multiple players, the pre-renewal set. The corpus is 46 NPCs, not the full 9,000+, so 68% to 74% is a floor-style measurement of interpreter fidelity on *entry flows*, not a corpus pass rate.

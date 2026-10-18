@@ -1,0 +1,17 @@
+ATTRIBUTION of 138 cases (NPC x variant)
+    94  PASS                                                                                            n01a n02a n02b n02c n05a n05b n05c n06a ...
+     8  interpreter: && || ?: short-circuit (legacy evaluates every operand)                            n12a n12b n12c n23b n29a n29b n29c n38b
+     7  world: no model / constant stub in harness (getitemname)                                        n17c n31a n31b n31c n41a n41c n44b
+     3  coverage: command not implemented in legacy_interp (getpartnerid)                               n24a n24b n24c
+     3  interpreter: statements between `switch (...) {` and the first `case` are skipped               n20a n20b n20c
+     3  world: instance variable ' needs a running instance                                             n16a n16b n16c
+     3  world: legacy command failed, needs real state (getcastledata)                                  n04a n04b n04c
+     3  world: legacy command failed, needs real state (instance_npcname)                               n37a n37b n37c
+     3  world: no model / constant stub in harness (callshop)                                           n14a n14b n14c
+     3  world: no model / constant stub in harness (getequipid)                                         n42a n43b n43c
+     3  world: no model / constant stub in harness (logmes)                                             n03a n03b n03c
+     3  world: no model / constant stub in harness (mobcount)                                           n39a n39b n39c
+     2  world: no model / constant stub in harness (getequipisequiped)                                  n01b n01c
+
+by group: PASS=94, world=30, interpreter=11, coverage=3
+failing cases explained by interpreter semantics: 11; by missing world state / coverage: 33; unattributed: 0

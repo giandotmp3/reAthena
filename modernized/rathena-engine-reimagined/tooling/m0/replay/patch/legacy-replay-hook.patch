@@ -133,7 +133,7 @@
  	if (!sd.state.using_fake_npc && (npcid == fake_nd->id || ((bl = map_id2bl(npcid)) && (bl->m!=sd.m ||
 --- /dev/null
 +++ b/src/map/replay_hook.inc
-@@ -0,0 +1,328 @@
+@@ -0,0 +1,348 @@
 +// Record/replay conformance hook for the legacy script VM (tooling/m0/replay).
 +// NOT part of the legacy build: applied only to a COPY of the source tree by replay/build_legacy.sh.
 +// Included at the very end of script.cpp so it can see the file-static VM state (str_data, buildin_func, st_db).
@@ -145,6 +145,7 @@
 +//   RA_REPLAY_PLAYER   file: key=value (name, class, sex, baselevel, joblevel, zeny, group)
 +//   RA_REPLAY_TRACE    output file (trace format: see replay/TRACE_FORMAT.md)
 +//   RA_REPLAY_LABEL    optional entry label (default: script start)
++//   RA_REPLAY_DUMP_CONSTS  write every integer constant of the VM as name<TAB>value, then (without RA_REPLAY_NPC) do nothing else
 +//   RA_REPLAY_CAP      max blocking interactions (default 60)
 +//
 +// The hook (1) runs the NPC script for a synthetic player exactly as npc_click() would
@@ -209,7 +210,7 @@
 +}
 +
 +static bool replay_skip_name( const std::string& n ){
-+	static const char* skip[] = { "set", "setr", "jump_zero", "goto", "callsub", "callfunc", "return", "getarg", "getargcount", "end", nullptr };
++	static const char* skip[] = { "set", "setr", "jump_zero", "goto", "callsub", "callfunc", "return", "getarg", "getargcount", "end", "getelementofarray", "getd", "setd", nullptr };
 +	for( int i = 0; skip[i]; i++ ) if( n == skip[i] ) return true;
 +	return false;
 +}
@@ -273,6 +274,12 @@
 +			if( n >= 2 ){ if( b < a ) std::swap( a, b ); v = a + (int64)( r % (uint64)( b - a + 1 ) ); }
 +			else v = a <= 0 ? 0 : (int64)( r % (uint64)a );
 +			top->u.num = v;
++		}
++		if( ( name == "gettime" || name == "gettimetick" ) && top->type == C_INT ){ // scripted clock: 2026-10-18 12:34:56 UTC, a Sunday
++			script_data d0 = st->stack->stack_data[st->start + 2]; get_val( st, &d0 );
++			static const int64 gt[] = { -1, 56, 34, 12, 0, 18, 10, 2026, 291 };
++			if( name == "gettime" ) top->u.num = ( d0.u.num >= 1 && d0.u.num <= 8 ) ? gt[d0.u.num] : -1;
++			else top->u.num = d0.u.num == 0 ? 1000000 : d0.u.num == 1 ? 1792326896 : d0.u.num == 2 ? 45296 : 0;
 +		}
 +		out += " -> " + replay_fmt_data( st, top, false );
 +	}
@@ -341,6 +348,15 @@
 +
 +// Called from map.cpp right after ScriptHost::run_oninit().
 +void replay_main(){
++	std::string dump = replay_getenv( "RA_REPLAY_DUMP_CONSTS" );
++	if( !dump.empty() ){ // all integer constants of the VM (script constants + hardcoded ones), for the Luau side
++		FILE* f = fopen( dump.c_str(), "wb" );
++		if( f ){
++			for( int32 i = LABEL_START; i < str_num; i++ )
++				if( str_data[i].type == C_INT ) fprintf( f, "%s\t%lld\n", get_str( i ), (long long)str_data[i].val );
++			fclose( f );
++		}
++	}
 +	std::string npcname = replay_getenv( "RA_REPLAY_NPC" );
 +	if( npcname.empty() ) return;
 +	std::string tracepath = replay_getenv( "RA_REPLAY_TRACE" );
@@ -397,6 +413,10 @@
 +	map_addiddb( sd );
 +
 +	replay_snap before = replay_snapshot( sd, nd );
++	{ // start state of the run ('$', '$@' and this NPC's '.' variables, as left by the server's OnInit run), for seeding the Luau side
++		FILE* fi = fopen( ( tracepath + ".init" ).c_str(), "wb" );
++		if( fi ){ for( auto& kv : before ) fprintf( fi, "%s\t%s\n", kv.first.c_str(), kv.second.c_str() ); fclose( fi ); }
++	}
 +	g_replay_oid = nd->id; g_replay_rid = sd->id; g_replay_root_id = 0; g_replay_on = true;
 +
 +	std::string reason = "end";

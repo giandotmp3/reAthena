@@ -61,11 +61,12 @@ Real Luau 0.690; code in `tooling/m0/`, report `analysis/rathena/M0_RESULTS.md`.
 - **One `lua_State` per mod** (236 KB each, per-mod memory caps, bomb isolation verified). Mod environments drop `getfenv` and wrap `table.sort`.
 - **Legacy NPC layer = Luau-hosted interpreter** (0 parse failures on 13,850 bodies). Required changes: legacy-VM record/replay before calling it done, lazy per-file parsing with flat ops, call-by-reference, host-stack depth cap, long command tail. Prototype: `tooling/m0/legacy_interp/` (parser, lowering, interpreter, scripted-client driver).
 - **Numerics:** `ctx` int64/f32 methods reproduce 17/17 worked examples. Ruleset code must not use `//` or `/` on signed values (Luau floors, legacy truncates); add the lint when `ruleset-*` packages are implemented.
+- **Replay vs the real VM (138 runs):** 68.1% strict equality, 73.9% with full operand evaluation. **The legacy VM does not short-circuit `&&`/`||`/`?:`**, so the interpreter must evaluate every operand. Details: `analysis/rathena/M0_RESULTS.md` addendum.
 - **Still unmeasured:** real PRE/RE pipelines against golden traces, cross-state call cost, reload with live coroutines, the compact AST cache.
 
 Done since M0: `engine-core` (all 30 pending tests; 2 test expectations corrected against legacy, see git log) and `script-host` (40 of 41; not done: per-tick degradation, slow-hook log, mod kill switch, cross-mod `exports`/`import`, lazy entity handles).
 
-Next work, in order: (1) legacy-VM record/replay harness (precondition for the NPC layer; in progress under `tooling/m0/replay/`); (2) `netproto` implementation behind its pending tests; (4) `rathena-migrate` for `db/pre-re`, then pre-renewal pipeline vs golden traces; (5) renewal as the architecture proof.
+Next work, in order: (1) fix the 11 interpreter bugs found by replay (full operand evaluation for `&&`/`||`/`?:`, statements before the first `case`, `$@__SWn_VAL` parity) and extend replay to the whole corpus and the pre-renewal set (harness: `tooling/m0/replay/`; legacy VM runs headless via a patch applied to a copy of the tree); (2) `netproto` implementation behind its pending tests; (4) `rathena-migrate` for `db/pre-re`, then pre-renewal pipeline vs golden traces; (5) renewal as the architecture proof.
 
 ## Decisions in force (HITL #1 and #2)
 

@@ -19,6 +19,7 @@ ap.add_argument('--skip-legacy', action='store_true')
 ap.add_argument('--skip-luau', action='store_true')
 ap.add_argument('--corpus', default=os.path.join(HERE, 'corpus', 'corpus.json'))
 ap.add_argument('--timeout', type=int, default=180)
+ap.add_argument('--no-seed', action='store_true', help='do not seed the Luau start state from the legacy VM (run OnInit on the Luau side instead)')
 ap.add_argument('--no-real-constants', action='store_true', help='keep the synthetic constant ids of prep.py (baseline)')
 args = ap.parse_args()
 
@@ -46,7 +47,7 @@ if args.only:
     want = set(args.only.split(','))
     cases = [c for c in cases if c['id'] in want or c['id'][:3] in want]
 
-for d in ('legacy', 'luau'):
+for d in ('legacy', 'luau', 'luau-nosc'):
     os.makedirs(os.path.join(OUT, d), exist_ok=True)
 json.dump(cases, open(os.path.join(OUT, 'cases.json'), 'w'), indent=1)
 
@@ -59,6 +60,39 @@ def lua_val(v):
     if isinstance(v, list): return '{' + ','.join(lua_val(x) for x in v) + '}'
     if isinstance(v, dict): return '{' + ','.join('[%s]=%s' % (json.dumps(k), lua_val(x)) for k, x in v.items()) + '}'
     raise TypeError(v)
+
+def lua_str(b):
+    out = ['"']
+    for c in b:
+        if c in (34, 92): out.append('\\' + chr(c))
+        elif 32 <= c < 127: out.append(chr(c))
+        else: out.append('\\%03d' % c)
+    return ''.join(out) + '"'
+
+def unq(tok):
+    if tok.startswith('"') and tok.endswith('"') and len(tok) >= 2:
+        b = bytearray(); t = tok[1:-1].encode('latin-1'); i = 0
+        while i < len(t):
+            if t[i] == 92 and i + 1 < len(t):
+                n = t[i + 1]
+                if n == ord('x') and i + 3 < len(t) + 0:
+                    b.append(int(t[i + 2:i + 4], 16)); i += 4; continue
+                b.append({ord('n'): 10, ord('r'): 13, ord('t'): 9}.get(n, n)); i += 2; continue
+            b.append(t[i]); i += 1
+        return bytes(b)
+    return None
+
+def load_init(cid):
+    """start-state snapshot written by the legacy hook: 'key<TAB>value' -> Luau literal pairs"""
+    path = os.path.join(OUT, 'legacy', cid + '.trace.init')
+    if not os.path.exists(path): return None
+    items = []
+    for line in open(path, 'rb').read().decode('latin-1').split('\n'):
+        if '\t' not in line: continue
+        k, v = line.split('\t', 1)
+        sv = unq(v)
+        items.append('{%s,%s}' % (lua_str(k.encode('latin-1')), lua_str(sv) if sv is not None else v))
+    return '{' + ','.join(items) + '}'
 
 def dump_legacy_constants():
     tsv = os.path.join(OUT, 'legacy_consts.tsv')
@@ -91,7 +125,7 @@ def merge_constants(tsv):
         f.write('return {consts={\n' + ''.join('["%s"]=%d,\n' % (k, v) for k, v in sorted(cons.items())) + '},params={' + tail)
     print('constants: %d from the real VM; %d synthetic ids replaced, %d added' % (sum(1 for _ in open(tsv, encoding='latin-1')), changed, added))
 
-def run_luau():
+def run_luau(mode):
     if not os.path.isdir(os.path.join(LUA, 'data')):
         os.makedirs(LUA, exist_ok=True)
         for f in os.listdir(LI):
@@ -101,13 +135,16 @@ def run_luau():
                        env=dict(os.environ, RATHENA_REPO=args.repo))
     if not args.no_real_constants and os.path.isdir(RA):
         merge_constants(dump_legacy_constants())
+    elif os.path.exists(os.path.join(LUA, 'consts.synthetic.luau')):
+        shutil.copy(os.path.join(LUA, 'consts.synthetic.luau'), os.path.join(LUA, 'consts.luau'))
     for f in os.listdir(os.path.join(HERE, 'luau')):
         if f.endswith('.luau') and f != 'cases.luau':
             shutil.copy(os.path.join(HERE, 'luau', f), LUA)
     with open(os.path.join(LUA, 'cases.luau'), 'w') as f:
-        f.write('return {\n' + ',\n'.join('{id=%s,path=%s,npc=%s,answers=%s,player=%s,cap=%d%s}' % (
-            lua_val(c['id']), lua_val(c['path']), lua_val(c['npc']), lua_val(c['answers']), lua_val(c['player']), c['cap'],
-            (',label=%s' % lua_val(c['label'])) if c.get('label') else '') for c in cases) + '\n}\n')
+        f.write('return {\n' + ',\n'.join('{id=%s,path=%s,npc=%s,answers=%s,player=%s,cap=%d,mode=%s%s%s}' % (
+            lua_val(c['id']), lua_val(c['path']), lua_val(c['npc']), lua_val(c['answers']), lua_val(c['player']), c['cap'], lua_val(mode),
+            (',label=%s' % lua_val(c['label'])) if c.get('label') else '',
+            (lambda i: (',init=%s' % i) if i and not args.no_seed else '')(load_init(c['id']))) for c in cases) + '\n}\n')
     t = time.time()
     p = subprocess.run([args.luau, 'run_cases.luau'], cwd=LUA, capture_output=True, timeout=3600)
     txt = p.stdout.decode('latin-1')
@@ -116,12 +153,12 @@ def run_luau():
         if line.startswith('=== CASE '):
             cur, buf = line[9:].strip(), []
         elif line.startswith('=== END ') and cur:
-            open(os.path.join(OUT, 'luau', cur + '.trace'), 'wb').write(('\n'.join(buf) + '\n').encode('latin-1'))
+            open(os.path.join(OUT, 'luau' if mode == 'asis' else 'luau-' + mode, cur + '.trace'), 'wb').write(('\n'.join(buf) + '\n').encode('latin-1'))
             cur = None
         elif cur is not None:
             buf.append(line)
-    open(os.path.join(OUT, 'luau.stderr'), 'wb').write(p.stderr)
-    print('luau side: %d cases in %.1fs (rc=%d)' % (len(cases), time.time() - t, p.returncode))
+    open(os.path.join(OUT, 'luau-%s.stderr' % mode), 'wb').write(p.stderr)
+    print('luau side [%s]: %d cases in %.1fs (rc=%d)' % (mode, len(cases), time.time() - t, p.returncode))
 
 # ---- legacy side -------------------------------------------------------------------------------------
 def run_legacy_case(args_):
@@ -168,8 +205,12 @@ def run_legacy():
             bad += [r for r in res if r[1] != 0]
     print('legacy side: %d cases in %.1fs, non-zero exits: %s' % (len(cases), time.time() - t, bad))
 
-if not args.skip_luau: run_luau()
 if not args.skip_legacy: run_legacy()
-rc = subprocess.run([sys.executable, '-I', os.path.join(HERE, 'compare_traces.py'), '--cases', os.path.join(OUT, 'cases.json'),
-                     '--legacy', os.path.join(OUT, 'legacy'), '--luau', os.path.join(OUT, 'luau'), '--out', OUT]).returncode
+rc = 0
+for mode in ('asis', 'nosc'):
+    if not args.skip_luau: run_luau(mode)
+    tag = '' if mode == 'asis' else '-nosc'
+    print('\n######## legacy_interp mode: %s ########' % ('as is' if mode == 'asis' else 'operands of && || ?: all evaluated (legacy semantics)'))
+    rc |= subprocess.run([sys.executable, '-I', os.path.join(HERE, 'compare_traces.py'), '--cases', os.path.join(OUT, 'cases.json'),
+                          '--legacy', os.path.join(OUT, 'legacy'), '--luau', os.path.join(OUT, 'luau' + tag), '--out', OUT, '--tag=' + tag]).returncode
 sys.exit(rc)
