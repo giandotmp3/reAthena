@@ -6,6 +6,8 @@
 
 #include "script_host/numeric.hpp"
 
+__extension__ typedef __int128 i128;  // GCC/Clang extension, as in src/numeric.cpp
+
 using namespace script_host;
 
 TEST("BR-RULESET-116", "effect queue keeps insertion order") {
@@ -113,7 +115,7 @@ TEST("BR-RULESET-115", "mul_pct keeps a 128-bit intermediate so large values sur
   c.mul_pct(100);
   CHECK_EQ(c.value(), INT64_MAX / 100 * 100);
   NumCtx d(INT64_MAX / 3); d.mul_pct(150);  // v*150 overflows int64 but v*150/100 fits
-  CHECK_EQ(d.value(), static_cast<std::int64_t>((__int128)(INT64_MAX / 3) * 150 / 100));
+  CHECK_EQ(d.value(), static_cast<std::int64_t>((i128)(INT64_MAX / 3) * 150 / 100));
 }
 
 TEST("BR-RULESET-115", "f32_step truncates the float32 product toward zero") {

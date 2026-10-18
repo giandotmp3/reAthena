@@ -132,7 +132,10 @@ TEST("MOD-MANIFEST-007", real_manifests_in_the_repo_are_accepted) {
 
   Manifest re = real("ruleset-renewal");
   CHECK(re.id == "ruleset.renewal" && re.provides == std::vector<std::string>{"ruleset"});
-  CHECK(!re.ruleset.has_value());  // renewal keeps its sub-flags in package.toml, not mod.toml
+  CHECK(re.ruleset.has_value() && re.ruleset->mode == "renewal" && re.ruleset->renewal());  // renewal gained a [ruleset] table (mode renewal, all sub-flags on, db/re)
+  CHECK(re.ruleset->db_set == "db/re" && re.ruleset->flags.size() == 7);
+  for (auto& [name, on] : re.ruleset->flags) { (void)name; CHECK(on); }
+  CHECK(re.ruleset->strict_parity == true && re.ruleset->legacy_quirks == true);
 
   Manifest base = real("mods/base/rathena.base");
   CHECK(base.id == "rathena.base" && base.version == (SemVer{0, 1, 0}) && base.permissions.empty());
