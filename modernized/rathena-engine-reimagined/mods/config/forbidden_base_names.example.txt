@@ -1,0 +1,5 @@
+# Example only. In CI this list is generated from the ruleset packages
+# (identifiers they define). One whole-token name per line.
+ruleset.renewal
+ruleset.prerenewal
+sm_bash

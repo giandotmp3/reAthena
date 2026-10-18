@@ -1,0 +1,25 @@
+# Interface contract stubs for the legacy-npc service (architecture section 7).
+service: legacy-npc
+exports:
+  - name: legacy.load_corpus
+    in: { paths: "list<string>" }
+    out: { npcs_loaded: int, report: "CorpusReport" }
+    notes: parse once, cache binary AST keyed by file hash; per-file unsupported report
+  - name: legacy.parse_file
+    in: { source: string, file_name: string }
+    out: ParsedFile
+  - name: legacy.run_npc
+    in: { npc: string, char: "entity", event_label: "string?" }
+    out: RunOutcome
+    notes: coroutine; yields on next/close2/menu/select/prompt/input/sleep/sleep2/progressbar
+  - name: legacy.compile_db_script
+    in: { script: string }
+    out: CompiledDbScript
+    notes: straight-line -> bonus table; otherwise needs_interpreter
+  - name: legacy.register_command
+    in: { name: string, class: "pure|reads_world|writes_world|yields", permission: "string?" }
+permissions:
+  - atcommand
+  - legacy.query_sql
+  - legacy.setunitdata
+  - unbounded_loop

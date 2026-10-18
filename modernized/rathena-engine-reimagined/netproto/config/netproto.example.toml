@@ -1,0 +1,21 @@
+# netproto example config. No secrets live here; nothing in netproto needs any.
+# If a database or credential is ever required, read it from the environment
+# (for example ${DATABASE_URL}); never write a value in this file.
+
+[framing]
+max_variable_packet_bytes = 32768   # BR-INTER-012
+min_variable_packet_bytes = 4
+
+[gating]
+max_packets_per_cycle = 3           # BR-MAP-059
+unknown_opcode = "disconnect"       # not configurable to "ignore"
+
+[flood_guard]                       # BR-INTER-011
+count = 5
+interval_ms = 3000
+autoreset_ms = 600000
+
+[codecs]
+proto_dir = "proto"
+# Client versions the server accepts. The first milestone generates one.
+supported = ["main/20211103"]

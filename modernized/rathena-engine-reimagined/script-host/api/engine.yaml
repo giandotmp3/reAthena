@@ -1,0 +1,36 @@
+# Typed API schema: single source for C++ bindings and engine.d.luau.
+# Generated files are never edited by hand.
+api_version: 1
+namespaces:
+  storage:
+    functions:
+      - name: character
+        params: [{ name: ch, type: Character }]
+        returns: StorageScope
+      - name: account
+        params: [{ name: acc, type: Account }]
+        returns: StorageScope
+      - name: world
+        params: []
+        returns: StorageScope
+  events:
+    functions:
+      - name: on
+        params:
+          - { name: event, type: string }
+          - { name: spec, type: HookSpec }
+          - { name: fn, type: "(HookContext) -> ()" }
+        returns: "()"
+  dialogue:
+    functions:
+      - { name: say,    params: [{ name: text, type: string }], returns: "()" }
+      - { name: choose, params: [{ name: options, type: "{string}" }], returns: number }
+      - { name: input,  params: [{ name: prompt, type: string }], returns: string }
+      - { name: wait,   params: [{ name: ms, type: number }], returns: "()" }
+types:
+  HookContext:
+    methods:
+      - { name: cancel,  params: [{ name: reason, type: string }], returns: "()" }
+      - { name: mul_pct, params: [{ name: pct, type: number }], returns: "()" }
+      - { name: idiv,    params: [{ name: d, type: number }], returns: "()" }
+      - { name: f32_step, params: [{ name: factor, type: number }], returns: "()" }

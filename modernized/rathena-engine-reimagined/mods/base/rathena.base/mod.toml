@@ -1,0 +1,6 @@
+# Mechanism only: no game numbers, formulas, or ruleset-specific names.
+id = "rathena.base"
+version = "0.1.0"
+engine_api = "^1"
+provides = ["base"]
+permissions = []

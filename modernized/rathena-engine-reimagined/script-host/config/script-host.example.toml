@@ -1,0 +1,29 @@
+# Example script-host configuration. No secrets live here; storage goes
+# through the persistence seam, which reads its own connection string from
+# the environment (${DATABASE_URL}).
+
+[budget]
+step_limit_per_dispatch   = 100000   # interrupt-callback steps, not exact instructions
+step_limit_per_coroutine_slice = 50000
+wall_us_per_dispatch      = 2000
+wall_us_per_tick          = 8000
+strikes_before_disable    = 3
+strike_window_ticks       = 3000     # 60 s at 20 ms
+
+[memory]
+default_mod_cap_bytes     = 33554432 # 32 MiB per mod
+accounting                = "allocator_tags"   # fallback: "per_mod_state"
+
+[dialogue]
+idle_timeout_ms           = 300000
+resume_token_bytes        = 16
+
+[reload]
+drain_timeout_game_ms     = 60000
+
+[storage]
+default_quota_bytes       = 1048576
+persistence_url           = "${DATABASE_URL}"
+
+[rng]
+strict_parity             = true

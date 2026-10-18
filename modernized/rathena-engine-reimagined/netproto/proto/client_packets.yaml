@@ -1,0 +1,72 @@
+# Machine-readable client packet spec (illustrative starter set).
+# One name may have several `versions`; `applies` is a predicate over
+# (flavour, date): "MAIN>=X || RE>=Y", optionally "MAIN>=X && MAIN<Y".
+# Opcodes below are a starter set; the full table is carried over from the
+# legacy packet DB as data and cross-checked by the codegen (--verify-legacy,
+# pending) before a second client version is generated.
+# gate: pre_session | pre_map_load | in_world   (session-phase gating)
+# length: {fixed: N} | {variable: {prefix_offset: 2, header: 4}}
+# No credentials appear in this file; obfuscation keys are per-version data
+# supplied at deploy time (obfuscation.keys_env), never literals.
+schema: 1
+client_versions:
+  - { id: "main/20211103", flavour: main, date: 20211103, obfuscation: { keys_env: NETPROTO_KEYS_MAIN_20211103 } }
+packets:
+  - name: CA_LOGIN
+    direction: cz            # client to server
+    category: login
+    gate: pre_session
+    versions:
+      - applies: "MAIN>=20000000"
+        opcode: 0x0064
+        length: { fixed: 55 }
+        fields:
+          - { name: version,  offset: 2,  type: u32 }
+          - { name: username, offset: 6,  type: string, width: 24 }
+          - { name: password, offset: 30, type: string, width: 24 }
+          - { name: client_type, offset: 54, type: u8 }
+  - name: CZ_ENTER
+    direction: cz
+    category: connect
+    gate: pre_session
+    versions:
+      - applies: "MAIN>=20040000 && MAIN<20180000"   # 0x0072 shared with other names in other eras
+        opcode: 0x0072
+        length: { fixed: 19 }
+        fields: &enter_fields
+          - { name: account_id, offset: 2,  type: u32 }
+          - { name: char_id,    offset: 6,  type: u32 }
+          - { name: login_id1,  offset: 10, type: u32 }
+          - { name: client_tick, offset: 14, type: u32 }
+          - { name: sex,        offset: 18, type: u8 }
+      - applies: "MAIN>=20180000"
+        opcode: 0x0436
+        length: { fixed: 19 }
+        fields: *enter_fields
+  - name: CZ_NOTIFY_ACTORINIT       # load-end ack
+    direction: cz
+    category: connect
+    gate: pre_map_load
+    versions:
+      - { applies: "MAIN>=20000000", opcode: 0x007d, length: { fixed: 2 }, fields: [] }
+  - name: CZ_REQUEST_MOVE
+    direction: cz
+    category: movement
+    gate: in_world
+    versions:
+      - applies: "MAIN>=20000000"
+        opcode: 0x0085
+        length: { fixed: 5 }
+        fields:
+          - { name: dest, offset: 2, type: pos3 }
+  - name: ZC_NOTIFY_PLAYERMOVE
+    direction: zc
+    category: movement
+    gate: in_world
+    versions:
+      - applies: "MAIN>=20000000"
+        opcode: 0x0087
+        length: { fixed: 12 }
+        fields:
+          - { name: move_start_time, offset: 2, type: u32 }
+          - { name: path, offset: 6, type: pos6 }

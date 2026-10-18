@@ -1,0 +1,14 @@
+rule_id	source	summary	tests	status
+BR-CHAR-032	spec AI_NATIVE_SPEC.md (P1)	Save accepted only if owner online (or final/restore) and payload size matches	tests/save_admission_test.cpp	pending
+BR-CHAR-050	spec (P1)	Registry scopes partitioned; 0 or empty value deletes the entry (compat switch)	tests/registry_scope_test.cpp	pending
+BR-CHAR-054	spec (P1)	Bounded collection (cap from config, e.g. 20) restored once on load; generic interpretation	tests/save_admission_test.cpp	pending
+BR-LOGIN-036	spec (P1)	Login-wide (##) registry is one store shared by all accounts	tests/registry_scope_test.cpp	pending
+BR-INTER-015	spec (P1)	Global registry routing by scope	tests/registry_scope_test.cpp	pending
+BR-INTER-016	spec (P0)	DB secrets from environment only, never a literal (config part; shared with core)	tests/config_test.cpp	implemented (PERSIST_CONFIG_001..003)
+PERSIST-WB-001..004	architecture 3, 4	Write-behind, copy-on-write dirty batches, coalescing, flush	tests/write_behind_test.cpp	pending
+PERSIST-WAL-001..005	architecture 3.1	Bounded on-disk WAL, replay after restart, refuse writes at limit, spill on DB outage	tests/wal_test.cpp	pending
+PERSIST-MIG-001..004	architecture 4, 5	Schema migrations; KV row version migration paths	tests/migration_test.cpp	pending
+PERSIST-IDMAP-001..004	architecture 6.2	id_map stability, tombstones, collisions, range exhaustion	tests/id_map_test.cpp	pending
+PERSIST-QUAR-001..002	architecture 3.1	Corrupt row quarantine with typed read error	tests/quarantine_quota_test.cpp	pending
+PERSIST-QUOTA-001..002	architecture 5	Per-mod storage quota enforced in persistence layer	tests/quarantine_quota_test.cpp	pending
+PERSIST-BACKEND-001..002	architecture 4, 9	SQLite and PostgreSQL pass one contract suite	tests/backend_contract_test.cpp	pending

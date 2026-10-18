@@ -1,0 +1,22 @@
+# Example gateway configuration. No secrets here: connection details are
+# placeholders resolved from the environment at startup.
+[storage]
+database_url = "${DATABASE_URL}"
+
+[listen]
+bind = "${LOGIN_BIND}"
+
+[policy]
+ticket_ttl_s = 30
+chars_per_account = 9
+max_chars = 15
+vip_char_increase = 6
+char_del_delay_s = 86400
+ip_ban_failures = 7
+ip_ban_window_s = 300
+ip_ban_duration_s = 300
+pin_max_tries = 3
+
+[hashing]
+argon2_pool_threads = 2
+argon2_queue_cap = 256

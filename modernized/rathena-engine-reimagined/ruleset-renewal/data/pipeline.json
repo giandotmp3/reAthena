@@ -1,0 +1,16 @@
+{
+  "_note": "BR-RULESET-019 / 044 stage registration order. Names are architecture 6.4 stages; entries in overrides are the only renewal-specific stage additions.",
+  "weapon": [
+    "init", "base_attack", "card_attacker", "sc_bonus", "sum", "p_atk", "mastery", "crit_rate",
+    "skill_ratio", "constant_add", "adv_katar_mastery", "res", "defense", "post_defense",
+    "skill_atk_bonus", "element", "crit_multiplier", "flat_additions", "card_target",
+    "div_fix", "hands", "map_rates", "target_modifiers", "final"
+  ],
+  "magic": [
+    "init", "base_attack", "card_attacker", "two_hand_staff", "s_matk", "skill_ratio",
+    "skill_atk_bonus", "ignore_mdef", "mdef", "element", "target_modifiers", "map_rates", "final"
+  ],
+  "overrides": ["p_atk", "res", "crit_multiplier", "s_matk", "adv_katar_mastery"],
+  "atk_percent_placement": "seeds_skill_ratio",
+  "magic_cardfix_order": ["size", "race2", "element", "attack_element", "race", "class"]
+}

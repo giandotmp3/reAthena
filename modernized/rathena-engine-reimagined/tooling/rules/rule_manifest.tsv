@@ -1,0 +1,10 @@
+rule_id	source	summary	tests	status
+BR-RULESET-115	spec (P0)	Seeded replay; RNG draws even when chance <= 0; per-hook derived streams	tests/test_sim.cpp	active
+BR-RULESET-119	spec (P0)	Golden-trace conformance and coverage keyed by BR-RULESET id	tests/test_sim.cpp	partial (coverage active, replay pending)
+TL-SIM-001..006	architecture s8 (derived, no spec id)	Virtual clock, in-memory store, SimPlayer, Luau scenarios, reload-during-select, reload-with-pending-tick	tests/test_sim.cpp	partial
+TL-MIG-001..007	spec 4.4 + architecture s8 (derived)	Last-wins merge, Index patching, Mode imports, Luau emit, diff report, embedded script routing	tests/test_migrate.cpp	partial (001,002 active)
+TL-SAVE-001..007	architecture s8 (derived)	Read-only legacy DB, dry-run, reconciliation, orphaned parking, rollback	tests/test_migrate_saves.cpp	partial (001,002 active)
+TL-PACK-001..002	architecture s6.2/s8 (derived)	Client tables, tombstoned ids	tests/test_pack_codegen_spike.cpp	pending
+TL-GEN-001..002	architecture s8 (derived)	Generated header, engine.d.luau	tests/test_pack_codegen_spike.cpp	pending
+TL-M0-001..002	architecture s12 (derived)	M0 spikes (a) and (d)	tests/test_pack_codegen_spike.cpp	pending
+TL-SEC-001..002	task security invariant	No credential literals; env placeholders only	tests/test_security.cpp	active

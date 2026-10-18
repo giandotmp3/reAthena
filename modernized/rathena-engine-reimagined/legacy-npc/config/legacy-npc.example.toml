@@ -1,0 +1,25 @@
+# Example config. Secrets come from the environment only.
+[mod]
+id = "legacy"
+engine_api = "^1"
+
+[permissions]
+# Denied by default. Grant in mods.lock, not here.
+requested = ["atcommand", "legacy.query_sql", "legacy.setunitdata", "unbounded_loop"]
+
+[limits]
+max_commands_per_run = 65535   # legacy check_cmdcount
+max_gotos_per_run = 2048       # legacy check_gotocount
+
+[compat]
+player_event_queue_slots = 2
+player_event_dequeue_ms = 100
+two_slot_event_queue = true    # compatibility flag (Q-J open)
+legacy_quirks = true
+
+[cache]
+ast_dir = "${LEGACY_NPC_CACHE_DIR}"
+
+[sql]
+# query_sql is scoped to the mod namespace; connection is owned by persistence.
+url = "${DATABASE_URL}"

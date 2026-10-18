@@ -1,0 +1,19 @@
+# Example tooling configuration. Secrets are read from the environment only.
+[sim]
+seed = 1
+clock = "virtual"
+persistence = "memory"
+
+[migrate]
+legacy_db_dir = "${LEGACY_DB_DIR}"        # path to legacy db/ (read-only input)
+out_prerenewal = "mods/ruleset.prerenewal/data"
+out_renewal = "mods/ruleset.renewal/data"
+
+[migrate_saves]
+legacy_dsn = "${LEGACY_DATABASE_URL}"     # opened read-only; never written
+target_dsn = "${DATABASE_URL}"
+mode = "dry-run"                          # dry-run | apply
+
+[codegen]
+proto_dir = "proto"
+api_dir = "api"

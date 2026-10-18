@@ -1,0 +1,24 @@
+# BR-RULESET-118 ruleset package config. Static tables stay data; formulas live in scripts/.
+mode = "renewal"
+db_set = "re"                 # legacy db/re equivalent, migrated by rathena-migrate
+
+# Sub-flags: the bundle default is all-on. Any other combination is an UNSUPPORTED
+# advanced override (Q-C) and is refused unless the operator sets allow_unsupported_subflags.
+allow_unsupported_subflags = false
+
+[subflags]
+cast = true
+drop = true
+exp = true
+lvdmg = true
+aspd = true
+stat = true
+edp = true
+
+[battle_defaults]
+hit_rate_min = 5
+hit_rate_max = 100
+max_res_mres_ignored = 50
+attack_attr_none = 14
+left_cardfix_to_right = true
+cardfix_monster_physical = true

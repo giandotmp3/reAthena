@@ -1,0 +1,16 @@
+{
+  "_note": "Data diff versus pre-renewal. Values trace to the cited BR-RULESET rule.",
+  "res": { "rule": "BR-RULESET-025", "divisor_offset": 400, "max_reduction_pct": 80, "ignore_res_cap_pct": 50 },
+  "level_advantage": { "rule": "BR-RULESET-054", "divisor": 5, "scale": 100 },
+  "tick_def2_ms": { "rule": "BR-RULESET-054", "stun": 500, "freeze": 3000, "bleeding": 12000 },
+  "status_resist_stat": { "rule": "BR-RULESET-054", "silence": "int", "blind": "int", "sleep": "agi", "bleeding": "agi", "confusion": "luk", "stone": "mdef", "freeze": "mdef" },
+  "crit": { "rule": "BR-RULESET-034", "base_mult": 1.4, "per_crate": 0.01, "float32": true },
+  "weapon_roll": { "rule": "BR-RULESET-010", "variance_pct_per_weapon_lv": 5, "stat_divisor": 200 },
+  "mdef": { "rule": "BR-RULESET-045", "k1": 1000, "k2": 10 },
+  "heal": { "rule": "BR-RULESET-048", "lv_div": 5, "mult": 30, "div": 10 },
+  "aspd_caps": { "rule": "BR-RULESET-068", "quicken": 7, "fleet": 5, "berserk": 15, "madness_cancel": 20 },
+  "bonus_semantics": { "rule": "BR-RULESET-102", "bBaseAtk": "eatk", "bAspdRate": "aspd_rate2_add" },
+  "refine": { "rule": "BR-RULESET-104", "weapon_p_atk_s_matk_per_refine": 2, "armor_grants": ["res", "mres"] },
+  "def2": { "rule": "BR-RULESET-066", "allow_negative": true },
+  "status_delay": { "rule": "BR-RULESET-057", "subtract_delay_from_duration": true, "min_duration_ms": 1 }
+}

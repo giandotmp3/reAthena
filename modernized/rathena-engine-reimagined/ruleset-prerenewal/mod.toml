@@ -1,0 +1,22 @@
+# ruleset.prerenewal package manifest (architecture section 6.1, 6.3)
+id = "ruleset.prerenewal"
+version = "0.1.0"
+engine_api = ">=0.1, <1"
+provides = ["ruleset"]
+conflicts = ["ruleset.renewal"]
+load_after = ["rathena.base"]
+
+[depends]
+"rathena.base" = "^0.1"
+
+# No permissions: a pure ruleset needs no storage, http, sql or unbounded_loop.
+permissions = []
+
+[ruleset]
+mode = "pre-renewal"
+db_set = "db/pre-re"
+# Six legacy sub-flags plus EDP; all off for the pre-renewal bundle (Q-C: bundles only).
+subflags = { cast = false, drop = false, exp = false, lvdmg = false, aspd = false, stat = false, edp = false }
+# Legacy defects ship as-is behind this flag (HITL #2 item 6).
+legacy_quirks = true
+strict_parity = true

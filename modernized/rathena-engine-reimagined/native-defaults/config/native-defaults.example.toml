@@ -1,0 +1,12 @@
+# Operator-facing plug-in config. No credentials. Rulesets opt in by stage ID.
+[plugin]
+enabled = true
+# Refuse to register a native stage that has no Luau reference.
+require_reference = true
+
+[mob_ai]
+hard_tick_ms = 100   # BR-RULESET-113
+lazy_tick_ms = 1000
+
+[strict_parity]
+enabled = true       # bit-exact default pipelines (HITL #2 item 3)

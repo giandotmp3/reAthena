@@ -1,0 +1,7 @@
+{
+  "_note": "BR-RULESET-117 minimum hook surface registered by this package.",
+  "damage_stage": ["base", "ratio", "element", "defense", "final"],
+  "status": ["start_gate", "resist", "calc_contribution", "tick", "end"],
+  "item": ["bonus_script", "equip", "unequip", "use", "combo"],
+  "formula": ["heal", "cast", "delay", "sp_cost"]
+}
