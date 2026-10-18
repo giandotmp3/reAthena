@@ -21,7 +21,7 @@ TEST("EC-TICK-002", poll_delay_clamped_to_20ms_floor_and_1000ms_ceiling) {
   CHECK(clamp_poll_delay(5000) == 1000);
 }
 
-PENDING_TEST("EC-TICK-003", timers_fire_by_due_time_then_insertion_order) {
+TEST("EC-TICK-003", timers_fire_by_due_time_then_insertion_order) {
   VirtualClock c;
   TimerQueue q(c);
   std::vector<int> order;
@@ -33,7 +33,7 @@ PENDING_TEST("EC-TICK-003", timers_fire_by_due_time_then_insertion_order) {
   CHECK((order == std::vector<int>{2, 3, 1}));
 }
 
-PENDING_TEST("EC-TICK-004", cancelled_timer_never_fires_and_not_due_timer_waits) {
+TEST("EC-TICK-004", cancelled_timer_never_fires_and_not_due_timer_waits) {
   VirtualClock c;
   TimerQueue q(c);
   int fired = 0;
@@ -47,7 +47,7 @@ PENDING_TEST("EC-TICK-004", cancelled_timer_never_fires_and_not_due_timer_waits)
   CHECK(q.next_due() == Tick{100});
 }
 
-PENDING_TEST("EC-TICK-005", late_timer_reports_scheduled_and_actual_time) {
+TEST("EC-TICK-005", late_timer_reports_scheduled_and_actual_time) {
   VirtualClock c;
   TimerQueue q(c);
   Tick sched = -1, actual = -1;
@@ -58,7 +58,7 @@ PENDING_TEST("EC-TICK-005", late_timer_reports_scheduled_and_actual_time) {
   CHECK(actual == 350);
 }
 
-PENDING_TEST("EC-TICK-006", interval_timer_rearms_until_cancelled) {
+TEST("EC-TICK-006", interval_timer_rearms_until_cancelled) {
   VirtualClock c;
   TimerQueue q(c);
   int n = 0;

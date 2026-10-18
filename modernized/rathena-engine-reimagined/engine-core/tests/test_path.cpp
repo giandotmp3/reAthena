@@ -12,7 +12,7 @@ MapGrid open_grid(uint16_t w, uint16_t h) {
 }
 }  // namespace
 
-PENDING_TEST("EC-PATH-001", straight_orthogonal_path_costs_10_per_step) {
+TEST("EC-PATH-001", straight_orthogonal_path_costs_10_per_step) {
   MapGrid g = open_grid(20, 20);
   PathResult r = path_search(g, {2, 2}, {6, 2});
   CHECK(r.found);
@@ -21,7 +21,7 @@ PENDING_TEST("EC-PATH-001", straight_orthogonal_path_costs_10_per_step) {
   CHECK(r.cost == 40);
 }
 
-PENDING_TEST("EC-PATH-002", diagonal_step_costs_14) {
+TEST("EC-PATH-002", diagonal_step_costs_14) {
   MapGrid g = open_grid(20, 20);
   PathResult r = path_search(g, {2, 2}, {5, 5});
   CHECK(r.found);
@@ -29,7 +29,7 @@ PENDING_TEST("EC-PATH-002", diagonal_step_costs_14) {
   CHECK(r.cost == 3 * kCostDiagonal);
 }
 
-PENDING_TEST("EC-PATH-003", no_corner_cutting) {
+TEST("EC-PATH-003", no_corner_cutting) {
   MapGrid g = open_grid(20, 20);
   g.set_terrain(3, 2, 0);  // wall east of start
   PathResult r = path_search(g, {2, 2}, {4, 4});
@@ -44,7 +44,7 @@ PENDING_TEST("EC-PATH-003", no_corner_cutting) {
   }
 }
 
-PENDING_TEST("EC-PATH-004", max_walkpath_limit_is_engine_config) {
+TEST("EC-PATH-004", max_walkpath_limit_is_engine_config) {
   MapGrid g = open_grid(100, 20);
   PathResult shortcfg = path_search(g, {2, 2}, {42, 2});  // 40 steps > default 32
   CHECK(!shortcfg.found);
@@ -54,22 +54,26 @@ PENDING_TEST("EC-PATH-004", max_walkpath_limit_is_engine_config) {
   CHECK(longcfg.found && longcfg.steps.size() == 40);
 }
 
-PENDING_TEST("EC-PATH-005", unreachable_destination_fails) {
+TEST("EC-PATH-005", unreachable_destination_fails) {
   MapGrid g = open_grid(20, 20);
   for (int y = 0; y < 20; ++y) g.set_terrain(10, y, 0);  // full wall
   CHECK(!path_search(g, {2, 2}, {15, 2}).found);
 }
 
-PENDING_TEST("EC-PATH-006", path_search_long_needs_clear_shootable_line) {
+TEST("EC-PATH-006", path_search_long_needs_clear_shootable_line) {
   MapGrid g = open_grid(30, 30);
   CHECK(path_search_long(g, {2, 2}, {12, 2}));
   g.set_terrain(7, 2, cell::Walkable);  // walkable, not shootable
   CHECK(!path_search_long(g, {2, 2}, {12, 2}));
 }
 
-PENDING_TEST("EC-PATH-007", official_walkpath_over_14_also_needs_long_search) {
+TEST("EC-PATH-007", official_walkpath_over_14_also_needs_long_search) {
+  // Legacy unit_walktoxy runs the long search with CELL_CHKNOPASS, i.e. the
+  // straight line must be *walkable*. (The scaffold used a walkable but not
+  // shootable cell, which cannot block the walkability line and which map data
+  // cannot produce; a real wall is used instead. See EC-PATH-011.)
   MapGrid g = open_grid(40, 20);
-  g.set_terrain(10, 2, cell::Walkable);  // blocks the shoot line, walkable around
+  g.set_terrain(10, 2, 0);  // wall on the straight line, walkable around it
   // 16 cells away: standard path exists, official rule rejects (len > 14).
   CHECK(path_search(g, {2, 2}, {18, 2}, PathMode::Standard).found);
   CHECK(!path_search(g, {2, 2}, {18, 2}, PathMode::OfficialWalkpath).found);
@@ -77,7 +81,26 @@ PENDING_TEST("EC-PATH-007", official_walkpath_over_14_also_needs_long_search) {
   CHECK(path_search(g, {2, 2}, {12, 2}, PathMode::OfficialWalkpath).found);
 }
 
-PENDING_TEST("EC-PATH-008", search_is_deterministic) {
+TEST("EC-PATH-011", official_rule_checks_walkability_not_shootability_like_legacy) {
+  MapGrid g = open_grid(40, 20);
+  g.set_terrain(10, 2, cell::Shootable);  // cliff: shoot through, cannot walk
+  PathResult std_r = path_search(g, {2, 2}, {18, 2}, PathMode::Standard);
+  CHECK(std_r.found && std_r.steps.size() == 16);
+  // The straight line crosses the cliff: official rule rejects.
+  CHECK(!path_search(g, {2, 2}, {18, 2}, PathMode::OfficialWalkpath).found);
+  // A walkable-but-not-shootable cell does not stop the official rule.
+  MapGrid h = open_grid(40, 20);
+  h.set_terrain(10, 2, cell::Walkable);
+  CHECK(path_search(h, {2, 2}, {18, 2}, PathMode::OfficialWalkpath).found);
+  // ...but it does stop a shot (wall check), as EC-PATH-006 requires.
+  CHECK(!path_search_long(h, {2, 2}, {18, 2}, LineBlock::Wall));
+  CHECK(path_search_long(h, {2, 2}, {18, 2}, LineBlock::NoPass));
+  // Cliff: walkability line blocked, shot line clear (legacy CELL_CHKWALL).
+  CHECK(path_search_long(g, {2, 2}, {18, 2}, LineBlock::Wall));
+  CHECK(!path_search_long(g, {2, 2}, {18, 2}, LineBlock::NoPass));
+}
+
+TEST("EC-PATH-008", search_is_deterministic) {
   MapGrid g = open_grid(30, 30);
   g.set_terrain(8, 5, 0);
   PathResult a = path_search(g, {3, 3}, {14, 9});

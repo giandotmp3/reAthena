@@ -34,8 +34,13 @@ add_executable(engine_core_tests
   tests/test_tick.cpp
   tests/test_movement.cpp
   tests/test_instance.cpp
+  tests/test_behavior.cpp
+  tests/test_props.cpp
+  tests/test_path_diff.cpp
+  tests/legacy_ref/legacy_path_ref.cpp
   tests/test_lint.cpp)
 target_link_libraries(engine_core_tests PRIVATE engine_core)
+target_compile_options(engine_core_tests PRIVATE -Wall -Wextra)
 target_compile_definitions(engine_core_tests PRIVATE
   ENGINE_CORE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 add_test(NAME acceptance COMMAND engine_core_tests)

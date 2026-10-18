@@ -26,7 +26,7 @@ struct World {
 };
 }  // namespace
 
-PENDING_TEST("EC-MOVE-001", walk_advances_one_cell_per_step_timer) {
+TEST("EC-MOVE-001", walk_advances_one_cell_per_step_timer) {
   World w;
   MovementSystem mv(w.reg, w.grid, w.spatial, w.timers);
   EntityId e = w.spawn({2, 2});
@@ -38,7 +38,7 @@ PENDING_TEST("EC-MOVE-001", walk_advances_one_cell_per_step_timer) {
   CHECK(w.reg.get<Position>(e)->x == 5);
 }
 
-PENDING_TEST("EC-MOVE-002", hooks_fire_per_step_and_veto_stops_walk) {
+TEST("EC-MOVE-002", hooks_fire_per_step_and_veto_stops_walk) {
   World w;
   std::vector<Point> moved;
   MoveHooks h;
@@ -54,7 +54,7 @@ PENDING_TEST("EC-MOVE-002", hooks_fire_per_step_and_veto_stops_walk) {
   CHECK((moved == std::vector<Point>{{3, 2}}));
 }
 
-PENDING_TEST("EC-MOVE-003", steps_update_spatial_index) {
+TEST("EC-MOVE-003", steps_update_spatial_index) {
   World w;
   MovementSystem mv(w.reg, w.grid, w.spatial, w.timers);
   EntityId e = w.spawn({2, 2});
@@ -63,7 +63,7 @@ PENDING_TEST("EC-MOVE-003", steps_update_spatial_index) {
   CHECK(w.spatial.position_of(e) == Point({4, 2}));
 }
 
-PENDING_TEST("EC-MOVE-004", walk_to_unreachable_cell_is_rejected) {
+TEST("EC-MOVE-004", walk_to_unreachable_cell_is_rejected) {
   World w;
   w.grid.set_terrain(5, 2, 0);
   MovementSystem mv(w.reg, w.grid, w.spatial, w.timers);

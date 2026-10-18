@@ -55,7 +55,7 @@ TEST("EC-ECS-004", destroy_strips_all_components) {
   CHECK(r.pool<Facing>().size() == 0);
 }
 
-PENDING_TEST("EC-ECS-003", deferred_destroy_applies_at_flush) {
+TEST("EC-ECS-003", deferred_destroy_applies_at_flush) {
   Registry r;
   EntityId e = r.create();
   r.defer_destroy(e);
@@ -64,7 +64,7 @@ PENDING_TEST("EC-ECS-003", deferred_destroy_applies_at_flush) {
   CHECK(!r.alive(e));
 }
 
-PENDING_TEST("EC-ECS-005", script_declared_schema_roundtrip) {
+TEST("EC-ECS-005", script_declared_schema_roundtrip) {
   Registry r;
   EntityId e = r.create();
   SchemaStore s;

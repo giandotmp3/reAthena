@@ -3,7 +3,7 @@
 
 using namespace engine;
 
-PENDING_TEST("EC-INST-001", create_clone_with_owner_and_lookup) {
+TEST("EC-INST-001", create_clone_with_owner_and_lookup) {
   VirtualClock c;
   TimerQueue q(c);
   InstanceManager m(q);
@@ -12,7 +12,7 @@ PENDING_TEST("EC-INST-001", create_clone_with_owner_and_lookup) {
   CHECK(m.source_of(id) == MapId{7});
 }
 
-PENDING_TEST("EC-INST-002", ttl_expiry_destroys_instance) {
+TEST("EC-INST-002", ttl_expiry_destroys_instance) {
   VirtualClock c;
   TimerQueue q(c);
   InstanceManager m(q);
@@ -23,7 +23,7 @@ PENDING_TEST("EC-INST-002", ttl_expiry_destroys_instance) {
   CHECK(!m.exists(id));
 }
 
-PENDING_TEST("EC-INST-003", owner_leaving_destroys_only_its_instances) {
+TEST("EC-INST-003", owner_leaving_destroys_only_its_instances) {
   VirtualClock c;
   TimerQueue q(c);
   InstanceManager m(q);
@@ -34,7 +34,7 @@ PENDING_TEST("EC-INST-003", owner_leaving_destroys_only_its_instances) {
   CHECK(m.exists(other));
 }
 
-PENDING_TEST("EC-INST-004", scoped_timers_die_with_instance) {
+TEST("EC-INST-004", scoped_timers_die_with_instance) {
   VirtualClock c;
   TimerQueue q(c);
   InstanceManager m(q);

@@ -28,7 +28,7 @@ TEST("EC-ATTR-001", interning_is_stable) {
   CHECK(s.name_of(b) == "beta");
 }
 
-PENDING_TEST("EC-ATTR-002", engine_runs_ruleset_stage_list_in_order) {
+TEST("EC-ATTR-002", engine_runs_ruleset_stage_list_in_order) {
   AttributeSystem s;
   EntityAllocator al;
   EntityId e = al.create();
@@ -45,7 +45,7 @@ PENDING_TEST("EC-ATTR-002", engine_runs_ruleset_stage_list_in_order) {
   CHECK(s.get(e, b) == 15);  // pct applied to 0 first, then add
 }
 
-PENDING_TEST("EC-ATTR-003", remove_source_drops_all_its_contributions) {
+TEST("EC-ATTR-003", remove_source_drops_all_its_contributions) {
   AttributeSystem s;
   EntityAllocator al;
   EntityId e = al.create();
@@ -59,7 +59,7 @@ PENDING_TEST("EC-ATTR-003", remove_source_drops_all_its_contributions) {
   CHECK(s.get(e, a) == 1);
 }
 
-PENDING_TEST("EC-ATTR-004", incremental_recompute_equals_from_scratch) {
+TEST("EC-ATTR-004", incremental_recompute_equals_from_scratch) {
   AttributeSystem s;
   EntityAllocator al;
   EntityId e = al.create();

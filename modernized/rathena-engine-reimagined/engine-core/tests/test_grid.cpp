@@ -54,14 +54,16 @@ TEST("EC-DIST-001", chebyshev_distance_for_rules) {
   CHECK(distance_chebyshev({-2, 1}, {2, -1}) == 4);
 }
 
-TEST("EC-DIST-002", client_distance_is_floor_of_euclid_minus_tenth) {
+TEST("EC-DIST-002", client_distance_is_trunc_of_euclid_minus_tenth_clamped_at_zero) {
   CHECK(distance_client({0, 0}, {3, 4}) == 4);  // sqrt(25)-0.1 = 4.9
   CHECK(distance_client({0, 0}, {1, 0}) == 0);  // 0.9
   CHECK(distance_client({0, 0}, {1, 1}) == 1);  // 1.314
-  CHECK(distance_client({0, 0}, {0, 0}) == -1); // -0.1 floors to -1 (legacy formula)
+  // Legacy path.cpp distance_client() clamps negatives to 0 before truncating
+  // (the scaffold asserted -1, which the legacy code never returns).
+  CHECK(distance_client({0, 0}, {0, 0}) == 0);
 }
 
-PENDING_TEST("EC-GRID-004", area_query_is_chebyshev_square) {
+TEST("EC-GRID-004", area_query_is_chebyshev_square) {
   MapGrid g(32, 32);
   SpatialIndex sp(g);
   EntityAllocator al;
@@ -74,7 +76,7 @@ PENDING_TEST("EC-GRID-004", area_query_is_chebyshev_square) {
   CHECK(seen.size() == 2);  // corner (7,3) is inside the square; (8,5) is not
 }
 
-PENDING_TEST("EC-GRID-005", area_order_primary_then_secondary_lifo_within_bucket) {
+TEST("EC-GRID-005", area_order_primary_then_secondary_lifo_within_bucket) {
   MapGrid g(32, 32);
   SpatialIndex sp(g);
   EntityAllocator al;
@@ -90,7 +92,7 @@ PENDING_TEST("EC-GRID-005", area_order_primary_then_secondary_lifo_within_bucket
   CHECK(seen[2] == b);  // secondary pass last
 }
 
-PENDING_TEST("EC-GRID-006", area_is_snapshot_then_call_and_skips_removed) {
+TEST("EC-GRID-006", area_is_snapshot_then_call_and_skips_removed) {
   MapGrid g(32, 32);
   SpatialIndex sp(g);
   EntityAllocator al;
@@ -109,7 +111,7 @@ PENDING_TEST("EC-GRID-006", area_is_snapshot_then_call_and_skips_removed) {
   CHECK(seen.size() == 1);  // removed one skipped, late insert not visited
 }
 
-PENDING_TEST("EC-GRID-007", area_wall_check_requires_clear_shootable_line) {
+TEST("EC-GRID-007", area_wall_check_requires_clear_shootable_line) {
   MapGrid g(32, 32);
   open_all(g);
   g.set_terrain(5, 3, cell::Walkable);  // walkable but not shootable: blocks the line
@@ -125,7 +127,7 @@ PENDING_TEST("EC-GRID-007", area_wall_check_requires_clear_shootable_line) {
   CHECK(seen.size() == 1 && seen[0] == clear);
 }
 
-PENDING_TEST("EC-GRID-008", spatial_move_and_remove_track_position) {
+TEST("EC-GRID-008", spatial_move_and_remove_track_position) {
   MapGrid g(32, 32);
   SpatialIndex sp(g);
   EntityAllocator al;

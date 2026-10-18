@@ -41,10 +41,11 @@ public:
     return static_cast<SparseSet<T>&>(*it->second);
   }
 
-  // Deferred structural changes: safe to call while iterating a pool.
-  // STUB (EC-ECS-003).
+  // Deferred structural changes: safe to call while iterating a pool. The
+  // entity stays alive (and keeps its components) until flush_deferred();
+  // duplicates and handles that die in the meantime are harmless.
   void defer_destroy(EntityId id);
-  void flush_deferred();
+  size_t flush_deferred();  // returns the number of entities actually destroyed
 
 private:
   EntityAllocator alloc_;
