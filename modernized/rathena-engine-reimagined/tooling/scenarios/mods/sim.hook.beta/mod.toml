@@ -1,0 +1,5 @@
+# Scenario test mod (rathena-sim). Pre hook 'guard': cancels when the context value is negative.
+id = "sim.hook.beta"
+version = "0.1.0"
+engine_api = "^1"
+permissions = []

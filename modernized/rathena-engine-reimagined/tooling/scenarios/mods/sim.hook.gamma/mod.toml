@@ -1,0 +1,5 @@
+# Scenario test mod (rathena-sim). Post hook, ordered after alpha.
+id = "sim.hook.gamma"
+version = "0.1.0"
+engine_api = "^1"
+permissions = []

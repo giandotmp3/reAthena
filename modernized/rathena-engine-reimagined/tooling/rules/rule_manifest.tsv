@@ -1,7 +1,24 @@
 rule_id	source	summary	tests	status
-BR-RULESET-115	spec (P0)	Seeded replay; RNG draws even when chance <= 0; per-hook derived streams	tests/test_sim.cpp	active
-BR-RULESET-119	spec (P0)	Golden-trace conformance and coverage keyed by BR-RULESET id	tests/test_sim.cpp	partial (coverage active, replay pending)
-TL-SIM-001..006	architecture s8 (derived, no spec id)	Virtual clock, in-memory store, SimPlayer, Luau scenarios, reload-during-select, reload-with-pending-tick	tests/test_sim.cpp	partial
+BR-RULESET-115	spec (P0)	Seeded replay; RNG draws even when chance <= 0; per-hook derived streams; draws counted; same seed => identical wire/event/RNG trace	tests/test_sim.cpp, tests/test_sim_world.cpp, tests/test_sim_scenarios.cpp, scenarios/damage_*_golden.luau, scenarios/hook_rng_streams.luau	active
+BR-RULESET-116	spec (P0)	Hook effects are queued and committed in hook order; a pre-hook cancel discards them (sim exercises script-host's bus)	tests/test_sim_world.cpp, scenarios/mod_hook_cancel_ordering.luau	active (hook effect queue only; the damage-side effects are the ruleset packages')
+BR-RULESET-117	spec (P0)	Hook ordering by phase, priority, constraints; reload refused on a constraint cycle naming both hooks	scenarios/mod_hook_cancel_ordering.luau	active (ordering and cancel; the nine skill hooks are not exercised)
+BR-RULESET-119	spec (P0)	Golden-trace conformance and coverage keyed by BR id: coverage report, golden trace replay, conformance driver for both rulesets	tests/test_sim.cpp, tests/test_sim_coverage.cpp, tests/test_sim_conformance.cpp	active
+BR-MAP-057	AI_NATIVE_SPEC (P0)	Chat speaker-name integrity: a forged or missing speaker prefix is dropped	scenarios/chat_speaker_integrity.luau	active
+BR-MAP-059	AI_NATIVE_SPEC (P0)	Framing, session-phase gating, 3 packets per socket per cycle (netproto gating applied by the sim boundary)	tests/test_sim_players.cpp, scenarios/packet_gating.luau	active
+BR-MAP-060	AI_NATIVE_SPEC (P0)	Connect packet checks: account range, sex byte, duplicate login	tests/test_sim_players.cpp, scenarios/packet_gating.luau	active
+TL-SIM-001..002	architecture s8 (derived, no spec id)	Virtual clock, in-memory store	tests/test_sim.cpp	active
+TL-SIM-003	architecture s8 (derived)	SimPlayer casts a skill and sees a damage packet	tests/test_sim.cpp	pending: the ruleset packages implement the basic weapon attack only (their skill formulas raise NOT_IMPLEMENTED); the same shape with the attack is scenarios/example_bash.luau
+TL-SIM-004	architecture s8 (derived)	Luau scenario declares BR tags and passes	tests/test_sim.cpp, scenarios/example_bash.luau	active
+TL-SIM-005	architecture s5/s8 (derived)	Reload during a pending select(): dialogue finishes in generation N, new ones use N+1, drain timeout cancels	tests/test_sim.cpp, scenarios/reload_during_select.luau	active
+TL-SIM-006	architecture s5/s8 (derived)	Reload with a pending status tick: old closure cancelled, tick fires once	tests/test_sim.cpp, scenarios/reload_with_pending_status_tick.luau	active
+TL-SIM-010..019	architecture s8 (derived)	SimPlayer: handshake, visibility, walking, chat, crowd connect, disconnect, NPC dialogue input and persistence, ignored clicks, unsupported cast	tests/test_sim_players.cpp	active
+TL-SIM-020	architecture s7/s8 (derived)	Real legacy .txt NPC (npc/pre-re/other/resetskill.txt) driven through SimPlayer answers	scenarios/npc_dialogue_hypnotist.luau	active
+TL-SIM-030	architecture s5/s8 (derived)	Position persisted through script-host storage into SQLite and restored on login	scenarios/persistence_roundtrip.luau, tests/test_sim_world.cpp	active
+TL-SIM-050..053	architecture s8 (derived)	Wire vocabulary equals the legacy packet DB and the netproto catalog; frame round trips; RPC value encoding	tests/test_sim_wire.cpp	active
+TL-SIM-060..066	architecture s8 (derived)	Mods from a mods dir through the loader, virtual time, persistence, movement hook veto, 200 players	tests/test_sim_world.cpp	active
+TL-SIM-070..076	architecture s8 (derived)	Scenario runner: every shipped scenario passes, assertion reporting, RPC chunking, sandbox and budget, directives	tests/test_sim_scenarios.cpp	active
+TL-SIM-080..081	architecture s8 (derived)	Conformance CLI; golden data expanded outside the package on a clean checkout	tests/test_sim_conformance.cpp	active
+TL-SIM-090	architecture s8 (derived)	Coverage static scan of other units' tests	tests/test_sim_coverage.cpp	active
 TL-MIG-001..007	spec 4.4 + architecture s8 (derived)	Last-wins merge, Index patching, Mode imports, Luau emit, diff report, embedded script routing	tests/test_migrate.cpp	partial (001,002 active)
 TL-SAVE-001..007	architecture s8 (derived)	Read-only legacy DB, dry-run, reconciliation, orphaned parking, rollback	tests/test_migrate_saves.cpp	partial (001,002 active)
 TL-PACK-001..002	architecture s6.2/s8 (derived)	Client tables, tombstoned ids	tests/test_pack_codegen_spike.cpp	pending

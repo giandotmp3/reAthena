@@ -1,5 +1,6 @@
-// Gateway-owned BR-LOGIN rules. PENDING_TEST = expected-failure until the
-// service stub is implemented; each body encodes the real expectation.
+// Gateway-owned BR-LOGIN rules. These were expected-failure tests against stubs; the services are
+// implemented now. Where a body originally said "config seam added with implementation" (013, 014, 016,
+// 039, 005) the seam setup or the real assertion was added; every such edit is marked "[impl]".
 #include "fixture.hpp"
 
 using namespace gt;
@@ -8,7 +9,7 @@ using namespace gt;
 // SUPERSEDED: login/char/map are one process behind in-process seams.
 // BR-LOGIN-036 (## registry) belongs to persistence/KV, not the gateway.
 
-PENDING_TEST("BR-LOGIN-001", first_failing_check_wins_banned_with_correct_password_is_6) {
+TEST("BR-LOGIN-001", first_failing_check_wins_banned_with_correct_password_is_6) {
   Env e;
   auto& a = e.add_account();
   Account u = a; u.unban_time = e.clock.now() + 3600; e.accounts.update(u);
@@ -16,7 +17,7 @@ PENDING_TEST("BR-LOGIN-001", first_failing_check_wins_banned_with_correct_passwo
   CHECK(!o.ok && o.refusal_code == refuse::Banned);
 }
 
-PENDING_TEST("BR-LOGIN-001", wrong_password_beats_banned_check_order) {
+TEST("BR-LOGIN-001", wrong_password_beats_banned_check_order) {
   Env e;
   auto& a = e.add_account();
   Account u = a; u.unban_time = e.clock.now() + 3600; e.accounts.update(u);
@@ -24,7 +25,7 @@ PENDING_TEST("BR-LOGIN-001", wrong_password_beats_banned_check_order) {
   CHECK(!o.ok && o.refusal_code == refuse::IncorrectPassword);
 }
 
-PENDING_TEST("BR-LOGIN-002", plaintext_compare_is_case_sensitive) {
+TEST("BR-LOGIN-002", plaintext_compare_is_case_sensitive) {
   Env e;
   auto& a = e.add_account();
   Account u = a; u.scheme = PasswordScheme::Plaintext; u.stored_secret = "secret1"; e.accounts.update(u);
@@ -32,7 +33,7 @@ PENDING_TEST("BR-LOGIN-002", plaintext_compare_is_case_sensitive) {
   CHECK(!e.login.login(e.req("fakeuser", "Secret1")).ok);
 }
 
-PENDING_TEST("BR-LOGIN-003", md5_challenge_accepts_salt_pass_or_pass_salt) {
+TEST("BR-LOGIN-003", md5_challenge_accepts_salt_pass_or_pass_salt) {
   Env e;
   auto& a = e.add_account();
   Account u = a; u.scheme = PasswordScheme::Md5; u.stored_secret = "unused"; e.accounts.update(u);
@@ -43,7 +44,7 @@ PENDING_TEST("BR-LOGIN-003", md5_challenge_accepts_salt_pass_or_pass_salt) {
   CHECK(e.login.login(r2).ok);
 }
 
-PENDING_TEST("BR-LOGIN-004", legacy_use_md5_passwords_option_is_removed_argon2id_at_rest) {
+TEST("BR-LOGIN-004", legacy_use_md5_passwords_option_is_removed_argon2id_at_rest) {
   Env e;
   e.add_account();
   e.login.login(e.req());
@@ -52,14 +53,21 @@ PENDING_TEST("BR-LOGIN-004", legacy_use_md5_passwords_option_is_removed_argon2id
   CHECK(e.hasher.verify(PasswordScheme::Argon2id, stored->stored_secret, kFakePass).ok);
 }
 
-PENDING_TEST("BR-LOGIN-005", challenge_salt_bytes_1_to_255_never_nul) {
+TEST("BR-LOGIN-005", challenge_salt_bytes_1_to_255_never_nul) {
   Env e;
+  e.add_account();  // [impl] the placeholder logged in without any account existing
   // Gateway exposes a salt generator through login(); a hook-level API lands with netproto wiring.
   auto o = e.login.login(e.req());
   CHECK(o.ok);  // placeholder expectation: salt generation is exercised through the challenge path
+  // [impl] the real rule: every byte of every generated salt is in 1..255, never NUL
+  for (int round = 0; round < 200; ++round) {
+    std::string salt = e.login.make_challenge_salt(20);
+    CHECK(salt.size() == 20);
+    for (char c : salt) CHECK(static_cast<unsigned char>(c) != 0);
+  }
 }
 
-PENDING_TEST("BR-LOGIN-006", new_account_suffix_M_creates_account_then_authenticates) {
+TEST("BR-LOGIN-006", new_account_suffix_M_creates_account_then_authenticates) {
   Env e;
   e.cfg.new_account = true;
   auto o = e.login.login(e.req("bob123_M", "pass12"));
@@ -68,14 +76,14 @@ PENDING_TEST("BR-LOGIN-006", new_account_suffix_M_creates_account_then_authentic
   CHECK(found.size() == 1 && found[0].sex == Sex::Male);
 }
 
-PENDING_TEST("BR-LOGIN-006", new_account_refused_when_too_short_or_exists_code_1) {
+TEST("BR-LOGIN-006", new_account_refused_when_too_short_or_exists_code_1) {
   Env e;
   e.cfg.new_account = true;
   e.add_account("bob123");
   CHECK(e.login.login(e.req("bob123_M", "pass12")).refusal_code == refuse::IncorrectPassword);
 }
 
-PENDING_TEST("BR-LOGIN-007", registration_flood_limit_is_server_wide_code_3) {
+TEST("BR-LOGIN-007", registration_flood_limit_is_server_wide_code_3) {
   Env e;
   e.cfg.new_account = true;
   int refused = 0;
@@ -86,14 +94,14 @@ PENDING_TEST("BR-LOGIN-007", registration_flood_limit_is_server_wide_code_3) {
   CHECK(refused > 0);
 }
 
-PENDING_TEST("BR-LOGIN-008", new_account_id_is_max_plus_one_at_least_2000000) {
+TEST("BR-LOGIN-008", new_account_id_is_max_plus_one_at_least_2000000) {
   Env e;
   e.cfg.new_account = true;
   auto o = e.login.login(e.req("newbie_F", "pass12"));
   CHECK(o.ok && o.account_id >= 2000000);
 }
 
-PENDING_TEST("BR-LOGIN-009", server_sex_account_cannot_log_in_from_client) {
+TEST("BR-LOGIN-009", server_sex_account_cannot_log_in_from_client) {
   Env e;
   auto& a = e.add_account("s1");
   Account u = a; u.sex = Sex::Server; e.accounts.update(u);
@@ -101,7 +109,7 @@ PENDING_TEST("BR-LOGIN-009", server_sex_account_cannot_log_in_from_client) {
   CHECK(!o.ok && o.refusal_code == refuse::UnregisteredId);
 }
 
-PENDING_TEST("BR-LOGIN-010", expired_account_is_code_2_zero_means_never) {
+TEST("BR-LOGIN-010", expired_account_is_code_2_zero_means_never) {
   Env e;
   auto& a = e.add_account();
   Account u = a; u.expiration_time = e.clock.now() - 1; e.accounts.update(u);
@@ -110,7 +118,7 @@ PENDING_TEST("BR-LOGIN-010", expired_account_is_code_2_zero_means_never) {
   CHECK(e.login.login(e.req()).ok);
 }
 
-PENDING_TEST("BR-LOGIN-011", future_unban_time_is_code_6_with_date) {
+TEST("BR-LOGIN-011", future_unban_time_is_code_6_with_date) {
   Env e;
   auto& a = e.add_account();
   Account u = a; u.unban_time = e.clock.now() + 100; e.accounts.update(u);
@@ -118,29 +126,36 @@ PENDING_TEST("BR-LOGIN-011", future_unban_time_is_code_6_with_date) {
   CHECK(o.refusal_code == refuse::Banned && o.unban_time == u.unban_time);
 }
 
-PENDING_TEST("BR-LOGIN-012", state_n_refuses_with_code_n_minus_1) {
+TEST("BR-LOGIN-012", state_n_refuses_with_code_n_minus_1) {
   Env e;
   auto& a = e.add_account();
   Account u = a; u.state = 5; e.accounts.update(u);
   CHECK(e.login.login(e.req()).refusal_code == 4);
 }
 
-PENDING_TEST("BR-LOGIN-013", client_hash_mismatch_is_code_5) {
+TEST("BR-LOGIN-013", client_hash_mismatch_is_code_5) {
   Env e;
   e.add_account();
   auto r = e.req(); r.client_hash = "00000000000000000000000000000000";
   // Requires a configured hash list excluding this hash (config seam added with implementation).
+  e.cfg.client_hash_check = true;  // [impl] the config seam: a list that does not contain the zero hash
+  e.cfg.client_hash_nodes = {{0, "113e195e6c051bb1cfb12a644bb084c5"}};
   CHECK(e.login.login(r).refusal_code == refuse::ClientHash);
+  r.client_hash = "113e195e6c051bb1cfb12a644bb084c5";
+  CHECK(e.login.login(r).ok);
 }
 
-PENDING_TEST("BR-LOGIN-014", dnsbl_hit_is_code_3) {
+TEST("BR-LOGIN-014", dnsbl_hit_is_code_3) {
   Env e;
   e.add_account();
   auto r = e.req(); r.ip = "192.0.2.99";  // listed by a fake DNSBL resolver seam
+  e.cfg.use_dnsbl = true;                  // [impl] the resolver seam is the fixture's FakeDnsbl
+  e.dnsbl.hits.insert("192.0.2.99");
   CHECK(e.login.login(r).refusal_code == refuse::Rejected);
+  CHECK(e.login.login(e.req()).ok);        // an unlisted address passes
 }
 
-PENDING_TEST("BR-LOGIN-015", success_rotates_ids_updates_account_and_clears_unban) {
+TEST("BR-LOGIN-015", success_rotates_ids_updates_account_and_clears_unban) {
   Env e;
   auto& a = e.add_account();
   Account u = a; u.unban_time = 1; e.accounts.update(u);  // past ban
@@ -152,14 +167,15 @@ PENDING_TEST("BR-LOGIN-015", success_rotates_ids_updates_account_and_clears_unba
   CHECK(s->web_token.size() == 16);
 }
 
-PENDING_TEST("BR-LOGIN-016", group_gating_server_closed_code_1) {
+TEST("BR-LOGIN-016", group_gating_server_closed_code_1) {
   Env e;
   e.add_account();
   // min_group_id_to_connect above the account group (config seam added with implementation).
+  e.cfg.min_group_id_to_connect = 1;  // [impl] the config seam; the fixture account has group 0
   CHECK(e.login.login(e.req()).refusal_code == refuse::ServerClosed);
 }
 
-PENDING_TEST("BR-LOGIN-017", world_unavailable_refuses_with_code_1) {
+TEST("BR-LOGIN-017", world_unavailable_refuses_with_code_1) {
   Env e;
   e.add_account();
   e.bus.up = false;
@@ -167,7 +183,7 @@ PENDING_TEST("BR-LOGIN-017", world_unavailable_refuses_with_code_1) {
   CHECK(!o.ok && o.refusal_code == refuse::ServerClosed);
 }
 
-PENDING_TEST("BR-LOGIN-018", duplicate_login_kicks_existing_and_client_gets_code_8) {
+TEST("BR-LOGIN-018", duplicate_login_kicks_existing_and_client_gets_code_8) {
   Env e;
   e.add_account();
   CHECK(e.login.login(e.req()).ok);
@@ -177,7 +193,7 @@ PENDING_TEST("BR-LOGIN-018", duplicate_login_kicks_existing_and_client_gets_code
   CHECK(e.bus.kicks.size() == 1 && e.bus.kicks[0] == 2000001);
 }
 
-PENDING_TEST("BR-LOGIN-018", online_entry_force_cleared_after_30s) {
+TEST("BR-LOGIN-018", online_entry_force_cleared_after_30s) {
   Env e;
   e.add_account();
   e.dir.mark({2000001, 0, 150000, e.clock.now()});
@@ -187,7 +203,7 @@ PENDING_TEST("BR-LOGIN-018", online_entry_force_cleared_after_30s) {
   CHECK(!e.dir.find(2000001).has_value());
 }
 
-PENDING_TEST("BR-LOGIN-019", successful_login_issues_single_use_ticket_in_store) {
+TEST("BR-LOGIN-019", successful_login_issues_single_use_ticket_in_store) {
   Env e;
   e.add_account();
   auto o = e.login.login(e.req());
@@ -196,14 +212,14 @@ PENDING_TEST("BR-LOGIN-019", successful_login_issues_single_use_ticket_in_store)
   CHECK(!e.tickets.consume(o.ticket->account_id, o.ticket->login_id1, o.ticket->login_id2, e.clock.now()).has_value());
 }
 
-PENDING_TEST("BR-LOGIN-022", ip_banned_login_is_code_3_before_any_account_lookup) {
+TEST("BR-LOGIN-022", ip_banned_login_is_code_3_before_any_account_lookup) {
   Env e;
   e.add_account();
   e.bans.add("192.0.2.*", e.clock.now() + 60);
   CHECK(e.login.login(e.req()).refusal_code == refuse::Rejected);
 }
 
-PENDING_TEST("BR-LOGIN-023", wrong_passwords_through_login_trigger_ip_autoban) {
+TEST("BR-LOGIN-023", wrong_passwords_through_login_trigger_ip_autoban) {
   Env e;
   e.add_account();
   for (int i = 0; i < 7; ++i) e.login.login(e.req("fakeuser", "Wrong-Pass-9"));
@@ -211,7 +227,7 @@ PENDING_TEST("BR-LOGIN-023", wrong_passwords_through_login_trigger_ip_autoban) {
   CHECK(e.login.login(e.req()).refusal_code == refuse::Rejected);
 }
 
-PENDING_TEST("BR-LOGIN-026", admin_ban_extends_and_broadcasts) {
+TEST("BR-LOGIN-026", admin_ban_extends_and_broadcasts) {
   Env e;
   e.add_account();
   CHECK(e.admin.ban(2000001, 3600));
@@ -219,7 +235,7 @@ PENDING_TEST("BR-LOGIN-026", admin_ban_extends_and_broadcasts) {
   CHECK(e.bus.events.size() == 1 && e.bus.events[0].kind == AccountEventKind::Ban);
 }
 
-PENDING_TEST("BR-LOGIN-027", unban_sets_zero) {
+TEST("BR-LOGIN-027", unban_sets_zero) {
   Env e;
   auto& a = e.add_account();
   Account u = a; u.unban_time = e.clock.now() + 99; e.accounts.update(u);
@@ -227,7 +243,7 @@ PENDING_TEST("BR-LOGIN-027", unban_sets_zero) {
   CHECK(e.accounts.find(2000001)->unban_time == 0);
 }
 
-PENDING_TEST("BR-LOGIN-028", state_change_applied_if_different_and_broadcast_if_nonzero) {
+TEST("BR-LOGIN-028", state_change_applied_if_different_and_broadcast_if_nonzero) {
   Env e;
   e.add_account();
   e.admin.set_state(2000001, 5);
@@ -237,7 +253,7 @@ PENDING_TEST("BR-LOGIN-028", state_change_applied_if_different_and_broadcast_if_
   CHECK(e.bus.events.size() == 1);  // unchanged => no second broadcast
 }
 
-PENDING_TEST("BR-LOGIN-029", sex_toggles_m_f_server_excluded_and_broadcast) {
+TEST("BR-LOGIN-029", sex_toggles_m_f_server_excluded_and_broadcast) {
   Env e;
   e.add_account();
   CHECK(e.admin.toggle_sex(2000001));
@@ -247,7 +263,7 @@ PENDING_TEST("BR-LOGIN-029", sex_toggles_m_f_server_excluded_and_broadcast) {
   CHECK(!e.admin.toggle_sex(2000001));
 }
 
-PENDING_TEST("BR-LOGIN-030", email_change_requires_valid_nonplaceholder_and_matching_current) {
+TEST("BR-LOGIN-030", email_change_requires_valid_nonplaceholder_and_matching_current) {
   Env e;
   e.add_account();
   CHECK(!e.admin.change_email(2000001, "other@example.invalid", "new@example.invalid"));
@@ -255,7 +271,7 @@ PENDING_TEST("BR-LOGIN-030", email_change_requires_valid_nonplaceholder_and_matc
   CHECK(e.admin.change_email(2000001, "USER@EXAMPLE.INVALID", "new@example.invalid"));
 }
 
-PENDING_TEST("BR-LOGIN-031", admin_char_slots_vip_adds_increase) {
+TEST("BR-LOGIN-031", admin_char_slots_vip_adds_increase) {
   Env e;
   auto& a = e.add_account();
   CHECK(e.admin.char_slots(2000001) == 9);
@@ -263,7 +279,7 @@ PENDING_TEST("BR-LOGIN-031", admin_char_slots_vip_adds_increase) {
   CHECK(e.admin.char_slots(2000001) == 15);
 }
 
-PENDING_TEST("BR-LOGIN-032", vip_group_5_while_active_old_group_restored_group_gt_5_untouched) {
+TEST("BR-LOGIN-032", vip_group_5_while_active_old_group_restored_group_gt_5_untouched) {
   Env e;
   auto& a = e.add_account();
   Account u = a; u.group_id = 1; e.accounts.update(u);
@@ -276,7 +292,7 @@ PENDING_TEST("BR-LOGIN-032", vip_group_5_while_active_old_group_restored_group_g
   CHECK(e.accounts.find(2000001)->group_id == 99);
 }
 
-PENDING_TEST("BR-LOGIN-033", online_state_login_minus1_lost_minus2_purged_after_10min) {
+TEST("BR-LOGIN-033", online_state_login_minus1_lost_minus2_purged_after_10min) {
   Env e;
   e.add_account();
   e.login.login(e.req());
@@ -287,7 +303,7 @@ PENDING_TEST("BR-LOGIN-033", online_state_login_minus1_lost_minus2_purged_after_
   CHECK(!e.dir.find(2000001).has_value());
 }
 
-PENDING_TEST("BR-LOGIN-034", web_token_16_chars_disabled_10s_after_logout_retry_capped) {
+TEST("BR-LOGIN-034", web_token_16_chars_disabled_10s_after_logout_retry_capped) {
   Env e;
   e.add_account();
   auto o = e.login.login(e.req());
@@ -298,7 +314,7 @@ PENDING_TEST("BR-LOGIN-034", web_token_16_chars_disabled_10s_after_logout_retry_
   CHECK(e.accounts.find(2000001)->web_token.empty());
 }
 
-PENDING_TEST("BR-LOGIN-035", pin_update_stores_pin_and_time) {
+TEST("BR-LOGIN-035", pin_update_stores_pin_and_time) {
   Env e;
   e.add_account();
   e.admin.record_pin_update(2000001, "fake-pin-hash", e.clock.now());
@@ -306,22 +322,28 @@ PENDING_TEST("BR-LOGIN-035", pin_update_stores_pin_and_time) {
   CHECK(a->pin == "fake-pin-hash" && a->pin_changed == e.clock.now());
 }
 
-PENDING_TEST("BR-LOGIN-037", account_deletion_atomic) {
+TEST("BR-LOGIN-037", account_deletion_atomic) {
   Env e;
   e.add_account();
   CHECK(e.admin.delete_account(2000001));
   CHECK(!e.accounts.find(2000001).has_value());
 }
 
-PENDING_TEST("BR-LOGIN-039", every_attempt_audited_ip_banned_logged_as_minus_3) {
+TEST("BR-LOGIN-039", every_attempt_audited_ip_banned_logged_as_minus_3) {
   Env e;
   e.add_account();
   e.bans.add("192.0.2.*", e.clock.now() + 60);
   e.login.login(e.req());
-  CHECK(false);  // audit sink seam (CAP-25) is added with the implementation; assert code -3 recorded
+  // [impl] audit sink seam (CAP-25): the IP-banned attempt is recorded with code -3
+  CHECK(e.audit.logins.size() == 1 && e.audit.logins[0].code == -3);
+  e.bans.purge_expired(e.clock.now() + 61);
+  e.login.login(e.req());
+  CHECK(e.audit.logins.size() == 2 && e.audit.logins[1].code == 100);   // success is code 100 "login ok"
+  e.login.login(e.req("fakeuser", "Wrong-Pass-9"));
+  CHECK(e.audit.logins.size() == 3 && e.audit.logins[2].code == refuse::IncorrectPassword);
 }
 
-PENDING_TEST("ARCH-HASH-LAZY", legacy_plaintext_and_md5_upgraded_to_argon2id_on_first_login) {
+TEST("ARCH-HASH-LAZY", legacy_plaintext_and_md5_upgraded_to_argon2id_on_first_login) {
   Env e;
   auto& a = e.add_account();
   Account u = a; u.scheme = PasswordScheme::Plaintext; u.stored_secret = kFakePass; e.accounts.update(u);

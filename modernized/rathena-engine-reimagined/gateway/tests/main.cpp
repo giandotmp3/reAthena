@@ -10,8 +10,10 @@ std::vector<TestCase>& registry() {
 
 int main(int argc, char** argv) {
   bool list = argc > 1 && std::strcmp(argv[1], "--list") == 0;
+  const char* only = (argc > 1 && std::strncmp(argv[1], "--only=", 7) == 0) ? argv[1] + 7 : nullptr;   // substring of rule or name
   int pass = 0, fail = 0, xfail = 0, xpass = 0;
   for (const auto& t : registry()) {
+    if (only && std::string(t.name).find(only) == std::string::npos && std::string(t.rule).find(only) == std::string::npos) continue;
     if (list) {
       std::cout << t.rule << (t.pending ? " PENDING " : " ACTIVE  ") << t.name << "\n";
       continue;

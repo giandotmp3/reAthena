@@ -1,7 +1,8 @@
 // rathena-sim acceptance tests. Rule ids: BR-RULESET-115, 119 (spec); TL-SIM-* are
 // tooling-local ids derived from architecture section 8 (no spec rule id exists).
 #include "harness.hpp"
-#include "tooling/sim.hpp"
+#include "sim_fixture.hpp"
+#include "tooling/sim_scenario.hpp"
 
 using namespace tooling;
 using namespace tooling::sim;
@@ -58,32 +59,87 @@ TEST("BR-RULESET-119", coverage_report_is_keyed_by_rule_id) {
   CHECK(r.render() == "BR-RULESET-019\tpending\nBR-RULESET-020\tpassing\n");
 }
 
+
+// ---- the former scaffold stubs, now implemented on the real stack --------------------------------
+// TL-SIM-003 keeps its pending marker with a STRONGER body: a cast of Bash must end in a damage frame
+// (ZC_NOTIFY_ACT with damage > 0). The ruleset packages implement the basic weapon attack only (their
+// skill formulas raise NOT_IMPLEMENTED, ruleset-prerenewal scripts/rules/skill.luau), so no cast can
+// produce damage yet; the sim reports that instead of inventing numbers. The same shape with the
+// attack that exists is scenarios/example_bash.luau (TL-SIM-004).
 PENDING_TEST("TL-SIM-003", simplayer_casts_skill_and_observes_damage_packet) {
-  SimPlayer p({"knight", 99});
-  p.cast("ruleset.prerenewal:skill/sm_bash", "mob:poring");
-  CHECK(!p.drain_received().empty());
+  auto sim = simtest::make_sim({"rathena.base", "ruleset.prerenewal"}, 1, [](SimConfig& c) { c.stage_test_support = true; });
+  auto& p = simtest::add(*sim, "knight", 100, 100);
+  uint32_t mob = sim->spawn_dummy("poring", 101, 100, "{kind='mob',level=1}");
+  p.drain_received();
+  p.cast("ruleset.prerenewal:skill/sm_bash", mob, 5);
+  sim->run_for(200);
+  bool damage = false;
+  for (auto& e : p.drain_received())
+    if (e.name == "ZC_NOTIFY_ACT" && e.num("damage") > 0) damage = true;
+  CHECK(damage);
 }
 
-PENDING_TEST("TL-SIM-004", luau_scenario_declares_br_tags_and_passes) {
+TEST("TL-SIM-004", luau_scenario_declares_br_tags_and_passes) {
+  simtest::need_luau();
   auto r = run_scenario(std::string(TOOLING_SOURCE_DIR) + "/scenarios/example_bash.luau");
-  CHECK(r.passed);
+  if (!r.passed) throw CheckFailure("scenario failed: " + r.message);
   CHECK(!r.rule_tags.empty() && r.rule_tags[0] == "BR-RULESET-020");
+  CHECK(r.assertions >= 5);
 }
 
-PENDING_TEST("BR-RULESET-119", golden_trace_replay_matches_for_both_rulesets) {
+TEST("BR-RULESET-119", golden_trace_replay_matches_for_both_rulesets) {
+  simtest::need_luau();
   auto recs = load_golden_trace(std::string(TOOLING_SOURCE_DIR) + "/scenarios/golden_example.trace");
+  CHECK(recs.size() == 1 && recs[0].rule_id == "BR-RULESET-020" && recs[0].expected == "1380");
+  CHECK(recs[0].inputs == "seed=1 damage=1000 race=+20 size=+15");
   CHECK(replay_golden_trace(recs, DbSet::PreRenewal));
   CHECK(replay_golden_trace(recs, DbSet::Renewal));
+  // the comparison bites: the 1350 an ADDITIVE card fix would give is not what the packages compute
+  auto wrong = recs;
+  wrong[0].expected = "1350";
+  CHECK(!replay_golden_trace(wrong, DbSet::PreRenewal));
+  CHECK(!replay_golden_trace(wrong, DbSet::Renewal));
 }
 
-PENDING_TEST("TL-SIM-005", reload_during_select_finishes_dialogue_in_old_generation) {
-  SimPlayer p({"novice", 1});
-  p.select(1);
-  reload_ruleset_generation("ruleset.prerenewal");
-  CHECK(false);  // real assertion: dialogue completes under generation N, new casts use N+1
+TEST("TL-SIM-005", reload_during_select_finishes_dialogue_in_old_generation) {
+  auto sim = simtest::make_sim({"rathena.base", "legacy.npc"});
+  sim->load_npc_file(repo_root() / "npc/pre-re/other/resetskill.txt");
+  sim->place_npc("Hypnotist#2", 146, 232);
+  auto& p = simtest::add(*sim, "neo", 146, 228);
+  p.click_npc("Hypnotist#2");
+  for (int i = 0; i < 3; ++i) {
+    p.expect("say", 500);
+    p.expect("next", 100);
+    p.next();
+  }
+  p.expect("menu", 500);  // parked on select()
+  CHECK(sim->dialogue_of(p.gid()).active && sim->dialogue_of(p.gid()).generation == 1);
+  auto r = sim->reload("legacy.npc");
+  CHECK(r.ok && r.generation == 2);
+  CHECK(sim->dialogue_of(p.gid()).generation == 1);  // the dialogue completes under generation N ...
+  p.answer(3);
+  p.expect("say", 500);
+  p.expect("next", 100);
+  p.next();
+  p.expect("close", 500);
+  CHECK(!sim->dialogue_of(p.gid()).active);
+  // ... and what starts afterwards uses N+1
+  auto& q = simtest::add(*sim, "trinity", 147, 228);
+  q.click_npc("Hypnotist#2");
+  q.expect("say", 500);
+  CHECK(sim->dialogue_of(q.gid()).generation == 2);
 }
 
-PENDING_TEST("TL-SIM-006", reload_with_pending_status_tick_does_not_fire_twice) {
-  reload_ruleset_generation("ruleset.renewal");
-  CHECK(false);  // real assertion: old-generation closure cancelled, tick fires once
+TEST("TL-SIM-006", reload_with_pending_status_tick_does_not_fire_twice) {
+  auto sim = simtest::make_sim({"sim.status.tick"});
+  auto ticks = [&] {
+    auto v = sim->storage().get(script_host::Scope::World, "world", "sim.status.tick", "sim.status.tick", "ticks");
+    return v ? std::get<int64_t>(*v) : int64_t(0);
+  };
+  sim->run_for(400);
+  CHECK(ticks() == 0);
+  auto r = sim->reload("sim.status.tick");  // same code, generation 2; the old tick (due at 1000) is cancelled
+  CHECK(r.ok && r.generation == 2);
+  sim->run_for(3100);                       // t = 3500: generation 2 ticks at 1400, 2400, 3400
+  CHECK(ticks() == 3);                      // without the cancel the old closure would add 1000, 2000 and 3000
 }

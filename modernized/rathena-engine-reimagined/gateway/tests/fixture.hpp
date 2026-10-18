@@ -1,5 +1,8 @@
 #pragma once
 // Test fixture. All credentials/secrets here are FAKE same-shape values.
+#include <deque>
+#include <set>
+
 #include "gateway/role.hpp"
 #include "gateway/services.hpp"
 #include "harness.hpp"
@@ -22,6 +25,13 @@ struct FakeHasher : PasswordHasher {
 
 inline const char* kFakePass = "Fake-Pass-1";
 
+// DNSBL resolver double: only the addresses added to `hits` are "listed".
+struct FakeDnsbl : DnsblResolver {
+  std::set<std::string> hits;
+  int calls = 0;
+  bool listed(const std::string& ip) override { ++calls; return hits.count(ip) != 0; }
+};
+
 struct Env {
   GatewayConfig cfg;
   ManualClock clock;
@@ -35,12 +45,17 @@ struct Env {
   InProcIpBanList bans;
   InProcFailureCounter fails{bans, 7, 300, 300};
   DefaultNamePolicy policy{"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_ "};
+  FakeDnsbl dnsbl;
+  MemoryAuditSink audit;
   LoginService login{deps()};
   AccountAdmin admin{deps()};
   CharService chr{deps()};
 
   GatewayDeps deps() {
-    return GatewayDeps{cfg, clock, rng, accounts, chars, dir, bus, tickets, hasher, bans, fails, policy};
+    GatewayDeps d{cfg, clock, rng, accounts, chars, dir, bus, tickets, hasher, bans, fails, policy};
+    d.dnsbl = &dnsbl;
+    d.audit = &audit;
+    return d;
   }
 
   Account& add_account(const std::string& userid = "fakeuser", AccountId id = 2000001) {
@@ -49,13 +64,16 @@ struct Env {
     a.userid = userid;
     a.scheme = PasswordScheme::Argon2id;
     a.stored_secret = hasher.hash(kFakePass);
+    a.challenge_secret = kFakePass;  // account kept a challenge secret for the MD5 wire shim (spec section 3)
     a.birthdate = "900101";
     a.email = "user@example.invalid";
     accounts.create(a);
     last = a;
-    return last;
+    made.push_back(a);   // stable address: `auto& x = add_account(); auto& y = add_account(...)` must not alias
+    return made.back();
   }
   Account last;
+  std::deque<Account> made;
 
   LoginRequest req(const std::string& userid = "fakeuser", const std::string& pw = kFakePass) {
     LoginRequest r;

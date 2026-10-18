@@ -26,6 +26,23 @@ struct Registrar {
 struct CheckFailure : std::runtime_error {
   using std::runtime_error::runtime_error;
 };
+// A test that cannot run in this build (for example no Luau VM). Reported as SKIP, never as a pass.
+struct SkipTest : std::runtime_error {
+  using std::runtime_error::runtime_error;
+};
+#define SKIP_TEST(reason) throw SkipTest(reason)
+
+// CHECK_THROWS(expr): the expression must throw (any std::exception).
+#define CHECK_THROWS(expr)                                                   \
+  do {                                                                       \
+    bool threw_ = false;                                                     \
+    try { (void)(expr); } catch (const std::exception&) { threw_ = true; }   \
+    if (!threw_) {                                                           \
+      std::ostringstream o_;                                                 \
+      o_ << __FILE__ << ":" << __LINE__ << " CHECK_THROWS failed: " #expr;   \
+      throw CheckFailure(o_.str());                                          \
+    }                                                                        \
+  } while (0)
 
 #define CHECK(cond)                                                          \
   do {                                                                       \

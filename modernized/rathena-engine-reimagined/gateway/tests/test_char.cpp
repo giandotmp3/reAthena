@@ -13,7 +13,7 @@ static MakeCharRequest good(const std::string& name = "Bobby", int slot = 0) {
   return r;
 }
 
-PENDING_TEST("BR-CHAR-001", make_rejects_bad_names_with_minus1_minus2_and_duplicate_minus1) {
+TEST("BR-CHAR-001", make_rejects_bad_names_with_minus1_minus2_and_duplicate_minus1) {
   Env e;
   auto& a = e.add_account();
   auto s = e.session(a);
@@ -23,7 +23,7 @@ PENDING_TEST("BR-CHAR-001", make_rejects_bad_names_with_minus1_minus2_and_duplic
   CHECK(e.chr.make(s, good("Bobby", 1)).error == -1);  // exists
 }
 
-PENDING_TEST("BR-CHAR-002", slot_beyond_char_slots_minus4_occupied_minus2) {
+TEST("BR-CHAR-002", slot_beyond_char_slots_minus4_occupied_minus2) {
   Env e;
   auto& a = e.add_account();
   auto s = e.session(a);
@@ -32,7 +32,7 @@ PENDING_TEST("BR-CHAR-002", slot_beyond_char_slots_minus4_occupied_minus2) {
   CHECK(e.chr.make(s, good("Carol", 0)).error == -2);
 }
 
-PENDING_TEST("BR-CHAR-003", count_must_be_below_slots) {
+TEST("BR-CHAR-003", count_must_be_below_slots) {
   Env e;
   auto& a = e.add_account();
   auto s = e.session(a);
@@ -40,7 +40,7 @@ PENDING_TEST("BR-CHAR-003", count_must_be_below_slots) {
   CHECK(!e.chr.make(s, good("Overflow", 8)).ok);
 }
 
-PENDING_TEST("BR-CHAR-004", new_clients_choose_sex_old_clients_use_account_sex) {
+TEST("BR-CHAR-004", new_clients_choose_sex_old_clients_use_account_sex) {
   Env e;
   auto& a = e.add_account();
   auto s = e.session(a);
@@ -51,7 +51,7 @@ PENDING_TEST("BR-CHAR-004", new_clients_choose_sex_old_clients_use_account_sex) 
   CHECK(e.chr.make(s, old).ch.sex == Sex::Male);  // account is male
 }
 
-PENDING_TEST("BR-CHAR-005", make_enforces_starting_stats) {
+TEST("BR-CHAR-005", make_enforces_starting_stats) {
   Env e;
   auto& a = e.add_account();
   auto s = e.session(a);
@@ -59,7 +59,7 @@ PENDING_TEST("BR-CHAR-005", make_enforces_starting_stats) {
   CHECK(!e.chr.make(s, r).ok);
 }
 
-PENDING_TEST("BR-CHAR-006", allowed_start_jobs_follow_flag) {
+TEST("BR-CHAR-006", allowed_start_jobs_follow_flag) {
   Env e;
   auto& a = e.add_account();
   auto s = e.session(a);
@@ -67,7 +67,7 @@ PENDING_TEST("BR-CHAR-006", allowed_start_jobs_follow_flag) {
   CHECK(!e.chr.make(s, r).ok);
 }
 
-PENDING_TEST("BR-CHAR-007", created_character_has_initial_hp_sp) {
+TEST("BR-CHAR-007", created_character_has_initial_hp_sp) {
   Env e;
   auto& a = e.add_account();
   auto s = e.session(a);
@@ -75,7 +75,7 @@ PENDING_TEST("BR-CHAR-007", created_character_has_initial_hp_sp) {
   CHECK(o.ok && o.ch.max_hp == 40 && o.ch.max_sp == 11);
 }
 
-PENDING_TEST("BR-CHAR-008", char_new_no_refuses_all_creation) {
+TEST("BR-CHAR-008", char_new_no_refuses_all_creation) {
   Env e;
   e.cfg.char_new = false;
   auto& a = e.add_account();
@@ -83,7 +83,7 @@ PENDING_TEST("BR-CHAR-008", char_new_no_refuses_all_creation) {
   CHECK(!e.chr.make(s, good()).ok);
 }
 
-PENDING_TEST("BR-CHAR-009", delete_request_queues_date_now_plus_delay_blocked_by_guild_or_party) {
+TEST("BR-CHAR-009", delete_request_queues_date_now_plus_delay_blocked_by_guild_or_party) {
   Env e;
   auto& a = e.add_account();
   auto s = e.session(a);
@@ -98,7 +98,7 @@ PENDING_TEST("BR-CHAR-009", delete_request_queues_date_now_plus_delay_blocked_by
   CHECK(e.chr.request_delete(s, p).code == 5);
 }
 
-PENDING_TEST("BR-CHAR-010", delete_confirm_requires_birthdate_code) {
+TEST("BR-CHAR-010", delete_confirm_requires_birthdate_code) {
   Env e;
   auto& a = e.add_account();
   auto s = e.session(a);
@@ -109,15 +109,17 @@ PENDING_TEST("BR-CHAR-010", delete_confirm_requires_birthdate_code) {
   CHECK(e.chr.confirm_delete(s, c, "900101").ok);
 }
 
-PENDING_TEST("BR-CHAR-011", legacy_delete_by_email_per_char_del_option) {
+TEST("BR-CHAR-011", legacy_delete_by_email_per_char_del_option) {
   Env e;
   auto& a = e.add_account();
   auto s = e.session(a);
   CharId c = e.add_char(a.id, "Bobby", 0);
+  e.cfg.char_del_option = 1;      // [impl] the option under test: e-mail ...
+  e.cfg.char_del_delay_s = 0;     // [impl] ... and no deletion delay (legacy: delay > 0 needs a queued request)
   CHECK(e.chr.confirm_delete(s, c, "user@example.invalid").ok);
 }
 
-PENDING_TEST("BR-CHAR-012", delete_gate_ownership_level_and_delay) {
+TEST("BR-CHAR-012", delete_gate_ownership_level_and_delay) {
   Env e;
   auto& a = e.add_account();
   auto& other = e.add_account("other", 2000002);
@@ -129,7 +131,7 @@ PENDING_TEST("BR-CHAR-012", delete_gate_ownership_level_and_delay) {
   CHECK(!e.chr.confirm_delete(s, mine, "900101").ok);  // delay not elapsed
 }
 
-PENDING_TEST("BR-CHAR-013", confirmed_delete_removes_character_and_delegates_world_cleanup) {
+TEST("BR-CHAR-013", confirmed_delete_removes_character_and_delegates_world_cleanup) {
   Env e;
   auto& a = e.add_account();
   auto s = e.session(a);
@@ -141,7 +143,7 @@ PENDING_TEST("BR-CHAR-013", confirmed_delete_removes_character_and_delegates_wor
   CHECK(e.bus.purged.size() == 1 && e.bus.purged[0] == c);
 }
 
-PENDING_TEST("BR-CHAR-014", cancel_delete_resets_date_to_zero) {
+TEST("BR-CHAR-014", cancel_delete_resets_date_to_zero) {
   Env e;
   auto& a = e.add_account();
   auto s = e.session(a);
@@ -151,7 +153,7 @@ PENDING_TEST("BR-CHAR-014", cancel_delete_resets_date_to_zero) {
   CHECK(e.chars.find(c)->delete_date == 0);
 }
 
-PENDING_TEST("BR-CHAR-015", character_queued_for_deletion_cannot_be_selected) {
+TEST("BR-CHAR-015", character_queued_for_deletion_cannot_be_selected) {
   Env e;
   auto& a = e.add_account();
   auto s = e.session(a);
@@ -160,7 +162,7 @@ PENDING_TEST("BR-CHAR-015", character_queued_for_deletion_cannot_be_selected) {
   CHECK(!e.chr.select(s, 0).ok);
 }
 
-PENDING_TEST("BR-CHAR-016", active_character_ban_blocks_selection_and_adjusts_from_max) {
+TEST("BR-CHAR-016", active_character_ban_blocks_selection_and_adjusts_from_max) {
   Env e;
   auto& a = e.add_account();
   auto s = e.session(a);
@@ -170,7 +172,7 @@ PENDING_TEST("BR-CHAR-016", active_character_ban_blocks_selection_and_adjusts_fr
   CHECK(e.chr.ban_character(c, -100000) == 0);
 }
 
-PENDING_TEST("BR-CHAR-017", rename_needs_counter_no_party_guild_and_name_rules) {
+TEST("BR-CHAR-017", rename_needs_counter_no_party_guild_and_name_rules) {
   Env e;
   auto& a = e.add_account();
   auto s = e.session(a);
@@ -182,7 +184,7 @@ PENDING_TEST("BR-CHAR-017", rename_needs_counter_no_party_guild_and_name_rules) 
   CHECK(e.chars.find(c)->rename_counter == 0);
 }
 
-PENDING_TEST("BR-CHAR-018", slot_move_requires_moves_valid_target_swap_if_enabled) {
+TEST("BR-CHAR-018", slot_move_requires_moves_valid_target_swap_if_enabled) {
   Env e;
   auto& a = e.add_account();
   auto s = e.session(a);
@@ -193,7 +195,7 @@ PENDING_TEST("BR-CHAR-018", slot_move_requires_moves_valid_target_swap_if_enable
   CHECK(e.chars.find(c)->slot == 1);
 }
 
-PENDING_TEST("BR-CHAR-019", pin_state_machine) {
+TEST("BR-CHAR-019", pin_state_machine) {
   Env e;
   auto& a = e.add_account();
   CHECK(e.chr.pin_state(a, false) == PinState::Passed || e.chr.pin_state(a, false) == PinState::New);
@@ -207,7 +209,7 @@ PENDING_TEST("BR-CHAR-019", pin_state_machine) {
   CHECK(e.chr.pin_state(with, false) == PinState::Expired);
 }
 
-PENDING_TEST("BR-CHAR-020", pin_set_rejects_illegal_pins) {
+TEST("BR-CHAR-020", pin_set_rejects_illegal_pins) {
   Env e;
   auto& a = e.add_account();
   auto s = e.session(a);
@@ -215,7 +217,7 @@ PENDING_TEST("BR-CHAR-020", pin_set_rejects_illegal_pins) {
   CHECK(e.chr.pin_set(s, "", "1357"));
 }
 
-PENDING_TEST("BR-CHAR-021", three_wrong_pins_take_account_offline_success_resets) {
+TEST("BR-CHAR-021", three_wrong_pins_take_account_offline_success_resets) {
   Env e;
   auto& a = e.add_account();
   Account u = a; u.pin = e.hasher.hash("1357"); e.accounts.update(u);
@@ -238,16 +240,24 @@ TEST("BR-CHAR-022", pin_gate_allows_only_connect_ping_pin_charlist_until_verifie
   CHECK(rules::char_packet_allowed(SessionPhase::Ready, CharPacket::SelectChar));
 }
 
-PENDING_TEST("BR-CHAR-023", capacity_or_maintenance_refuses_below_gm_allow_group) {
+TEST("BR-CHAR-023", capacity_or_maintenance_refuses_below_gm_allow_group) {
   Env e;
   auto& a = e.add_account();
   auto s = e.session(a, rules::SessionPhase::Unauthenticated);
   // capacity/maintenance config seam added with implementation; full world => refuse
   e.bus.up = false;
   CHECK(!e.chr.enter(s, a.id, 11, 22, Sex::Male).ok);
+  // [impl] the real gate: valid ticket, but the server is full / in maintenance and the group is below gm_allow_group
+  e.bus.up = true;
+  e.tickets.issue({a.id, 11, 22, Sex::Male, e.clock.now()});
+  e.cfg.max_connect_user = 0;   // closed
+  CHECK(!e.chr.enter(s, a.id, 11, 22, Sex::Male).ok);
+  e.cfg.gm_allow_group = 0;     // the account's group (0) may bypass
+  e.tickets.issue({a.id, 11, 22, Sex::Male, e.clock.now()});
+  CHECK(e.chr.enter(s, a.id, 11, 22, Sex::Male).ok);
 }
 
-PENDING_TEST("BR-CHAR-025", duplicate_char_session_kicks_with_code_8) {
+TEST("BR-CHAR-025", duplicate_char_session_kicks_with_code_8) {
   Env e;
   auto& a = e.add_account();
   e.tickets.issue({a.id, 11, 22, Sex::Male, e.clock.now()});
@@ -258,7 +268,7 @@ PENDING_TEST("BR-CHAR-025", duplicate_char_session_kicks_with_code_8) {
   CHECK(e.bus.kicks.size() == 1);
 }
 
-PENDING_TEST("BR-CHAR-026", enter_verifies_ticket_wrong_id2_rejected_valid_ticket_advances_phase) {
+TEST("BR-CHAR-026", enter_verifies_ticket_wrong_id2_rejected_valid_ticket_advances_phase) {
   Env e;
   auto& a = e.add_account();
   e.tickets.issue({a.id, 11, 22, Sex::Male, e.clock.now()});
@@ -269,7 +279,7 @@ PENDING_TEST("BR-CHAR-026", enter_verifies_ticket_wrong_id2_rejected_valid_ticke
   CHECK(s.phase != rules::SessionPhase::Unauthenticated);
 }
 
-PENDING_TEST("BR-CHAR-028", startup_sets_all_characters_offline) {
+TEST("BR-CHAR-028", startup_sets_all_characters_offline) {
   Env e;
   auto& a = e.add_account();
   CharId c = e.add_char(a.id, "Bobby", 0);
@@ -278,7 +288,7 @@ PENDING_TEST("BR-CHAR-028", startup_sets_all_characters_offline) {
   CHECK(!e.chars.find(c)->online);
 }
 
-PENDING_TEST("BR-CHAR-029", stale_cleanup_skips_connected_entry_and_continues) {
+TEST("BR-CHAR-029", stale_cleanup_skips_connected_entry_and_continues) {
   Env e;
   e.dir.mark({1, 0, 1, e.clock.now() - 10000});  // still connected (modelled by world bus up)
   e.dir.mark({2, kOnlineLost, 2, e.clock.now() - 10000});
@@ -287,7 +297,7 @@ PENDING_TEST("BR-CHAR-029", stale_cleanup_skips_connected_entry_and_continues) {
   CHECK(!e.dir.find(2).has_value());
 }
 
-PENDING_TEST("BR-CHAR-031", world_auth_requires_matching_ticket_single_use) {
+TEST("BR-CHAR-031", world_auth_requires_matching_ticket_single_use) {
   Env e;
   auto& a = e.add_account();
   CharId c = e.add_char(a.id, "Bobby", 0);
@@ -297,7 +307,7 @@ PENDING_TEST("BR-CHAR-031", world_auth_requires_matching_ticket_single_use) {
   CHECK(!e.chr.authenticate_from_world(a.id, c, 11));
 }
 
-PENDING_TEST("BR-CHAR-032", save_accepted_only_if_online_or_final_and_size_matches) {
+TEST("BR-CHAR-032", save_accepted_only_if_online_or_final_and_size_matches) {
   Env e;
   auto& a = e.add_account();
   CharId c = e.add_char(a.id, "Bobby", 0);
@@ -306,7 +316,7 @@ PENDING_TEST("BR-CHAR-032", save_accepted_only_if_online_or_final_and_size_match
   CHECK(!e.chr.accept_save(c, true, 99, 100));    // size mismatch
 }
 
-PENDING_TEST("BR-CHAR-055", gm_op_authority_rechecked_by_gateway) {
+TEST("BR-CHAR-055", gm_op_authority_rechecked_by_gateway) {
   Env e;
   e.add_account("target", 2000002);
   e.add_account("plain", 2000003);  // group 0

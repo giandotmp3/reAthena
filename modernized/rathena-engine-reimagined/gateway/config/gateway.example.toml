@@ -1,10 +1,16 @@
 # Example gateway configuration. No secrets here: connection details are
 # placeholders resolved from the environment at startup.
+[process]
+role = "all"            # all | gateway | world ; --role=... on the command line wins
+
 [storage]
 database_url = "${DATABASE_URL}"
 
 [listen]
 bind = "${LOGIN_BIND}"
+
+[pin]
+pepper = "${GATEWAY_PIN_PEPPER}"   # optional server-side secret mixed into stored PIN hashes
 
 [policy]
 ticket_ttl_s = 30
@@ -20,3 +26,7 @@ pin_max_tries = 3
 [hashing]
 argon2_pool_threads = 2
 argon2_queue_cap = 256
+pbkdf2_iterations = 600000      # only used when libargon2 is not available
+argon2_time_cost = 2
+argon2_memory_kib = 19456
+argon2_parallelism = 1

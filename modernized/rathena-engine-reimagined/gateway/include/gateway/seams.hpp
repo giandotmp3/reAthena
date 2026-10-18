@@ -1,7 +1,12 @@
 #pragma once
-// The three architecture seams (REIMAGINED_ARCHITECTURE section 3) plus the
-// stores the gateway needs. In-process implementations live in inproc.hpp; a
-// future gateway/world split is a new implementation of these, not a redesign.
+// The three architecture seams (REIMAGINED_ARCHITECTURE section 3) plus the stores and hooks the
+// gateway needs. In-process implementations live in inproc.hpp / loopback.hpp / persist_adapter.hpp;
+// a future gateway/world split is a new implementation of these, not a redesign.
+//
+// Threading contract: every method may be called with the gateway strand held (one gateway-owned
+// mutex, see GatewayDeps::strand). Implementations that talk to the world must not block on the
+// simulation thread; WorldBus implementations hand messages over through a bounded mailbox.
+// Methods that touch a persistence backend throw StoreUnavailable when it is down.
 #include <optional>
 #include <string>
 #include <vector>
@@ -50,8 +55,10 @@ struct WorldBus {
   virtual void kick(AccountId aid) = 0;  // BR-LOGIN-018
   virtual void broadcast(const AccountEvent& ev) = 0;
   virtual MembershipInfo membership(CharId id) const = 0;
-  // World-owned cleanup for BR-CHAR-013 (divorce, party, guild, mail, ...).
-  virtual void purge_character_data(CharId id) = 0;
+  // World-owned cleanup for BR-CHAR-013. `plan` is the ordered list of cleanup step ids the policy
+  // hook supplies (divorce, party, guild, mail, ... are world vocabulary, not the gateway's); the
+  // world executes them in that order. The gateway deletes the character row AFTER this returns.
+  virtual void purge_character_data(CharId id, const std::vector<std::string>& plan) = 0;
   virtual bool available() const = 0;  // false => refuse logins (failure-mode table)
 };
 
@@ -63,28 +70,59 @@ struct AccountStore {
   virtual void update(const Account& a) = 0;
   virtual void remove(AccountId id) = 0;
   virtual AccountId max_id() const = 0;
+  virtual bool web_token_in_use(const std::string& token) const = 0;
+  virtual void clear_all_web_tokens() = 0;  // BR-LOGIN-034: wiped at startup
 };
 
 // One-time auth ticket (30 s, single use).
 struct TicketStore {
   virtual ~TicketStore() = default;
   virtual void issue(const AuthTicket& t) = 0;
-  // Succeeds at most once per issued ticket and only inside the TTL.
+  // Succeeds at most once per issued ticket and only inside the TTL. `hop` selects the stage that is
+  // acceptable (Any tickets satisfy every hop; Login tickets are refused at the World hop and vice versa).
   virtual std::optional<AuthTicket> consume(AccountId aid, std::uint32_t id1, std::uint32_t id2, Timestamp now) = 0;
+  // id2 / sex are checked only when non-null. A mismatch leaves the ticket in place.
+  virtual std::optional<AuthTicket> consume_for(AuthStage hop, AccountId aid, std::uint32_t id1,
+                                                const std::uint32_t* id2, const Sex* sex, Timestamp now) = 0;
+  virtual void revoke(AccountId aid) = 0;
 };
 
-// Argon2id hashing pool seam. Implementations run on a bounded gateway-owned
-// pool so hashing never touches the simulation thread.
+// Password hashing. Implementations may run on a bounded pool (see PooledHasher); hash()/verify()
+// then throw HashOverloaded when the queue is full, and the login is refused (SEC-OVERLOAD).
 struct VerifyResult {
   bool ok = false;
-  bool needs_rehash = false;  // legacy plaintext/MD5 matched => upgrade (lazy rehash)
+  bool needs_rehash = false;  // legacy plaintext/MD5 matched, or an older/weaker PHC string => upgrade
+};
+struct HashOverloaded : std::runtime_error {
+  HashOverloaded() : std::runtime_error("hash queue full") {}
 };
 struct PasswordHasher {
   virtual ~PasswordHasher() = default;
-  virtual std::string hash(const std::string& password) = 0;                 // -> Argon2id string
+  virtual std::string hash(const std::string& password) = 0;                 // -> PHC string
   virtual VerifyResult verify(PasswordScheme scheme, const std::string& stored,
                               const std::string& password) = 0;               // case-sensitive
   virtual std::string md5_hex(const std::string& data) = 0;                  // legacy shim only
+  virtual std::string algorithm_name() const { return "unspecified"; }
+};
+
+// DNS blacklist lookup seam (BR-LOGIN-014). Production wraps the resolver on the gateway pool.
+struct DnsblResolver {
+  virtual ~DnsblResolver() = default;
+  virtual bool listed(const std::string& ip) = 0;
+};
+
+// Audit sink for the login/char log (CAP-25, BR-LOGIN-039). The IP failure counter does NOT depend on it.
+struct AuditSink {
+  virtual ~AuditSink() = default;
+  virtual void login_attempt(const std::string& ip, const std::string& userid, int code, const std::string& msg) = 0;
+  virtual void char_event(AccountId aid, CharId cid, const std::string& what) = 0;
+};
+
+// Account-scoped global registry (legacy `##` variables) that must go with a deleted account
+// (BR-LOGIN-037). Optional: the persistence adapter wires it to the GlobalAccount KV scope.
+struct AccountRegistryPurger {
+  virtual ~AccountRegistryPurger() = default;
+  virtual void purge_account_registry(AccountId aid) = 0;
 };
 
 }  // namespace gateway

@@ -9,9 +9,15 @@ std::vector<TestCase>& registry() {
 }
 
 int main(int argc, char** argv) {
-  bool list = argc > 1 && std::strcmp(argv[1], "--list") == 0;
-  int pass = 0, fail = 0, xfail = 0, xpass = 0;
+  bool list = false;
+  std::string only;  // --only <substring of "RULE name">
+  for (int i = 1; i < argc; ++i) {
+    if (std::strcmp(argv[i], "--list") == 0) list = true;
+    else if (std::strcmp(argv[i], "--only") == 0 && i + 1 < argc) only = argv[++i];
+  }
+  int pass = 0, fail = 0, xfail = 0, xpass = 0, skip = 0;
   for (const auto& t : registry()) {
+    if (!only.empty() && (std::string(t.rule) + " " + t.name).find(only) == std::string::npos) continue;
     if (list) {
       std::cout << t.rule << (t.pending ? " PENDING " : " ACTIVE  ") << t.name << "\n";
       continue;
@@ -20,6 +26,10 @@ int main(int argc, char** argv) {
     std::string why;
     try {
       t.fn();
+    } catch (const SkipTest& e) {
+      ++skip;
+      std::cout << "SKIP   " << t.rule << " " << t.name << " (" << e.what() << ")\n";
+      continue;
     } catch (const std::exception& e) {
       ok = false;
       why = e.what();
@@ -35,6 +45,6 @@ int main(int argc, char** argv) {
   }
   if (list) return 0;
   std::cout << "\n" << pass << " passed, " << fail << " failed, " << xfail
-            << " expected-failures, " << xpass << " unexpected passes\n";
+            << " expected-failures, " << xpass << " unexpected passes, " << skip << " skipped\n";
   return (fail || xpass) ? 1 : 0;
 }

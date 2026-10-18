@@ -52,25 +52,21 @@ class InMemoryStore {
   std::map<std::pair<std::string, std::string>, std::string> rows_;
 };
 
-struct PlayerSpec { std::string job; int level = 1; };
-struct Packet { std::string name; std::vector<uint8_t> bytes; };
-
-// Speaks codec-level packets to the engine under test.
-class SimPlayer {
- public:
-  explicit SimPlayer(PlayerSpec spec) : spec_(std::move(spec)) {}
-  const PlayerSpec& spec() const { return spec_; }
-  void send(const Packet& p);                         // stub
-  std::vector<Packet> drain_received();               // stub
-  void cast(const std::string& skill_id, const std::string& target);  // stub
-  void select(int choice);                            // stub: NPC dialogue select
- private:
-  PlayerSpec spec_;
-};
-
 // Loads and runs a Luau scenario file; returns the BR-ID tags it declared.
-struct ScenarioResult { bool passed = false; std::vector<std::string> rule_tags; std::string message; };
-ScenarioResult run_scenario(const std::string& luau_path);  // stub
+struct ScenarioResult {
+  bool passed = false;
+  std::vector<std::string> rule_tags;
+  std::string message;
+  std::string name;               // file stem
+  uint64_t assertions = 0;        // sim.assert_* calls that held
+  int64_t virtual_ms = 0;         // virtual time the scenario advanced
+  double wall_ms = 0;             // wall clock of the whole run (sim construction included)
+  uint64_t trace_hash = 0;        // hash of the wire/event trace, equal for equal seeds
+  uint64_t main_rng_draws = 0, native_rng_draws = 0;
+  std::vector<std::string> output;  // what the scenario printed
+};
+// Runs a scenario in a fresh Sim built from its `--@` directives (see sim_scenario.hpp).
+ScenarioResult run_scenario(const std::string& luau_path);
 
 // Coverage per behavior-contract rule ID.
 enum class RuleStatus { Passing, Pending, Failing, Uncovered };
@@ -86,10 +82,11 @@ class CoverageReport {
 
 // Golden-trace conformance (BR-RULESET-119).
 struct GoldenTraceRecord { std::string rule_id; std::string inputs; std::string expected; };
-std::vector<GoldenTraceRecord> load_golden_trace(const std::string& path);   // stub
-bool replay_golden_trace(const std::vector<GoldenTraceRecord>& recs, DbSet set);  // stub
-
-// Reload scenarios (architecture section 5, hot reload generations).
-void reload_ruleset_generation(const std::string& mod_id);  // stub
+// A line is "<rule id>\tseed=<n>\t<inputs>\t<expected damage>" (tab separated). `inputs` are space
+// separated key=value pairs (damage, race, size, see sim_conformance.hpp); `golden=<id>` replays a
+// recorded legacy case of the ruleset package instead. `inputs` keeps columns 2..n-1 joined by a space.
+std::vector<GoldenTraceRecord> load_golden_trace(const std::string& path);
+// Replays the records through the real ruleset package (loaded by the mod loader) of `set`.
+bool replay_golden_trace(const std::vector<GoldenTraceRecord>& recs, DbSet set);
 
 }  // namespace tooling::sim

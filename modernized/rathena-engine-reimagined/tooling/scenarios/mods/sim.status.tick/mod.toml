@@ -1,0 +1,5 @@
+# Scenario test mod (rathena-sim). A status-tick style timer chain (timers.after re-arms itself).
+id = "sim.status.tick"
+version = "0.1.0"
+engine_api = "^1"
+permissions = []

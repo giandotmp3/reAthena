@@ -53,13 +53,6 @@ bool InMemoryStore::get(const std::string& o, const std::string& k, std::string*
   return true;
 }
 
-void SimPlayer::send(const Packet&) { throw NotImplemented("SimPlayer::send (netproto codec set)"); }
-std::vector<Packet> SimPlayer::drain_received() { throw NotImplemented("SimPlayer::drain_received"); }
-void SimPlayer::cast(const std::string&, const std::string&) { throw NotImplemented("SimPlayer::cast"); }
-void SimPlayer::select(int) { throw NotImplemented("SimPlayer::select"); }
-
-ScenarioResult run_scenario(const std::string&) { throw NotImplemented("Luau scenario runner"); }
-
 void CoverageReport::record(const std::string& id, RuleStatus s) { by_rule_[id] = s; }
 RuleStatus CoverageReport::status(const std::string& id) const {
   auto it = by_rule_.find(id);
@@ -71,9 +64,5 @@ std::string CoverageReport::render() const {
   for (const auto& [id, s] : by_rule_) o << id << "\t" << names[static_cast<int>(s)] << "\n";
   return o.str();
 }
-
-std::vector<GoldenTraceRecord> load_golden_trace(const std::string&) { throw NotImplemented("golden trace loader"); }
-bool replay_golden_trace(const std::vector<GoldenTraceRecord>&, DbSet) { throw NotImplemented("golden trace replay"); }
-void reload_ruleset_generation(const std::string&) { throw NotImplemented("reload generation in sim"); }
 
 }  // namespace tooling::sim
