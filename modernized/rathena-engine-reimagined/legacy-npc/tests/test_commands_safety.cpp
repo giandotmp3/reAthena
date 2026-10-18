@@ -144,3 +144,19 @@ ACCEPT_LUAU("LNPC-DEGRADE-003", registry_matches_luau_command_tables) {
   CHECK(n > 200);
   CHECK(reg.size() >= n);
 }
+
+// an unimplemented command is a typed outcome naming the command; the NPC is refused before any of its commands run
+ACCEPT_LUAU("LNPC-DEGRADE-006", interpreter_reports_unsupported_commands_as_a_typed_outcome) {
+  auto reg = CommandRegistry::with_defaults();
+  auto f = parse_file("-\tscript\tt\t-1,{\n mes \"before\"; bg_warp 1, \"x\", 1, 1; mes \"after\";\n}\n", "t.txt");
+  struct Rec : HostApi {
+    InMemoryVariableStore s;
+    int calls = 0;
+    VariableStore& vars() override { return s; }
+    void emit(std::string_view, const std::vector<Value>&) override { ++calls; }
+  } rec;
+  Interpreter in(f.npcs.at(0).program, rec, reg, {});
+  CHECK(in.run() == RunOutcome::Unsupported);
+  CHECK(in.last_error_type() == "UNSUPPORTED" && in.last_error_command() == "bg_warp");
+  CHECK(rec.calls == 0);  // disabled up front: not even `mes "before"` ran
+}

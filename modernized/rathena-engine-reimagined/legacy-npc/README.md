@@ -4,6 +4,10 @@ Compatibility layer for rAthena `.txt` NPC scripts (REIMAGINED_ARCHITECTURE sect
 (`tooling/m0/legacy_interp`, matches the real legacy script VM on 2,482 of 2,485 replay runs) moved into this unit as tested code, mapped
 onto script-host. Package id `legacy.npc` (`mod.toml`, no permissions requested).
 
+Status: implemented and tested (all 18 formerly pending acceptance tests pass; 56 C++ cases and 100 Luau cases, one Luau case that needs full garbage
+collections is skipped inside sandboxes and runs in the Luau CLI). Replay: strict equality with the real VM on the smoke subset (renewal 15/15, pre-renewal 3/3,
+synthetic 16/16), the wide corpora (240/240 each) and the synthetic NPCs (44/44 each). Open items are listed at the end.
+
 ## Layout
 
 | Path | What |
