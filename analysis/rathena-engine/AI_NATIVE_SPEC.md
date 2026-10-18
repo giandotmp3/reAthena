@@ -4,6 +4,7 @@ Assembled for the scaffold workflow from three sources. Edit the sources in `ana
 Order: (1) engine delta spec, (2) BR-RULESET rules, (3) inherited base spec (191 rules BR-LOGIN/CHAR/MAP/INTER/WEB, interfaces, entities). Where the base spec describes the old multi-process or in-place-refactor design, the architecture in `REIMAGINED_ARCHITECTURE.md` wins.
 
 ---
+
 # rAthena — Engine + Luau Mods: Specification Delta
 
 **System:** `rathena` (legacy source: repo root, HEAD `d2c5a95`)
@@ -168,13 +169,13 @@ erDiagram
 | Q-A | Confirm auction and battlegrounds are out of the first milestone | HITL #1 variant |
 | Q-B | Bit-exact legacy parity (float32, RNG draw counts) or statistical parity? | BR-RULESET-115 |
 | Q-C | Must the six renewal sub-flags be independently selectable? | BR-RULESET-118 |
-| Q-D | Do any DBs besides mobs have custom merge rules? | engine report |
+| Q-D | Do any DBs besides mobs have custom merge rules? **ANSWERED**: all per-field patching, differing in key, mandatory nodes and list handling (table in `tooling/migrate/README.md`) | engine report |
 | Q-E | Is mob AI scriptable at all, or native with only mob-skill conditions scripted? | BR-RULESET-113 |
 | Q-F | Can status `val1..val4` become named fields (save-format migration)? | BR-RULESET-051 |
 | Q-G | Ship legacy defects (Burnt, `rnd%(max-min)`) as-is behind a `legacy_quirks` flag, or fix? | BR-RULESET §0 |
-| Q-H | Are `.` NPC variables shared by `duplicate()` clones? Inferred yes (`script_code` object), not traced | script report |
+| Q-H | Are `.` NPC variables shared by `duplicate()` clones? **ANSWERED yes**: clones share the script object (`npc.cpp:4602`; `.` registry in `script_code::local`, `script.cpp:2734`) | script report |
 | Q-I | Does any operator rely on the 283 never-used commands, `query_sql`, `atcommand`, `setunitdata`? | script report |
-| Q-J | Is the exact 2-slot event-queue drop and 100 ms dequeue a contract? | script report |
+| Q-J | Is the exact 2-slot event-queue drop and 100 ms dequeue a contract? **ANSWERED from source**: third event dropped (`npc.cpp:1751-1759`, `MAX_EVENTQUEUE` 2 at `map.hpp:73`); queued event runs via a 100 ms player timer (`npc.cpp:1176-1204`); kept behind a compat flag | script report |
 | Q-K | Does a deployment run more than one map process? | topology |
 | Q-L | Does the earlier architecture's decision K2 (keep the legacy NPC VM) stay superseded? This vision replaces it with Luau + a compat layer | rules report Q9 |
 
