@@ -29,7 +29,6 @@ DirtyBatch batch_of(std::size_t n, std::size_t payload_bytes) {
 } // namespace
 
 TEST(PERSIST_WAL_001, AppendThenReplayDeliversBatchesInOrderAndEmptiesTheWal) {
-	PENDING_RULE("PERSIST-WAL-001");
 	Wal wal({scratch("wal001"), 1u << 20});
 	wal.append(batch_of(2, 8));
 	wal.append(batch_of(3, 8));
@@ -40,7 +39,6 @@ TEST(PERSIST_WAL_001, AppendThenReplayDeliversBatchesInOrderAndEmptiesTheWal) {
 }
 
 TEST(PERSIST_WAL_002, WalSurvivesProcessRestartAndReplaysIntoTheDatabase) {
-	PENDING_RULE("PERSIST-WAL-002");
 	const auto dir = scratch("wal002");
 	{
 		Wal wal({dir, 1u << 20});
@@ -56,7 +54,6 @@ TEST(PERSIST_WAL_002, WalSurvivesProcessRestartAndReplaysIntoTheDatabase) {
 }
 
 TEST(PERSIST_WAL_003, AtTheByteLimitAppendIsRefusedWithWalFullAndNothingIsWritten) {
-	PENDING_RULE("PERSIST-WAL-003");
 	Wal wal({scratch("wal003"), 4096});
 	wal.append(batch_of(1, 1024));
 	const auto before = wal.bytes_used();
@@ -66,7 +63,6 @@ TEST(PERSIST_WAL_003, AtTheByteLimitAppendIsRefusedWithWalFullAndNothingIsWritte
 }
 
 TEST(PERSIST_WAL_004, DatabaseOutageSpillsTheBatchToTheWalInsteadOfLosingIt) {
-	PENDING_RULE("PERSIST-WAL-004");
 	// Needs a connection whose writes fail; the sqlite file connection is closed/removed mid-test
 	// once the backend is lifted. Contract: flush_once() returns spilled_to_wal == true and the
 	// tracker no longer holds the batch; WalFullError surfaces only when the WAL is full.
@@ -86,7 +82,6 @@ TEST(PERSIST_WAL_004, DatabaseOutageSpillsTheBatchToTheWalInsteadOfLosingIt) {
 }
 
 TEST(PERSIST_WAL_005, WalDirectoryComesFromConfigurationNotFromACompiledInPath) {
-	PENDING_RULE("PERSIST-WAL-005");
 	WalConfig cfg;
 	EXPECT_TRUE(cfg.dir.empty());           // no baked-in default directory
 	EXPECT_THROW(Wal{cfg}, PersistError);   // an unset directory is a configuration error

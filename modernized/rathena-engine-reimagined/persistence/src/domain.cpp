@@ -29,3 +29,9 @@ std::size_t encoded_size(const Value& v) noexcept {
 }
 
 } // namespace rathena::persist
+
+namespace rathena::persist {
+std::string owner_ref_text(const KvKey& k) {
+	return k.owner_text.empty() ? std::to_string(k.owner.id) : k.owner_text;
+}
+} // namespace rathena::persist

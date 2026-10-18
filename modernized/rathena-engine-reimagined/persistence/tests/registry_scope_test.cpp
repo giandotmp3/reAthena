@@ -17,7 +17,6 @@ struct Fixture {
 } // namespace
 
 TEST(BR_CHAR_050, ScopesArePartitionedCharacterAccountGlobal) {
-	PENDING_RULE("BR-CHAR-050");
 	Fixture f;
 	f.kv.set({character(1), "legacy", "x"}, Value{std::int64_t{1}});
 	f.kv.set({account(1), "legacy", "x"}, Value{std::int64_t{2}});
@@ -28,7 +27,6 @@ TEST(BR_CHAR_050, ScopesArePartitionedCharacterAccountGlobal) {
 }
 
 TEST(BR_CHAR_050, ZeroOrEmptyValueDeletesEntryWhenCompatibilitySwitchIsOn) {
-	PENDING_RULE("BR-CHAR-050");
 	Fixture f(true);
 	const KvKey k{character(2), "legacy", "n"};
 	f.kv.set(k, Value{std::int64_t{5}});
@@ -41,7 +39,6 @@ TEST(BR_CHAR_050, ZeroOrEmptyValueDeletesEntryWhenCompatibilitySwitchIsOn) {
 }
 
 TEST(BR_CHAR_050, ZeroIsStoredAsIsWhenCompatibilitySwitchIsOff) {
-	PENDING_RULE("BR-CHAR-050");
 	Fixture f(false);
 	const KvKey k{character(3), "mymod", "n"};
 	f.kv.set(k, Value{std::int64_t{0}});
@@ -49,7 +46,6 @@ TEST(BR_CHAR_050, ZeroIsStoredAsIsWhenCompatibilitySwitchIsOff) {
 }
 
 TEST(BR_INTER_015, GlobalScopeEntriesAreNotVisibleInAccountScopeAndViceVersa) {
-	PENDING_RULE("BR-INTER-015");
 	Fixture f;
 	f.kv.set({global_account(), "legacy", "only_global"}, Value{std::int64_t{9}});
 	f.kv.set({account(7), "legacy", "only_account"}, Value{std::int64_t{8}});
@@ -58,7 +54,6 @@ TEST(BR_INTER_015, GlobalScopeEntriesAreNotVisibleInAccountScopeAndViceVersa) {
 }
 
 TEST(BR_LOGIN_036, LoginWideRegistryIsOneStoreSharedByEveryAccount) {
-	PENDING_RULE("BR-LOGIN-036");
 	Fixture f;
 	f.kv.set({global_account(), "legacy", "shared"}, Value{std::int64_t{42}});
 	// any account's view of the login-wide scope resolves to the same single row

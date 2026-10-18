@@ -16,7 +16,6 @@ Record rec(std::uint64_t id, std::string payload, std::uint64_t revision = 1) {
 } // namespace
 
 TEST(PERSIST_WB_001, SwappedOutBatchIsImmutableWhileNewMarksAccumulate) {
-	PENDING_RULE("PERSIST-WB-001");
 	DirtyTracker t;
 	t.mark(rec(1, "v1"));
 	auto batch = t.swap_out();
@@ -28,7 +27,6 @@ TEST(PERSIST_WB_001, SwappedOutBatchIsImmutableWhileNewMarksAccumulate) {
 }
 
 TEST(PERSIST_WB_002, RepeatedMarksOfOneKeyCoalesceToTheLatest) {
-	PENDING_RULE("PERSIST-WB-002");
 	DirtyTracker t;
 	for (int i = 1; i <= 5; ++i) t.mark(rec(7, "v" + std::to_string(i), static_cast<std::uint64_t>(i)));
 	auto batch = t.swap_out();
@@ -38,7 +36,6 @@ TEST(PERSIST_WB_002, RepeatedMarksOfOneKeyCoalesceToTheLatest) {
 }
 
 TEST(PERSIST_WB_003, MassLogoutBatchOf1000OwnersIsOneSwapAndOneFlushTransaction) {
-	PENDING_RULE("PERSIST-WB-003");
 	DirtyTracker t;
 	for (std::uint64_t i = 1; i <= 1000; ++i) t.mark(rec(i, "p"));
 	auto batch = t.swap_out();
@@ -47,7 +44,6 @@ TEST(PERSIST_WB_003, MassLogoutBatchOf1000OwnersIsOneSwapAndOneFlushTransaction)
 }
 
 TEST(PERSIST_WB_004, FlushWritesRecordsAndKvToTheDatabase) {
-	PENDING_RULE("PERSIST-WB-004");
 	auto db = memory_db();
 	DirtyTracker t;
 	Wal wal({std::filesystem::temp_directory_path() / "persist_wb_004", 1u << 20});

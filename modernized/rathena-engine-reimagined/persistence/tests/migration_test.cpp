@@ -19,7 +19,6 @@ Migration m(std::uint32_t v, const char* table) {
 } // namespace
 
 TEST(PERSIST_MIG_001, PendingMigrationsApplyInOrderOnceAndAreIdempotent) {
-	PENDING_RULE("PERSIST-MIG-001");
 	auto db = memory_db();
 	MigrationRunner runner(*db, {m(1, "t1"), m(2, "t2")});
 	EXPECT_EQ(runner.current_version(), 0u);
@@ -29,7 +28,6 @@ TEST(PERSIST_MIG_001, PendingMigrationsApplyInOrderOnceAndAreIdempotent) {
 }
 
 TEST(PERSIST_MIG_002, FailingMigrationRollsBackAndLeavesVersionUnchanged) {
-	PENDING_RULE("PERSIST-MIG-002");
 	auto db = memory_db();
 	Migration bad = m(2, "t2");
 	bad.up_sqlite = {{"CREATE TABLE t2 (id INTEGER)", {}}, {"THIS IS NOT SQL", {}}};
@@ -41,7 +39,6 @@ TEST(PERSIST_MIG_002, FailingMigrationRollsBackAndLeavesVersionUnchanged) {
 }
 
 TEST(PERSIST_MIG_003, DatabaseNewerThanBuildAndChecksumDriftAreRefused) {
-	PENDING_RULE("PERSIST-MIG-003");
 	auto db = memory_db();
 	MigrationRunner(*db, {m(1, "t1"), m(2, "t2")}).apply_pending();
 	EXPECT_THROW(MigrationRunner(*db, {m(1, "t1")}).apply_pending(), MigrationError);  // downgrade
@@ -51,7 +48,6 @@ TEST(PERSIST_MIG_003, DatabaseNewerThanBuildAndChecksumDriftAreRefused) {
 }
 
 TEST(PERSIST_MIG_004, KvRowVersionWithoutMigrationPathIsRefusedAndWithPathIsUpgraded) {
-	PENDING_RULE("PERSIST-MIG-004");
 	KvMigrationRegistry reg;
 	reg.register_step("mymod", 1, [](const Value& v) { return Value{std::get<std::int64_t>(v.data) * 2}; });
 	EXPECT_TRUE(reg.has_path("mymod", 1, 2));

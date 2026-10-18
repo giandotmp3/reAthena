@@ -1,12 +1,10 @@
---!strict
--- Package entry: registers the renewal pipeline order, tables and hooks through the generic
--- pipeline/status APIs. Must not require engine changes or add mechanism to rathena.base.
+--!nonstrict
+-- Package entry point (BR-RULESET-019/118). The mod loader calls register(engine) once per generation.
+-- `engine` is the typed API from api/*.yaml; this package needs only engine.pipeline.define (see docs/ARCHITECTURE_PROOF.md section 6).
 local M = {}
 
-function M.register(api: any)
-  -- Pending: api.pipeline.define("weapon", data.pipeline.weapon), api.pipeline.define("magic", ...),
-  -- then api.pipeline.use_native(...) for hot stages and Luau reference stages (BR-RULESET-111).
-  error("NotImplemented: BR-RULESET-019")
+function M.register(engine)
+	import("scripts/pipeline").register(engine)
 end
 
 return M

@@ -4,6 +4,7 @@
 #include <compare>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <variant>
@@ -61,13 +62,24 @@ struct KvKey {
 	OwnerRef owner;
 	std::string mod_id; ///< namespacing is automatic: one mod cannot address another's rows
 	std::string key;
+	/// Optional textual owner id (script-host owners are strings such as "77" or "world"). When
+	/// non-empty it replaces the decimal form of owner.id as the stored owner reference.
+	std::string owner_text{};
 	friend auto operator<=>(const KvKey&, const KvKey&) = default;
 };
+/// The owner reference as stored in the database (decimal id unless owner_text is set).
+std::string owner_ref_text(const KvKey& k);
+
 struct KvEntry {
 	KvKey key;
 	Value value;
 	std::uint32_t row_version{1}; ///< versioned rows, see KvMigrationRegistry
 	std::uint64_t revision{0};
+	bool erased{false};           ///< delete marker: the row is removed when the batch is applied
+	/// Pre-encoded stored bytes (codec byte + body) used instead of `value` when set; the
+	/// script-host adapter stores its own value model this way.
+	std::optional<Blob> encoded{};
+	std::uint64_t cost{0};        ///< quota cost; 0 = key bytes + encoded_size(value)
 };
 
 /// Immutable snapshot of dirty state handed to persistence workers at the tick boundary.
@@ -76,6 +88,9 @@ struct DirtyBatch {
 	std::uint64_t epoch{0};
 	std::vector<Record> records;
 	std::vector<KvEntry> kv;
+	/// Keeps the tracker's retired index buffer alive so that it is freed on the thread that drops
+	/// the batch (the writer), not on the producer at hand-off time.
+	std::shared_ptr<void> retired{};
 	[[nodiscard]] bool empty() const noexcept { return records.empty() && kv.empty(); }
 };
 using DirtyBatchPtr = std::shared_ptr<const DirtyBatch>;
@@ -85,6 +100,7 @@ struct QuarantinedRow {
 	std::uint64_t quarantine_id{0};
 	std::string table;
 	std::string row_ref; ///< key text such as "kv/<mod>/<key>"; never the payload
+	std::string owner;   ///< stored owner reference of the row ("" when not owner-scoped)
 	std::string reason;
 	Blob raw;
 };

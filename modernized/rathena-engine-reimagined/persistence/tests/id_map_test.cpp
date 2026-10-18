@@ -10,7 +10,6 @@ const std::map<std::string, IdRange> kRanges{{"skill", {100000, 100999}}, {"item
 }
 
 TEST(PERSIST_IDMAP_001, AllocatedNumbersAreStableAcrossRestarts) {
-	PENDING_RULE("PERSIST-IDMAP-001");
 	auto db = memory_db();
 	std::uint32_t first;
 	{
@@ -26,7 +25,6 @@ TEST(PERSIST_IDMAP_001, AllocatedNumbersAreStableAcrossRestarts) {
 }
 
 TEST(PERSIST_IDMAP_002, RetiredNumberIsTombstonedAndNeverReassigned) {
-	PENDING_RULE("PERSIST-IDMAP-002");
 	auto db = memory_db();
 	IdMap map(*db, kRanges);
 	const auto n = map.assign("item", "mymod:item/potion");
@@ -40,7 +38,6 @@ TEST(PERSIST_IDMAP_002, RetiredNumberIsTombstonedAndNeverReassigned) {
 }
 
 TEST(PERSIST_IDMAP_003, ExplicitClientIdKeepsLegacyNumberAndCollisionNamesBothClaimants) {
-	PENDING_RULE("PERSIST-IDMAP-003");
 	auto db = memory_db();
 	IdMap map(*db, kRanges);
 	EXPECT_EQ(map.assign("item", "legacy:item/red_potion", 501u), 501u);
@@ -55,7 +52,6 @@ TEST(PERSIST_IDMAP_003, ExplicitClientIdKeepsLegacyNumberAndCollisionNamesBothCl
 }
 
 TEST(PERSIST_IDMAP_004, RangeExhaustionIsAnErrorNotAWrapAround) {
-	PENDING_RULE("PERSIST-IDMAP-004");
 	auto db = memory_db();
 	IdMap map(*db, {{"status", {1, 2}}});
 	map.assign("status", "m:status/a");

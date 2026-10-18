@@ -22,7 +22,6 @@ struct Fixture {
 } // namespace
 
 TEST(BR_CHAR_032, SaveAcceptedWhenOwnerOnlineAndSizeMatches) {
-	PENDING_RULE("BR-CHAR-032");
 	Fixture f;
 	f.leases.acquire(character(150000));
 	EXPECT_EQ(f.store.save(Fixture::req(character(150000), "abc")), SaveOutcome::Accepted);
@@ -30,14 +29,12 @@ TEST(BR_CHAR_032, SaveAcceptedWhenOwnerOnlineAndSizeMatches) {
 }
 
 TEST(BR_CHAR_032, SaveRejectedWhenOwnerNotOnline) {
-	PENDING_RULE("BR-CHAR-032");
 	Fixture f;
 	EXPECT_EQ(f.store.save(Fixture::req(character(150001), "abc")), SaveOutcome::RejectedNotOnline);
 	EXPECT_FALSE(f.store.load({character(150001), "mod:profile"}).has_value());
 }
 
 TEST(BR_CHAR_032, SaveRejectedWhenDeclaredSizeDiffersFromPayload) {
-	PENDING_RULE("BR-CHAR-032");
 	Fixture f;
 	f.leases.acquire(character(150002));
 	auto r = Fixture::req(character(150002), "abc");
@@ -47,7 +44,6 @@ TEST(BR_CHAR_032, SaveRejectedWhenDeclaredSizeDiffersFromPayload) {
 }
 
 TEST(BR_CHAR_032, FinalAndRestoreSavesAreAcceptedOffline) {
-	PENDING_RULE("BR-CHAR-032");
 	Fixture f;
 	auto fin = Fixture::req(character(150003), "abc");
 	fin.final_save = true;
@@ -66,7 +62,6 @@ TEST(BR_CHAR_032, FinalAndRestoreSavesAreAcceptedOffline) {
 // cap and restore-once flag are per-kind policy supplied by the ruleset; persistence has no
 // notion of cooldowns. Over-cap is rejected, not silently truncated.
 TEST(BR_CHAR_054, CollectionCapAcceptsExactlyMaxItemsAndRejectsMore) {
-	PENDING_RULE("BR-CHAR-054");
 	Fixture f;
 	f.store.set_collection_policy("mod:timers", {20, true});
 	const RecordKey key{character(150010), "mod:timers"};
@@ -77,7 +72,6 @@ TEST(BR_CHAR_054, CollectionCapAcceptsExactlyMaxItemsAndRejectsMore) {
 }
 
 TEST(BR_CHAR_054, RestoreOnceCollectionIsHandedBackByTheFirstLoadOnly) {
-	PENDING_RULE("BR-CHAR-054");
 	Fixture f;
 	f.store.set_collection_policy("mod:timers", {20, true});
 	const RecordKey key{character(150011), "mod:timers"};

@@ -1,14 +1,24 @@
 rule_id	source	summary	tests	status
-BR-CHAR-032	spec AI_NATIVE_SPEC.md (P1)	Save accepted only if owner online (or final/restore) and payload size matches	tests/save_admission_test.cpp	pending
-BR-CHAR-050	spec (P1)	Registry scopes partitioned; 0 or empty value deletes the entry (compat switch)	tests/registry_scope_test.cpp	pending
-BR-CHAR-054	spec (P1)	Bounded collection (cap from config, e.g. 20) restored once on load; generic interpretation	tests/save_admission_test.cpp	pending
-BR-LOGIN-036	spec (P1)	Login-wide (##) registry is one store shared by all accounts	tests/registry_scope_test.cpp	pending
-BR-INTER-015	spec (P1)	Global registry routing by scope	tests/registry_scope_test.cpp	pending
+BR-CHAR-032	spec AI_NATIVE_SPEC.md (P1)	Save accepted only if owner online (or final/restore) and payload size matches	tests/save_admission_test.cpp	implemented
+BR-CHAR-050	spec (P1)	Registry scopes partitioned; 0 or empty value deletes the entry (compat switch)	tests/registry_scope_test.cpp	implemented
+BR-CHAR-054	spec (P1)	Bounded collection (cap from config, e.g. 20) restored once on load; generic interpretation	tests/save_admission_test.cpp	implemented
+BR-LOGIN-036	spec (P1)	Login-wide (##) registry is one store shared by all accounts	tests/registry_scope_test.cpp	implemented
+BR-INTER-015	spec (P1)	Global registry routing by scope	tests/registry_scope_test.cpp	implemented
 BR-INTER-016	spec (P0)	DB secrets from environment only, never a literal (config part; shared with core)	tests/config_test.cpp	implemented (PERSIST_CONFIG_001..003)
-PERSIST-WB-001..004	architecture 3, 4	Write-behind, copy-on-write dirty batches, coalescing, flush	tests/write_behind_test.cpp	pending
-PERSIST-WAL-001..005	architecture 3.1	Bounded on-disk WAL, replay after restart, refuse writes at limit, spill on DB outage	tests/wal_test.cpp	pending
-PERSIST-MIG-001..004	architecture 4, 5	Schema migrations; KV row version migration paths	tests/migration_test.cpp	pending
-PERSIST-IDMAP-001..004	architecture 6.2	id_map stability, tombstones, collisions, range exhaustion	tests/id_map_test.cpp	pending
-PERSIST-QUAR-001..002	architecture 3.1	Corrupt row quarantine with typed read error	tests/quarantine_quota_test.cpp	pending
-PERSIST-QUOTA-001..002	architecture 5	Per-mod storage quota enforced in persistence layer	tests/quarantine_quota_test.cpp	pending
-PERSIST-BACKEND-001..002	architecture 4, 9	SQLite and PostgreSQL pass one contract suite	tests/backend_contract_test.cpp	pending
+PERSIST-WB-001..004	architecture 3, 4	Write-behind, copy-on-write dirty batches, coalescing, flush	tests/write_behind_test.cpp	implemented
+PERSIST-WAL-001..005	architecture 3.1	Bounded on-disk WAL, replay after restart, refuse writes at limit, spill on DB outage	tests/wal_test.cpp	implemented
+PERSIST-MIG-001..004	architecture 4, 5	Schema migrations; KV row version migration paths	tests/migration_test.cpp	implemented
+PERSIST-IDMAP-001..004	architecture 6.2	id_map stability, tombstones, collisions, range exhaustion	tests/id_map_test.cpp	implemented
+PERSIST-QUAR-001..002	architecture 3.1	Corrupt row quarantine with typed read error	tests/quarantine_quota_test.cpp	implemented
+PERSIST-QUOTA-001..002	architecture 5	Per-mod storage quota enforced in persistence layer	tests/quarantine_quota_test.cpp	implemented
+PERSIST-BACKEND-001..002	architecture 4, 9	SQLite and PostgreSQL pass one contract suite	tests/backend_contract_test.cpp	implemented (001 runs; 002 skips: needs RATHENA_TEST_PG_URL + libpq headers)
+PERSIST-SQLITE-001..006	architecture 4, 9	Lifted SQLite connection: file/WAL mode, typed poison-row errors, statement cache, guarded sharing	tests/sqlite_backend_test.cpp	implemented
+PERSIST-KV-001..007	architecture 5, 3.1	Typed KV round trip, per-mod quota across owners, row-version migration on read, corruption kinds quarantined per owner	tests/kv_store_test.cpp	implemented
+PERSIST-RECORD-001..003	architecture 4	Records: stale revision reported, corrupt record quarantine, ordered collections	tests/kv_store_test.cpp	implemented
+PERSIST-IDMAP-005..006	architecture 6.2	Retired string id revives its own number; tombstones never recycled, holes filled	tests/kv_store_test.cpp	implemented
+PERSIST-CODEC-001..002	architecture 3.1	Decoders reject mutated/random/hostile bytes; depth limit	tests/kv_store_test.cpp	implemented
+PERSIST-WAL-006..015	architecture 3.1	WAL CRC, torn writes, limit across restart, fsync policies, single instance, kill-mid-replay exactly once	tests/wal_recovery_test.cpp	implemented
+PERSIST-WBS-001..013	architecture 3, 4	Threaded write-behind: order, save->auth barrier, shutdown drain, outage->WAL->recovery, refusal, poison row, concurrency	tests/write_behind_service_test.cpp	implemented
+PERSIST-FAULT-001..010	architecture 3.1	Failure injection: rollback, replay faults, ledger restore, migration/id_map faults, poison rows, WAL I/O, flapping backend	tests/failure_injection_test.cpp	implemented
+PERSIST-MASS-001..002	architecture 3	1,000-character mass save: producer hand-off cost measured and bounded	tests/mass_save_test.cpp	implemented
+CAP-E04 (script-host storage contract)	script-host StorageBackend	script-host storage cases run against memory, SQLite write-through and write-behind; adapter extras	tests/script_host_adapter_test.cpp	implemented

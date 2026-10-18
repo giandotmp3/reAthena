@@ -25,15 +25,18 @@ void contract(SqlConnection& db) {
 } // namespace
 
 TEST(PERSIST_BACKEND_001, SqliteBackendPassesTheConnectionContract) {
-	PENDING_RULE("PERSIST-BACKEND-001");
 	auto db = memory_db();
 	contract(*db);
 }
 
 TEST(PERSIST_BACKEND_002, PostgresBackendPassesTheSameContractWhenADisposableUrlIsProvided) {
-	PENDING_RULE("PERSIST-BACKEND-002");
 	const char* url = std::getenv("RATHENA_TEST_PG_URL");
 	if (url == nullptr || *url == '\0') GTEST_SKIP() << "RATHENA_TEST_PG_URL not set (disposable PostgreSQL required)";
-	auto db = open_connection(url);
+	std::unique_ptr<SqlConnection> db;
+	try {
+		db = open_connection(url);
+	} catch (const BackendUnavailableError& e) {
+		GTEST_SKIP() << "PostgreSQL backend not compiled into this build: " << e.what();
+	}
 	contract(*db);
 }

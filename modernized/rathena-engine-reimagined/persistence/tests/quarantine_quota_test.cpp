@@ -6,7 +6,6 @@ using namespace rathena::persist;
 using namespace rathena::persist::testing_support;
 
 TEST(PERSIST_QUAR_001, CorruptRowIsQuarantinedAndReadRaisesTypedErrorOtherModsUnaffected) {
-	PENDING_RULE("PERSIST-QUAR-001");
 	auto db = memory_db();
 	Quarantine q(*db);
 	KvStore kv(*db, q);
@@ -22,7 +21,6 @@ TEST(PERSIST_QUAR_001, CorruptRowIsQuarantinedAndReadRaisesTypedErrorOtherModsUn
 }
 
 TEST(PERSIST_QUAR_002, ReleasedRowIsReturnedRawAndLeavesQuarantine) {
-	PENDING_RULE("PERSIST-QUAR-002");
 	auto db = memory_db();
 	Quarantine q(*db);
 	QuarantinedRow row;
@@ -38,7 +36,6 @@ TEST(PERSIST_QUAR_002, ReleasedRowIsReturnedRawAndLeavesQuarantine) {
 }
 
 TEST(PERSIST_QUOTA_001, WriteOverModQuotaIsRefusedAndStoredStateUnchanged) {
-	PENDING_RULE("PERSIST-QUOTA-001");
 	auto db = memory_db();
 	Quarantine q(*db);
 	KvStore kv(*db, q, KvPolicy{64, false});
@@ -50,7 +47,6 @@ TEST(PERSIST_QUOTA_001, WriteOverModQuotaIsRefusedAndStoredStateUnchanged) {
 }
 
 TEST(PERSIST_QUOTA_002, OverwriteAndEraseReleaseQuota) {
-	PENDING_RULE("PERSIST-QUOTA-002");
 	auto db = memory_db();
 	Quarantine q(*db);
 	KvStore kv(*db, q, KvPolicy{64, false});

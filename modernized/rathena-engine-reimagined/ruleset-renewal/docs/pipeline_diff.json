@@ -1,0 +1,1341 @@
+{
+ "aggregate": {
+  "data": {
+   "byte_identical": 0,
+   "files": 2,
+   "identical_code": 0,
+   "modified": 2,
+   "pre_lines": 91,
+   "re_lines": 93,
+   "re_only": 0,
+   "shared": 50,
+   "shared_masked": 91
+  },
+  "golden generator": {
+   "byte_identical": 1,
+   "files": 6,
+   "identical_code": 1,
+   "modified": 5,
+   "pre_lines": 808,
+   "re_lines": 987,
+   "re_only": 0,
+   "shared": 595,
+   "shared_masked": 653
+  },
+  "pipeline code": {
+   "byte_identical": 0,
+   "files": 7,
+   "identical_code": 0,
+   "modified": 5,
+   "pre_lines": 556,
+   "re_lines": 824,
+   "re_only": 2,
+   "shared": 284,
+   "shared_masked": 286
+  },
+  "test support": {
+   "byte_identical": 4,
+   "files": 7,
+   "identical_code": 4,
+   "modified": 3,
+   "pre_lines": 412,
+   "re_lines": 422,
+   "re_only": 0,
+   "shared": 327,
+   "shared_masked": 328
+  },
+  "tools": {
+   "byte_identical": 0,
+   "files": 4,
+   "identical_code": 0,
+   "modified": 4,
+   "pre_lines": 163,
+   "re_lines": 147,
+   "re_only": 0,
+   "shared": 105,
+   "shared_masked": 105
+  }
+ },
+ "api": {
+  "counts": {
+   "cancel": 3,
+   "insert_after": 12,
+   "replace": 8
+  },
+  "define_only": 1,
+  "ops": [
+   [
+    "cancel",
+    "skill_atk_bonus"
+   ],
+   [
+    "cancel",
+    "element_bonus"
+   ],
+   [
+    "cancel",
+    "card_attacker"
+   ],
+   [
+    "insert_after",
+    "base_attack",
+    "ruleset.renewal:card_attacker"
+   ],
+   [
+    "insert_after",
+    "ruleset.renewal:card_attacker",
+    "ruleset.renewal:card_target_parts"
+   ],
+   [
+    "insert_after",
+    "ruleset.renewal:card_target_parts",
+    "ruleset.renewal:sc_bonus"
+   ],
+   [
+    "insert_after",
+    "ruleset.renewal:sc_bonus",
+    "ruleset.renewal:sum"
+   ],
+   [
+    "insert_after",
+    "ruleset.renewal:sum",
+    "ruleset.renewal:p_atk"
+   ],
+   [
+    "insert_after",
+    "ruleset.renewal:p_atk",
+    "ruleset.renewal:mastery"
+   ],
+   [
+    "insert_after",
+    "ruleset.renewal:mastery",
+    "ruleset.renewal:crit_rate"
+   ],
+   [
+    "insert_after",
+    "const_add",
+    "ruleset.renewal:adv_katar_mastery"
+   ],
+   [
+    "insert_after",
+    "ruleset.renewal:adv_katar_mastery",
+    "ruleset.renewal:res"
+   ],
+   [
+    "insert_after",
+    "post_defense",
+    "ruleset.renewal:skill_atk_bonus"
+   ],
+   [
+    "insert_after",
+    "element",
+    "ruleset.renewal:crit_multiplier"
+   ],
+   [
+    "insert_after",
+    "ruleset.renewal:crit_multiplier",
+    "ruleset.renewal:flat_additions"
+   ],
+   [
+    "replace",
+    "init"
+   ],
+   [
+    "replace",
+    "base_attack"
+   ],
+   [
+    "replace",
+    "skill_ratio"
+   ],
+   [
+    "replace",
+    "defense"
+   ],
+   [
+    "replace",
+    "post_defense"
+   ],
+   [
+    "replace",
+    "element"
+   ],
+   [
+    "replace",
+    "card_target"
+   ],
+   [
+    "replace",
+    "target_modifiers"
+   ]
+  ],
+  "reproduces_re_order": true
+ },
+ "audit": {
+  "changed_outside_package": [],
+  "cross_ruleset_references": [],
+  "engine_api_calls": [
+   "pipeline.define"
+  ],
+  "imports": [
+   "data/damage_cfg",
+   "data/damage_tables",
+   "scripts/damage/consts",
+   "scripts/damage/fp",
+   "scripts/damage/weapon",
+   "scripts/pipeline"
+  ]
+ },
+ "data": {
+  "cfg_keys": 22,
+  "cfg_keys_differ_or_new": [
+   "max_res_mres_ignored",
+   "undead_detect_type"
+  ],
+  "element_cells": 400,
+  "element_cells_differ": 184,
+  "size_rows": 24,
+  "size_rows_differ": 2
+ },
+ "files": {
+  "data": [
+   {
+    "file": "data/damage_cfg.luau",
+    "kind": "modified",
+    "pre_lines": 13,
+    "re_lines": 15,
+    "shared": 13,
+    "shared_masked": 13
+   },
+   {
+    "file": "data/damage_tables.luau",
+    "kind": "modified",
+    "pre_lines": 78,
+    "re_lines": 78,
+    "shared": 37,
+    "shared_masked": 78
+   }
+  ],
+  "golden generator": [
+   {
+    "file": "conformance/golden_gen/golden_stage.hpp",
+    "kind": "byte-identical",
+    "pre_lines": 8,
+    "re_lines": 8,
+    "shared": 8,
+    "shared_masked": 8
+   },
+   {
+    "file": "conformance/golden_gen/golden_hook.inc",
+    "kind": "modified",
+    "pre_lines": 266,
+    "re_lines": 303,
+    "shared": 261,
+    "shared_masked": 261
+   },
+   {
+    "file": "conformance/golden_gen/apply_edits.py",
+    "kind": "modified",
+    "pre_lines": 95,
+    "re_lines": 114,
+    "shared": 68,
+    "shared_masked": 69
+   },
+   {
+    "file": "conformance/golden_gen/gen_cases.py",
+    "kind": "modified",
+    "pre_lines": 359,
+    "re_lines": 482,
+    "shared": 184,
+    "shared_masked": 241
+   },
+   {
+    "file": "conformance/golden_gen/gen_tables.py",
+    "kind": "modified",
+    "pre_lines": 60,
+    "re_lines": 60,
+    "shared": 56,
+    "shared_masked": 56
+   },
+   {
+    "file": "conformance/golden_gen/build.sh",
+    "kind": "modified",
+    "pre_lines": 20,
+    "re_lines": 20,
+    "shared": 18,
+    "shared_masked": 18
+   }
+  ],
+  "pipeline code": [
+   {
+    "file": "scripts/damage/weapon.luau",
+    "kind": "modified",
+    "pre_lines": 486,
+    "re_lines": 710,
+    "shared": 240,
+    "shared_masked": 241
+   },
+   {
+    "file": "scripts/damage/consts.luau",
+    "kind": "modified",
+    "pre_lines": 9,
+    "re_lines": 12,
+    "shared": 6,
+    "shared_masked": 7
+   },
+   {
+    "file": "scripts/damage/unit.luau",
+    "kind": "modified",
+    "pre_lines": 22,
+    "re_lines": 27,
+    "shared": 20,
+    "shared_masked": 20
+   },
+   {
+    "file": "scripts/pipeline.luau",
+    "kind": "modified",
+    "pre_lines": 23,
+    "re_lines": 18,
+    "shared": 13,
+    "shared_masked": 13
+   },
+   {
+    "file": "scripts/init.luau",
+    "kind": "modified",
+    "pre_lines": 16,
+    "re_lines": 5,
+    "shared": 5,
+    "shared_masked": 5
+   },
+   {
+    "file": "scripts/damage/fp.luau",
+    "kind": "RE only",
+    "pre_lines": 0,
+    "re_lines": 28,
+    "shared": 0,
+    "shared_masked": 0
+   },
+   {
+    "file": "scripts/formulas.luau",
+    "kind": "RE only",
+    "pre_lines": 0,
+    "re_lines": 24,
+    "shared": 0,
+    "shared_masked": 0
+   }
+  ],
+  "test support": [
+   {
+    "file": "tests/support/fake_ctx.luau",
+    "kind": "byte-identical",
+    "pre_lines": 34,
+    "re_lines": 34,
+    "shared": 34,
+    "shared_masked": 34
+   },
+   {
+    "file": "tests/support/scripted_rng.luau",
+    "kind": "byte-identical",
+    "pre_lines": 38,
+    "re_lines": 38,
+    "shared": 38,
+    "shared_masked": 38
+   },
+   {
+    "file": "tests/support/harness.luau",
+    "kind": "modified",
+    "pre_lines": 54,
+    "re_lines": 55,
+    "shared": 54,
+    "shared_masked": 54
+   },
+   {
+    "file": "tests/support/fake_host.luau",
+    "kind": "byte-identical",
+    "pre_lines": 14,
+    "re_lines": 14,
+    "shared": 14,
+    "shared_masked": 14
+   },
+   {
+    "file": "tests/support/golden_runner.luau",
+    "kind": "modified",
+    "pre_lines": 68,
+    "re_lines": 68,
+    "shared": 67,
+    "shared_masked": 67
+   },
+   {
+    "file": "tests/acceptance/weapon_golden_test.luau",
+    "kind": "modified",
+    "pre_lines": 158,
+    "re_lines": 167,
+    "shared": 74,
+    "shared_masked": 75
+   },
+   {
+    "file": "tests/bench_weapon.luau",
+    "kind": "byte-identical",
+    "pre_lines": 46,
+    "re_lines": 46,
+    "shared": 46,
+    "shared_masked": 46
+   }
+  ],
+  "tools": [
+   {
+    "file": "tools/bundle_luau.py",
+    "kind": "modified",
+    "pre_lines": 31,
+    "re_lines": 40,
+    "shared": 28,
+    "shared_masked": 28
+   },
+   {
+    "file": "tools/build_golden.py",
+    "kind": "modified",
+    "pre_lines": 57,
+    "re_lines": 47,
+    "shared": 41,
+    "shared_masked": 41
+   },
+   {
+    "file": "tools/lint_numeric.py",
+    "kind": "modified",
+    "pre_lines": 21,
+    "re_lines": 22,
+    "shared": 17,
+    "shared_masked": 17
+   },
+   {
+    "file": "tools/run_tests.py",
+    "kind": "modified",
+    "pre_lines": 54,
+    "re_lines": 38,
+    "shared": 19,
+    "shared_masked": 19
+   }
+  ]
+ },
+ "function_class_counts": {
+  "PRE only": 11,
+  "RE only": 35,
+  "identical": 19,
+  "logic differs": 11
+ },
+ "function_lines": {
+  "PRE only": 140,
+  "RE only": 394,
+  "identical": 96,
+  "logic differs": 204
+ },
+ "functions": [
+  {
+   "class": "identical",
+   "name": "M.atk_percent",
+   "pre_lines": 11,
+   "re_lines": 11,
+   "similarity": 1.0
+  },
+  {
+   "class": "logic differs",
+   "name": "M.attr_fix",
+   "pre_lines": 9,
+   "re_lines": 8,
+   "similarity": 0.235
+  },
+  {
+   "class": "PRE only",
+   "name": "M.base_damage",
+   "pre_lines": 29,
+   "re_lines": 0,
+   "similarity": null
+  },
+  {
+   "class": "PRE only",
+   "name": "M.base_range",
+   "pre_lines": 20,
+   "re_lines": 0,
+   "similarity": null
+  },
+  {
+   "class": "PRE only",
+   "name": "M.base_rate_pct",
+   "pre_lines": 10,
+   "re_lines": 0,
+   "similarity": null
+  },
+  {
+   "class": "logic differs",
+   "name": "M.calc_attack",
+   "pre_lines": 96,
+   "re_lines": 34,
+   "similarity": 0.323
+  },
+  {
+   "class": "logic differs",
+   "name": "M.cardfix_attacker",
+   "pre_lines": 31,
+   "re_lines": 29,
+   "similarity": 0.933
+  },
+  {
+   "class": "logic differs",
+   "name": "M.cardfix_target",
+   "pre_lines": 17,
+   "re_lines": 19,
+   "similarity": 0.889
+  },
+  {
+   "class": "logic differs",
+   "name": "M.crit_roll",
+   "pre_lines": 15,
+   "re_lines": 15,
+   "similarity": 0.933
+  },
+  {
+   "class": "identical",
+   "name": "M.crowd_penalty",
+   "pre_lines": 6,
+   "re_lines": 6,
+   "similarity": 1.0
+  },
+  {
+   "class": "logic differs",
+   "name": "M.def_reduce",
+   "pre_lines": 9,
+   "re_lines": 8,
+   "similarity": 0.471
+  },
+  {
+   "class": "RE only",
+   "name": "M.defense_values",
+   "pre_lines": 0,
+   "re_lines": 20,
+   "similarity": null
+  },
+  {
+   "class": "identical",
+   "name": "M.dual_wield",
+   "pre_lines": 14,
+   "re_lines": 14,
+   "similarity": 1.0
+  },
+  {
+   "class": "PRE only",
+   "name": "M.element_damage",
+   "pre_lines": 4,
+   "re_lines": 0,
+   "similarity": null
+  },
+  {
+   "class": "identical",
+   "name": "M.finish",
+   "pre_lines": 9,
+   "re_lines": 9,
+   "similarity": 1.0
+  },
+  {
+   "class": "identical",
+   "name": "M.gvg_damage",
+   "pre_lines": 7,
+   "re_lines": 7,
+   "similarity": 1.0
+  },
+  {
+   "class": "logic differs",
+   "name": "M.hit_roll",
+   "pre_lines": 19,
+   "re_lines": 25,
+   "similarity": 0.773
+  },
+  {
+   "class": "identical",
+   "name": "M.lucky_dodge",
+   "pre_lines": 3,
+   "re_lines": 3,
+   "similarity": 1.0
+  },
+  {
+   "class": "RE only",
+   "name": "M.mastery_atk",
+   "pre_lines": 0,
+   "re_lines": 29,
+   "similarity": null
+  },
+  {
+   "class": "RE only",
+   "name": "M.mob_base_damage",
+   "pre_lines": 0,
+   "re_lines": 17,
+   "similarity": null
+  },
+  {
+   "class": "PRE only",
+   "name": "M.post_defense",
+   "pre_lines": 5,
+   "re_lines": 0,
+   "similarity": null
+  },
+  {
+   "class": "PRE only",
+   "name": "M.recover_cap",
+   "pre_lines": 4,
+   "re_lines": 0,
+   "similarity": null
+  },
+  {
+   "class": "RE only",
+   "name": "M.res_reduction",
+   "pre_lines": 0,
+   "re_lines": 7,
+   "similarity": null
+  },
+  {
+   "class": "logic differs",
+   "name": "M.skill_ratio",
+   "pre_lines": 7,
+   "re_lines": 8,
+   "similarity": 0.667
+  },
+  {
+   "class": "logic differs",
+   "name": "M.target_modifiers",
+   "pre_lines": 21,
+   "re_lines": 30,
+   "similarity": 0.588
+  },
+  {
+   "class": "PRE only",
+   "name": "M.vit_def",
+   "pre_lines": 32,
+   "re_lines": 0,
+   "similarity": null
+  },
+  {
+   "class": "RE only",
+   "name": "M.weapon_atk_part",
+   "pre_lines": 0,
+   "re_lines": 31,
+   "similarity": null
+  },
+  {
+   "class": "RE only",
+   "name": "M.weapon_atk_range",
+   "pre_lines": 0,
+   "re_lines": 10,
+   "similarity": null
+  },
+  {
+   "class": "logic differs",
+   "name": "M.weapon_element",
+   "pre_lines": 7,
+   "re_lines": 9,
+   "similarity": 0.875
+  },
+  {
+   "class": "RE only",
+   "name": "STAGES.adv_katar_mastery",
+   "pre_lines": 0,
+   "re_lines": 3,
+   "similarity": null
+  },
+  {
+   "class": "RE only",
+   "name": "STAGES.base_attack",
+   "pre_lines": 0,
+   "re_lines": 35,
+   "similarity": null
+  },
+  {
+   "class": "RE only",
+   "name": "STAGES.card_attacker",
+   "pre_lines": 0,
+   "re_lines": 10,
+   "similarity": null
+  },
+  {
+   "class": "RE only",
+   "name": "STAGES.card_target",
+   "pre_lines": 0,
+   "re_lines": 9,
+   "similarity": null
+  },
+  {
+   "class": "RE only",
+   "name": "STAGES.card_target_parts",
+   "pre_lines": 0,
+   "re_lines": 15,
+   "similarity": null
+  },
+  {
+   "class": "RE only",
+   "name": "STAGES.const_add",
+   "pre_lines": 0,
+   "re_lines": 3,
+   "similarity": null
+  },
+  {
+   "class": "RE only",
+   "name": "STAGES.crit_multiplier",
+   "pre_lines": 0,
+   "re_lines": 18,
+   "similarity": null
+  },
+  {
+   "class": "RE only",
+   "name": "STAGES.crit_rate",
+   "pre_lines": 0,
+   "re_lines": 4,
+   "similarity": null
+  },
+  {
+   "class": "RE only",
+   "name": "STAGES.defense",
+   "pre_lines": 0,
+   "re_lines": 12,
+   "similarity": null
+  },
+  {
+   "class": "RE only",
+   "name": "STAGES.div_hands",
+   "pre_lines": 0,
+   "re_lines": 11,
+   "similarity": null
+  },
+  {
+   "class": "RE only",
+   "name": "STAGES.element",
+   "pre_lines": 0,
+   "re_lines": 18,
+   "similarity": null
+  },
+  {
+   "class": "RE only",
+   "name": "STAGES.final",
+   "pre_lines": 0,
+   "re_lines": 3,
+   "similarity": null
+  },
+  {
+   "class": "RE only",
+   "name": "STAGES.flat_additions",
+   "pre_lines": 0,
+   "re_lines": 3,
+   "similarity": null
+  },
+  {
+   "class": "RE only",
+   "name": "STAGES.init",
+   "pre_lines": 0,
+   "re_lines": 2,
+   "similarity": null
+  },
+  {
+   "class": "RE only",
+   "name": "STAGES.map_rates",
+   "pre_lines": 0,
+   "re_lines": 19,
+   "similarity": null
+  },
+  {
+   "class": "RE only",
+   "name": "STAGES.mastery",
+   "pre_lines": 0,
+   "re_lines": 6,
+   "similarity": null
+  },
+  {
+   "class": "RE only",
+   "name": "STAGES.p_atk",
+   "pre_lines": 0,
+   "re_lines": 9,
+   "similarity": null
+  },
+  {
+   "class": "RE only",
+   "name": "STAGES.post_defense",
+   "pre_lines": 0,
+   "re_lines": 5,
+   "similarity": null
+  },
+  {
+   "class": "RE only",
+   "name": "STAGES.res",
+   "pre_lines": 0,
+   "re_lines": 8,
+   "similarity": null
+  },
+  {
+   "class": "RE only",
+   "name": "STAGES.sc_bonus",
+   "pre_lines": 0,
+   "re_lines": 17,
+   "similarity": null
+  },
+  {
+   "class": "RE only",
+   "name": "STAGES.skill_atk_bonus",
+   "pre_lines": 0,
+   "re_lines": 2,
+   "similarity": null
+  },
+  {
+   "class": "RE only",
+   "name": "STAGES.skill_ratio",
+   "pre_lines": 0,
+   "re_lines": 4,
+   "similarity": null
+  },
+  {
+   "class": "RE only",
+   "name": "STAGES.sum",
+   "pre_lines": 0,
+   "re_lines": 7,
+   "similarity": null
+  },
+  {
+   "class": "RE only",
+   "name": "STAGES.target_modifiers",
+   "pre_lines": 0,
+   "re_lines": 15,
+   "similarity": null
+  },
+  {
+   "class": "identical",
+   "name": "apply_cardfix",
+   "pre_lines": 4,
+   "re_lines": 4,
+   "similarity": 1.0
+  },
+  {
+   "class": "identical",
+   "name": "at",
+   "pre_lines": 3,
+   "re_lines": 3,
+   "similarity": 1.0
+  },
+  {
+   "class": "PRE only",
+   "name": "atk_add2",
+   "pre_lines": 4,
+   "re_lines": 0,
+   "similarity": null
+  },
+  {
+   "class": "identical",
+   "name": "atk_add_rate",
+   "pre_lines": 4,
+   "re_lines": 4,
+   "similarity": 1.0
+  },
+  {
+   "class": "identical",
+   "name": "atk_rate",
+   "pre_lines": 4,
+   "re_lines": 4,
+   "similarity": 1.0
+  },
+  {
+   "class": "identical",
+   "name": "bit_set",
+   "pre_lines": 3,
+   "re_lines": 3,
+   "similarity": 1.0
+  },
+  {
+   "class": "identical",
+   "name": "bl_type",
+   "pre_lines": 3,
+   "re_lines": 3,
+   "similarity": 1.0
+  },
+  {
+   "class": "identical",
+   "name": "bonus_of",
+   "pre_lines": 3,
+   "re_lines": 3,
+   "similarity": 1.0
+  },
+  {
+   "class": "RE only",
+   "name": "crit_rate_pc",
+   "pre_lines": 0,
+   "re_lines": 15,
+   "similarity": null
+  },
+  {
+   "class": "PRE only",
+   "name": "defense_stage",
+   "pre_lines": 9,
+   "re_lines": 0,
+   "similarity": null
+  },
+  {
+   "class": "PRE only",
+   "name": "element_stage",
+   "pre_lines": 15,
+   "re_lines": 0,
+   "similarity": null
+  },
+  {
+   "class": "identical",
+   "name": "left_handed",
+   "pre_lines": 4,
+   "re_lines": 4,
+   "similarity": 1.0
+  },
+  {
+   "class": "identical",
+   "name": "min_damage",
+   "pre_lines": 4,
+   "re_lines": 4,
+   "similarity": 1.0
+  },
+  {
+   "class": "RE only",
+   "name": "parts_zero",
+   "pre_lines": 0,
+   "re_lines": 3,
+   "similarity": null
+  },
+  {
+   "class": "PRE only",
+   "name": "post_defense_stage",
+   "pre_lines": 8,
+   "re_lines": 0,
+   "similarity": null
+  },
+  {
+   "class": "identical",
+   "name": "probe",
+   "pre_lines": 4,
+   "re_lines": 4,
+   "similarity": 1.0
+  },
+  {
+   "class": "RE only",
+   "name": "res_stage_value",
+   "pre_lines": 0,
+   "re_lines": 11,
+   "similarity": null
+  },
+  {
+   "class": "identical",
+   "name": "sc_of",
+   "pre_lines": 4,
+   "re_lines": 4,
+   "similarity": 1.0
+  },
+  {
+   "class": "identical",
+   "name": "step",
+   "pre_lines": 3,
+   "re_lines": 3,
+   "similarity": 1.0
+  },
+  {
+   "class": "RE only",
+   "name": "uses_arrow",
+   "pre_lines": 0,
+   "re_lines": 4,
+   "similarity": null
+  },
+  {
+   "class": "logic differs",
+   "name": "validate",
+   "pre_lines": 14,
+   "re_lines": 19,
+   "similarity": 0.788
+  },
+  {
+   "class": "RE only",
+   "name": "weapon_damage_rate",
+   "pre_lines": 0,
+   "re_lines": 9,
+   "similarity": null
+  },
+  {
+   "class": "identical",
+   "name": "wrap16",
+   "pre_lines": 3,
+   "re_lines": 3,
+   "similarity": 1.0
+  }
+ ],
+ "order": {
+  "common": 14,
+  "inversions": [
+   [
+    "skill_ratio",
+    "card_attacker"
+   ],
+   [
+    "const_add",
+    "card_attacker"
+   ],
+   [
+    "skill_atk_bonus",
+    "defense"
+   ],
+   [
+    "skill_atk_bonus",
+    "post_defense"
+   ],
+   [
+    "skill_atk_bonus",
+    "card_attacker"
+   ],
+   [
+    "defense",
+    "card_attacker"
+   ],
+   [
+    "post_defense",
+    "card_attacker"
+   ],
+   [
+    "element",
+    "card_attacker"
+   ]
+  ],
+  "lcs": 12,
+  "pre": [
+   "init",
+   "base_attack",
+   "skill_ratio",
+   "const_add",
+   "skill_atk_bonus",
+   "defense",
+   "post_defense",
+   "element",
+   "element_bonus",
+   "card_attacker",
+   "card_target",
+   "div_hands",
+   "target_modifiers",
+   "map_rates",
+   "final"
+  ],
+  "pre_only": [
+   "element_bonus"
+  ],
+  "re": [
+   "init",
+   "base_attack",
+   "card_attacker",
+   "card_target_parts",
+   "sc_bonus",
+   "sum",
+   "p_atk",
+   "mastery",
+   "crit_rate",
+   "skill_ratio",
+   "const_add",
+   "adv_katar_mastery",
+   "res",
+   "defense",
+   "post_defense",
+   "skill_atk_bonus",
+   "element",
+   "crit_multiplier",
+   "flat_additions",
+   "card_target",
+   "div_hands",
+   "target_modifiers",
+   "map_rates",
+   "final"
+  ],
+  "re_only": [
+   "card_target_parts",
+   "sc_bonus",
+   "sum",
+   "p_atk",
+   "mastery",
+   "crit_rate",
+   "adv_katar_mastery",
+   "res",
+   "crit_multiplier",
+   "flat_additions"
+  ]
+ },
+ "stage_class_counts": {
+  "empty in both (no basic-attack logic)": 2,
+  "identical": 3,
+  "logic differs": 9,
+  "new in RE": 10
+ },
+ "stages": [
+  {
+   "class": "logic differs",
+   "pre_functions": [
+    "M.lucky_dodge",
+    "M.crit_roll",
+    "M.hit_roll",
+    "M.crowd_penalty",
+    "M.weapon_element"
+   ],
+   "re_functions": [
+    "M.lucky_dodge",
+    "M.crit_roll",
+    "M.hit_roll",
+    "M.crowd_penalty",
+    "M.weapon_element"
+   ],
+   "similarity": 0.87,
+   "stage": "init"
+  },
+  {
+   "class": "logic differs",
+   "pre_functions": [
+    "M.base_range",
+    "M.base_damage",
+    "M.base_rate_pct"
+   ],
+   "re_functions": [
+    "M.weapon_atk_range",
+    "M.weapon_atk_part",
+    "M.mob_base_damage",
+    "STAGES.base_attack"
+   ],
+   "similarity": 0.263,
+   "stage": "base_attack"
+  },
+  {
+   "class": "logic differs",
+   "pre_functions": [
+    "M.cardfix_attacker"
+   ],
+   "re_functions": [
+    "M.cardfix_attacker"
+   ],
+   "similarity": 0.933,
+   "stage": "card_attacker"
+  },
+  {
+   "class": "new in RE",
+   "pre_functions": [],
+   "re_functions": [
+    "STAGES.card_target_parts"
+   ],
+   "similarity": null,
+   "stage": "card_target_parts"
+  },
+  {
+   "class": "new in RE",
+   "pre_functions": [],
+   "re_functions": [
+    "STAGES.sc_bonus"
+   ],
+   "similarity": null,
+   "stage": "sc_bonus"
+  },
+  {
+   "class": "new in RE",
+   "pre_functions": [],
+   "re_functions": [
+    "STAGES.sum"
+   ],
+   "similarity": null,
+   "stage": "sum"
+  },
+  {
+   "class": "new in RE",
+   "pre_functions": [],
+   "re_functions": [
+    "STAGES.p_atk"
+   ],
+   "similarity": null,
+   "stage": "p_atk"
+  },
+  {
+   "class": "new in RE",
+   "pre_functions": [],
+   "re_functions": [
+    "M.mastery_atk",
+    "STAGES.mastery"
+   ],
+   "similarity": null,
+   "stage": "mastery"
+  },
+  {
+   "class": "new in RE",
+   "pre_functions": [],
+   "re_functions": [
+    "crit_rate_pc",
+    "STAGES.crit_rate"
+   ],
+   "similarity": null,
+   "stage": "crit_rate"
+  },
+  {
+   "class": "logic differs",
+   "pre_functions": [
+    "M.skill_ratio",
+    "M.atk_percent"
+   ],
+   "re_functions": [
+    "M.skill_ratio",
+    "M.atk_percent"
+   ],
+   "similarity": 0.865,
+   "stage": "skill_ratio"
+  },
+  {
+   "class": "empty in both (no basic-attack logic)",
+   "pre_functions": [],
+   "re_functions": [],
+   "similarity": null,
+   "stage": "const_add"
+  },
+  {
+   "class": "new in RE",
+   "pre_functions": [],
+   "re_functions": [],
+   "similarity": null,
+   "stage": "adv_katar_mastery"
+  },
+  {
+   "class": "new in RE",
+   "pre_functions": [],
+   "re_functions": [
+    "M.res_reduction",
+    "res_stage_value",
+    "STAGES.res"
+   ],
+   "similarity": null,
+   "stage": "res"
+  },
+  {
+   "class": "logic differs",
+   "pre_functions": [
+    "M.vit_def",
+    "M.def_reduce",
+    "defense_stage"
+   ],
+   "re_functions": [
+    "M.defense_values",
+    "M.def_reduce",
+    "STAGES.defense"
+   ],
+   "similarity": 0.533,
+   "stage": "defense"
+  },
+  {
+   "class": "logic differs",
+   "pre_functions": [
+    "M.post_defense",
+    "post_defense_stage"
+   ],
+   "re_functions": [
+    "STAGES.post_defense"
+   ],
+   "similarity": 0.111,
+   "stage": "post_defense"
+  },
+  {
+   "class": "empty in both (no basic-attack logic)",
+   "pre_functions": [],
+   "re_functions": [],
+   "similarity": null,
+   "stage": "skill_atk_bonus"
+  },
+  {
+   "class": "logic differs",
+   "pre_functions": [
+    "M.attr_fix",
+    "M.element_damage",
+    "M.recover_cap",
+    "element_stage"
+   ],
+   "re_functions": [
+    "M.attr_fix",
+    "STAGES.element"
+   ],
+   "similarity": 0.241,
+   "stage": "element"
+  },
+  {
+   "class": "new in RE",
+   "pre_functions": [],
+   "re_functions": [
+    "STAGES.crit_multiplier"
+   ],
+   "similarity": null,
+   "stage": "crit_multiplier"
+  },
+  {
+   "class": "new in RE",
+   "pre_functions": [],
+   "re_functions": [],
+   "similarity": null,
+   "stage": "flat_additions"
+  },
+  {
+   "class": "logic differs",
+   "pre_functions": [
+    "M.cardfix_target"
+   ],
+   "re_functions": [
+    "M.cardfix_target"
+   ],
+   "similarity": 0.889,
+   "stage": "card_target"
+  },
+  {
+   "class": "identical",
+   "pre_functions": [
+    "M.dual_wield"
+   ],
+   "re_functions": [
+    "M.dual_wield"
+   ],
+   "similarity": 1.0,
+   "stage": "div_hands"
+  },
+  {
+   "class": "logic differs",
+   "pre_functions": [
+    "M.target_modifiers"
+   ],
+   "re_functions": [
+    "M.target_modifiers"
+   ],
+   "similarity": 0.588,
+   "stage": "target_modifiers"
+  },
+  {
+   "class": "identical",
+   "pre_functions": [
+    "M.gvg_damage"
+   ],
+   "re_functions": [
+    "M.gvg_damage"
+   ],
+   "similarity": 1.0,
+   "stage": "map_rates"
+  },
+  {
+   "class": "identical",
+   "pre_functions": [
+    "M.finish"
+   ],
+   "re_functions": [
+    "M.finish"
+   ],
+   "similarity": 1.0,
+   "stage": "final"
+  }
+ ],
+ "stages_removed_from_pre": [
+  "element_bonus"
+ ],
+ "weapon_luau": {
+  "file": "scripts/damage/weapon.luau",
+  "kind": "modified",
+  "pre_lines": 486,
+  "re_lines": 710,
+  "shared": 240,
+  "shared_masked": 241
+ }
+}
