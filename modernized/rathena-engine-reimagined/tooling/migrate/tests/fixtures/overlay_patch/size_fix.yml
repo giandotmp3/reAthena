@@ -1,0 +1,7 @@
+Header:
+  Type: SIZE_FIX_DB
+  Version: 1
+
+Body:
+  - Weapon: Dagger
+    Small: 60

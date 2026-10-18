@@ -1,0 +1,153 @@
+{
+ "dbs": [
+  {
+   "common": 6170,
+   "db": "item_db",
+   "entries_identical": 6170,
+   "explained": {},
+   "field_checks": 333180,
+   "field_matches": 333180,
+   "legacy_entries": 6170,
+   "migrator_entries": 6170,
+   "mismatched_fields": {},
+   "only_in_legacy": [],
+   "only_in_legacy_count": 0,
+   "only_in_migrator": [],
+   "only_in_migrator_count": 0
+  },
+  {
+   "common": 2,
+   "db": "mob_db",
+   "entries_identical": 2,
+   "explained": {},
+   "field_checks": 84,
+   "field_matches": 84,
+   "legacy_entries": 2,
+   "migrator_entries": 2,
+   "mismatched_fields": {},
+   "only_in_legacy": [],
+   "only_in_legacy_count": 0,
+   "only_in_migrator": [],
+   "only_in_migrator_count": 0
+  },
+  {
+   "common": 1228,
+   "db": "skill_db",
+   "entries_identical": 1228,
+   "explained": {
+    "unit_layout": {
+     "class": "loader-quirk",
+     "count": 11,
+     "note": "special layout -1 is replaced by a hard-coded layout-table index in skill_init_unit_layout()"
+    }
+   },
+   "field_checks": 69996,
+   "field_matches": 69985,
+   "legacy_entries": 1228,
+   "migrator_entries": 1228,
+   "mismatched_fields": {},
+   "only_in_legacy": [],
+   "only_in_legacy_count": 0,
+   "only_in_migrator": [],
+   "only_in_migrator_count": 0
+  },
+  {
+   "common": 2,
+   "db": "status",
+   "entries_identical": 2,
+   "explained": {},
+   "field_checks": 34,
+   "field_matches": 34,
+   "legacy_entries": 2,
+   "migrator_entries": 2,
+   "mismatched_fields": {},
+   "only_in_legacy": [],
+   "only_in_legacy_count": 0,
+   "only_in_migrator": [],
+   "only_in_migrator_count": 0
+  },
+  {
+   "common": 2,
+   "db": "size_fix",
+   "entries_identical": 2,
+   "explained": {},
+   "field_checks": 8,
+   "field_matches": 8,
+   "legacy_entries": 2,
+   "migrator_entries": 2,
+   "mismatched_fields": {},
+   "only_in_legacy": [],
+   "only_in_legacy_count": 0,
+   "only_in_migrator": [],
+   "only_in_migrator_count": 0
+  },
+  {
+   "common": 4,
+   "db": "attr_fix",
+   "entries_identical": 4,
+   "explained": {},
+   "field_checks": 8,
+   "field_matches": 8,
+   "legacy_entries": 4,
+   "migrator_entries": 4,
+   "mismatched_fields": {},
+   "only_in_legacy": [],
+   "only_in_legacy_count": 0,
+   "only_in_migrator": [],
+   "only_in_migrator_count": 0
+  },
+  {
+   "common": 275,
+   "db": "statpoint",
+   "entries_identical": 275,
+   "explained": {},
+   "field_checks": 825,
+   "field_matches": 825,
+   "legacy_entries": 275,
+   "migrator_entries": 275,
+   "mismatched_fields": {},
+   "only_in_legacy": [],
+   "only_in_legacy_count": 0,
+   "only_in_migrator": [],
+   "only_in_migrator_count": 0
+  },
+  {
+   "common": 76,
+   "db": "job_stats",
+   "entries_identical": 76,
+   "explained": {
+    "max_param": {
+     "class": "not-stored-by-yaml",
+     "count": 76,
+     "note": "defaults come from battle.conf max_parameter & class family (loadingFinished); only explicit MaxStats are modelled"
+    }
+   },
+   "field_checks": 1444,
+   "field_matches": 1368,
+   "legacy_entries": 76,
+   "migrator_entries": 76,
+   "mismatched_fields": {},
+   "only_in_legacy": [],
+   "only_in_legacy_count": 0,
+   "only_in_migrator": [],
+   "only_in_migrator_count": 0
+  },
+  {
+   "common": 70,
+   "db": "refine",
+   "entries_identical": 70,
+   "explained": {},
+   "field_checks": 630,
+   "field_matches": 630,
+   "legacy_entries": 70,
+   "migrator_entries": 70,
+   "mismatched_fields": {},
+   "only_in_legacy": [],
+   "only_in_legacy_count": 0,
+   "only_in_migrator": [],
+   "only_in_migrator_count": 0
+  }
+ ],
+ "import_dir": "/home/user/reAthena/modernized/rathena-engine-reimagined/tooling/migrate/tests/fixtures/overlay_clear",
+ "mode": "prerenewal"
+}

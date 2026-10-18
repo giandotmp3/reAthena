@@ -1,5 +1,8 @@
 #include "legacy_npc/commands.hpp"
 
+#include <array>
+#include <set>
+
 namespace legacy_npc {
 
 std::string_view permission_name(Permission p) {
@@ -18,8 +21,38 @@ bool is_yielding_command(std::string_view n) {
          n == "progressbar_npc";
 }
 
+namespace {
+
+// Every command implemented by the Luau tables (luau/commands.luau, commands_ext.luau, commands_rt.luau).
+constexpr std::array kSupported = {
+#define X(name) std::string_view(#name),
+#include "supported_commands.inc"
+#undef X
+};
+
+bool starts(std::string_view s, std::string_view p) { return s.substr(0, p.size()) == p; }
+
+// "pure": reads and writes script variables only. "reads world": asks the world. Everything else writes the world.
+CommandClass classify(std::string_view n) {
+  static const std::set<std::string_view> pure = {
+      "abs", "atoi", "axtoi", "charat", "charisalpha", "charislower", "charisupper", "compare", "countstr", "delchar", "distance",
+      "explode", "getarg", "getargcount", "getarraysize", "getelementofarray", "getstrlen", "implode", "inarray", "countinarray",
+      "insertchar", "max", "min", "pow", "rand", "replacestr", "setchar", "sprintf", "sqrt", "sscanf", "strcmp", "strlen", "strpos",
+      "strtol", "strtolower", "strtoupper", "substr", "set", "setarray", "cleararray", "copyarray", "deletearray", "getd", "setd",
+      "getvariableofnpc", "clear"};
+  if (is_yielding_command(n)) return CommandClass::Yields;
+  if (pure.count(n)) return CommandClass::Pure;
+  if (starts(n, "get") || starts(n, "is") || starts(n, "check") || starts(n, "count") || n == "strcharinfo" || n == "strnpcinfo" ||
+      n == "mobcount" || n == "readparam" || n == "jobname" || n == "playerattached" || n == "rid2name" || n == "query_sql")
+    return CommandClass::ReadsWorld;
+  return CommandClass::WritesWorld;
+}
+
+}  // namespace
+
 CommandRegistry CommandRegistry::with_defaults() {
   CommandRegistry r;
+  for (auto n : kSupported) r.add({std::string(n), classify(n), std::nullopt, 0});
   for (auto n : {"next", "close2", "menu", "select", "prompt", "input", "sleep", "sleep2",
                  "progressbar", "progressbar_npc"})
     r.add({n, CommandClass::Yields, std::nullopt, 1});

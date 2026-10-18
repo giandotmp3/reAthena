@@ -1,0 +1,14 @@
+# Test overlay (db/import/job_stats.yml)
+Header:
+  Type: JOB_STATS
+  Version: 4
+
+Body:
+  - Jobs:
+      Swordman: true
+    MaxWeight: 30000
+    BonusStats:
+      - Level: 2
+        Str: 5
+    BaseASPD:
+      Dagger: 600

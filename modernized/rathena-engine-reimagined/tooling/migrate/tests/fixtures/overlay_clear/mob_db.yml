@@ -1,0 +1,19 @@
+# Header.Clear: everything loaded so far (stub + pre-re/re) is dropped before this body is applied.
+Header:
+  Type: MOB_DB
+  Version: 5
+  Clear: true
+
+Body:
+  - Id: 1002
+    AegisName: PORING
+    Name: Poring
+    Level: 1
+    Hp: 50
+    Drops:
+      - Item: Jellopy
+        Rate: 7000
+  - Id: 31990
+    AegisName: ONLY_MOB
+    Name: Only Mob
+    Level: 2

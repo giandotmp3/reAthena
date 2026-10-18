@@ -1,20 +1,22 @@
 # Example config. Secrets come from the environment only.
 [mod]
-id = "legacy"
+id = "legacy.npc"
 engine_api = "^1"
 
 [permissions]
-# Denied by default. Grant in mods.lock, not here.
-requested = ["atcommand", "legacy.query_sql", "legacy.setunitdata", "unbounded_loop"]
+# Nothing is requested by default. Grant in mods.lock, not here; the runtime's `granted` list mirrors the lock.
+requested = []
+optional = ["storage.account", "atcommand", "unbounded_loop", "legacy.query_sql", "legacy.setunitdata"]
 
 [limits]
 max_commands_per_run = 65535   # legacy check_cmdcount
 max_gotos_per_run = 2048       # legacy check_gotocount
+max_call_depth = 32768         # heap frames; typed CALL_DEPTH beyond
 
 [compat]
 player_event_queue_slots = 2
 player_event_dequeue_ms = 100
-two_slot_event_queue = true    # compatibility flag (Q-J open)
+two_slot_event_queue = true    # compatibility flag (Q-J answered from npc.cpp, see README)
 legacy_quirks = true
 
 [cache]

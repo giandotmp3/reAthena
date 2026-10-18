@@ -1,0 +1,24 @@
+# legacy.npc: rAthena `.txt` NPC script compatibility on script-host (REIMAGINED_ARCHITECTURE section 7, CAP-E08).
+# Package layout: luau/ holds the modules (the loader bundles them into one chunk, see include/legacy_npc/package.hpp).
+id = "legacy.npc"
+version = "0.1.0"
+engine_api = "^1"
+provides = ["legacy-npc"]
+
+# No permissions are requested: out of the box a legacy script can use character/world storage, dialogue, timers and the bus, and
+# nothing else. The operator may grant these in mods.lock; until then the matching legacy commands/variables fail with a typed error:
+#   storage.account   `#` and `##` variables               (PERMISSION_DENIED: storage.account)
+#   atcommand         the atcommand script command         (PERMISSION_DENIED: atcommand)
+#   unbounded_loop    freeloop() lifts the goto/command budget  (PERMISSION_DENIED: unbounded_loop)
+#   query_sql         the query_sql script command         (gated by the runtime's `granted` list; no entry in the manifest vocabulary)
+#   setunitdata       the setunitdata script command       (same)
+permissions = []
+
+[legacy]
+optional_permissions = ["storage.account", "atcommand", "unbounded_loop", "legacy.query_sql", "legacy.setunitdata"]
+# command budget per run slice (legacy check_cmdcount / check_gotocount)
+max_commands = 65535
+max_gotos = 2048
+# compatibility flags
+two_slot_event_queue = true
+legacy_quirks = true

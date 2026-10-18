@@ -1,0 +1,8 @@
+Header:
+  Type: ATTRIBUTE_DB
+  Version: 1
+
+Body:
+  - Level: 1
+    Fire:
+      Water: 77

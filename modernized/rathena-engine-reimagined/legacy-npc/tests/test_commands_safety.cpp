@@ -1,5 +1,7 @@
 #include "legacy_npc/commands.hpp"
 #include "legacy_npc/interpreter.hpp"
+#include "legacy_npc/package.hpp"
+#include "legacy_npc/parser.hpp"
 
 #include "mini_test.hpp"
 
@@ -45,15 +47,25 @@ struct NullHost : HostApi {
 };
 }  // namespace
 
-PENDING("LNPC-SAFE-003", command_budget_aborts_script_not_tick, "needs interpreter") {
+ACCEPT_LUAU("LNPC-SAFE-003", command_budget_aborts_script_not_tick) {
   auto reg = CommandRegistry::with_defaults();
   NullHost h;
-  Program p;  // infinite jump loop once the lowering exists
+  Program p;  // an infinite jump loop: L: goto L;
+  p.labels["L"] = 0;
+  Instr g; g.op = Op::Goto; g.name = "L";
+  p.code.push_back(g);
   Interpreter in(p, h, reg, {}, RunLimits{100, 10});
   CHECK(in.run() == RunOutcome::BudgetExceeded);
+  CHECK(in.last_error_type() == "BUDGET_EXCEEDED");
+  // the tick (the host) is unharmed: the same sandbox runs the next script
+  Program ok;
+  Instr e; e.op = Op::Command; e.name = "clear";
+  ok.code.push_back(e);
+  Interpreter in2(ok, h, reg, {});
+  CHECK(in2.run() == RunOutcome::Finished);
 }
 
-PENDING("LNPC-SAFE-004", freeloop_without_permission_is_denied_at_runtime, "needs interpreter") {
+ACCEPT_LUAU("LNPC-SAFE-004", freeloop_without_permission_is_denied_at_runtime) {
   auto reg = CommandRegistry::with_defaults();
   NullHost h;
   Program p;
@@ -61,9 +73,12 @@ PENDING("LNPC-SAFE-004", freeloop_without_permission_is_denied_at_runtime, "need
   p.code.push_back(i);
   Interpreter in(p, h, reg, {});
   CHECK(in.run() == RunOutcome::PermissionDenied);
+  CHECK(in.last_error_command() == "freeloop");
+  Interpreter granted(p, h, reg, {Permission::UnboundedLoop});
+  CHECK(granted.run() == RunOutcome::Finished);
 }
 
-PENDING("LNPC-SAFE-005", atcommand_query_sql_setunitdata_denied_at_runtime, "needs interpreter") {
+ACCEPT_LUAU("LNPC-SAFE-005", atcommand_query_sql_setunitdata_denied_at_runtime) {
   auto reg = CommandRegistry::with_defaults();
   NullHost h;
   for (auto c : {"atcommand", "query_sql", "setunitdata"}) {
@@ -72,10 +87,11 @@ PENDING("LNPC-SAFE-005", atcommand_query_sql_setunitdata_denied_at_runtime, "nee
     p.code.push_back(i);
     Interpreter in(p, h, reg, {});
     CHECK(in.run() == RunOutcome::PermissionDenied);
+    CHECK(in.last_error_command() == c);
   }
 }
 
-PENDING("LNPC-YIELD-002", blocking_commands_yield_and_disconnect_cancels, "needs interpreter") {
+ACCEPT_LUAU("LNPC-YIELD-002", blocking_commands_yield_and_disconnect_cancels) {
   auto reg = CommandRegistry::with_defaults();
   NullHost h;
   Program p;
@@ -85,4 +101,46 @@ PENDING("LNPC-YIELD-002", blocking_commands_yield_and_disconnect_cancels, "needs
   CHECK(in.run() == RunOutcome::Yielded);
   in.cancel();
   CHECK(in.resume({}) == RunOutcome::Cancelled);
+}
+
+// every blocking command leaves run() as Yielded and resume() carries the client's answer back into the script
+ACCEPT_LUAU("LNPC-YIELD-003", every_blocking_command_yields_and_resumes) {
+  auto reg = CommandRegistry::with_defaults();
+  struct Rec : HostApi {
+    InMemoryVariableStore s;
+    std::vector<std::pair<std::string, std::vector<Value>>> calls;
+    VariableStore& vars() override { return s; }
+    void emit(std::string_view c, const std::vector<Value>& a) override { calls.emplace_back(std::string(c), a); }
+  } h;
+  auto f = parse_file("-\tscript\tt\t-1,{\n mes \"a\"; next; .@r = select(\"x:y:z\"); input .@n; sleep 100; progressbar \"0xff\", 2; mes \"r=\" + .@r + \" n=\" + .@n; close2; end;\n}\n", "t.txt");
+  Interpreter in(f.npcs.at(0).program, h, reg, {});
+  CHECK(in.run() == RunOutcome::Yielded);                  // next
+  CHECK(in.resume({}) == RunOutcome::Yielded);             // select
+  ResumeInput pick; pick.choice = 3;
+  CHECK(in.resume(pick) == RunOutcome::Yielded);           // input
+  ResumeInput typed; typed.input = std::int64_t{42};
+  CHECK(in.resume(typed) == RunOutcome::Yielded);          // sleep
+  CHECK(in.resume({}) == RunOutcome::Yielded);             // progressbar
+  CHECK(in.resume({}) == RunOutcome::Yielded);             // close2
+  CHECK(in.resume({}) == RunOutcome::Finished);
+  bool saw = false;
+  for (auto& [c, a] : h.calls)
+    if (c == "mes" && !a.empty())
+      if (auto* s = std::get_if<std::string>(&a[0])) saw = saw || *s == "r=3 n=42";
+  CHECK(saw);
+}
+
+// the command tables of the Luau package and the C++ registry list the same commands
+ACCEPT_LUAU("LNPC-DEGRADE-003", registry_matches_luau_command_tables) {
+  auto reg = CommandRegistry::with_defaults();
+  auto& host = shared_host();
+  host.clear_log();
+  host.run_ok("names", "for _, n in LEGACY.command_names() do if string.sub(n, -7) ~= '_unused' then print('@name\\t' .. n) end end");
+  std::size_t n = 0;
+  for (auto& r : host.records("@name")) {
+    CHECK_MSG(reg.find(r[1]) != nullptr, "registry lacks " + r[1]);
+    ++n;
+  }
+  CHECK(n > 200);
+  CHECK(reg.size() >= n);
 }

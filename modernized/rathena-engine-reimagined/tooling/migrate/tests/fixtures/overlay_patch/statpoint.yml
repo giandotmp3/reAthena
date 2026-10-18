@@ -1,0 +1,8 @@
+# Test overlay (db/import/statpoint.yml)
+Header:
+  Type: STATPOINT_DB
+  Version: 2
+
+Body:
+  - Level: 10
+    Points: 99

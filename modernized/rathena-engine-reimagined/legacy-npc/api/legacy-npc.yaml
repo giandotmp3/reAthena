@@ -1,25 +1,48 @@
-# Interface contract stubs for the legacy-npc service (architecture section 7).
+# Interface of the legacy-npc package (architecture section 7). Luau side: require("legacy") / the bundled global LEGACY; C++ side: include/legacy_npc/.
 service: legacy-npc
+mod: legacy.npc
 exports:
-  - name: legacy.load_corpus
-    in: { paths: "list<string>" }
-    out: { npcs_loaded: int, report: "CorpusReport" }
-    notes: parse once, cache binary AST keyed by file hash; per-file unsupported report
-  - name: legacy.parse_file
+  - name: LEGACY.new
+    in: { cfg: "{ host = { storage, timers, events, dialogue, log, hooks }, granted = {string}, limits = { max_commands, max_gotos, max_depth }, compat = { two_slot_event_queue, legacy_quirks }, trace, readText, disable_unsupported }" }
+    out: Runtime
+    notes: every host seam is optional; the defaults are an in-memory storage and an internal scheduler
+  - name: Runtime:addFile
+    in: { path: string, text: "string?" }
+    out: "npcs added, parse errors"
+    notes: indexes only (declarations, byte ranges, event labels); a body is parsed on first use and the flat ops are cached on the entry
+  - name: Runtime:registerEvents
+    in: { events: "script-host events API" }
+    out: hooks registered
+    notes: one hook per On* label of every NPC and clone, event legacy:<Label>, hook id <npc>::<Label>; load time only
+  - name: Runtime:run
+    in: { npc: string, rid: number, label: "string?" }
+    out: "{ status = end|error|unsupported|load_error|missing, err = { type, cmd, ... } }"
+    notes: call directly from the dialogue coroutine; blocking commands are dialogue requests; err.type in UNSUPPORTED PERMISSION_DENIED BUDGET_EXCEEDED CALL_DEPTH ...
+  - name: Runtime:fireEvent
+    in: { event: "Npc::OnLabel", player: "player?" }
+    out: boolean
+    notes: npc_event / npc_event_do semantics, the 2-slot queue for busy players
+  - name: Runtime:fireAll
+    in: { label: string, player: "player?" }
+    out: count
+    notes: engine-fired broadcast events (OnInit, OnPCLoginEvent, ...)
+  - name: Runtime:clockTick
+    in: { now: "{min,hour,mday,month,wday}", prev: "same?" }
+    out: count
+    notes: OnMinute/OnClock/OnHour/OnDay/OnSun.. as npc_event_do_clock
+  - name: Runtime:report
+    in: { file: "string?" }
+    out: "{ rows = { {file, npc, line, commands, gated} }, npcs, disabled }"
+    notes: per-NPC unsupported-command report; LEGACY.report.format() prints the table
+  - name: legacy_npc::parse_file
     in: { source: string, file_name: string }
     out: ParsedFile
-  - name: legacy.run_npc
-    in: { npc: string, char: "entity", event_label: "string?" }
-    out: RunOutcome
-    notes: coroutine; yields on next/close2/menu/select/prompt/input/sleep/sleep2/progressbar
-  - name: legacy.compile_db_script
+  - name: legacy_npc::Interpreter
+    notes: run/resume/cancel over a script-host dialogue; Yielded while a blocking command waits
+  - name: legacy_npc::compile_db_script
     in: { script: string }
     out: CompiledDbScript
-    notes: straight-line -> bonus table; otherwise needs_interpreter
-  - name: legacy.register_command
-    in: { name: string, class: "pure|reads_world|writes_world|yields", permission: "string?" }
+    notes: straight-line bonus scripts -> delta table; anything else needs_interpreter
 permissions:
-  - atcommand
-  - legacy.query_sql
-  - legacy.setunitdata
-  - unbounded_loop
+  requested: []
+  optional: [storage.account, atcommand, unbounded_loop, legacy.query_sql, legacy.setunitdata]

@@ -1,3 +1,6 @@
+#include "legacy_npc/interpreter.hpp"
+#include "legacy_npc/package.hpp"
+#include "legacy_npc/parser.hpp"
 #include "legacy_npc/variables.hpp"
 
 #include "mini_test.hpp"
@@ -81,11 +84,40 @@ ACCEPT("LNPC-PARAM-001", param_variables_shim_over_attributes) {
   CHECK(b.last_id == "legacy:param/baselevel" && b.last == 99);
 }
 
-PENDING("LNPC-VAR-008", npc_vars_shared_by_duplicate_clones, "Q-H unconfirmed; needs interpreter + loader") {
-  // Inferred: `.` vars live on the script_code object shared by duplicate() clones.
-  throw legacy_npc::NotImplemented("duplicate clone sharing");
+// Q-H: `.` NPC variables are shared by a template and its duplicate clones (legacy: both point at one script_code, npc.cpp:4602, whose
+// `local` registry holds the `.` variables, script.cpp:2658/2734). The parser records the clone relation; the Luau runtime shares the table.
+ACCEPT_LUAU("LNPC-VAR-008", npc_vars_shared_by_duplicate_clones) {
+  auto f = parse_file(
+      "prontera,150,150,4\tscript\tGuide\t111,{\n .visits += 1; mes \"visit \" + .visits; close;\n}\n"
+      "prontera,152,150,4\tduplicate(Guide)\tGuide2\t111\n", "t.txt");
+  CHECK(f.npcs.size() == 2 && f.npcs[1].kind == DeclKind::Duplicate && f.npcs[1].duplicate_of == "Guide");
+  auto& host = shared_host();
+  host.clear_log();
+  host.run_ok("qh", R"(
+    local api = LEGACY.blocking.scripted({})
+    local rt = LEGACY.new{ host = { dialogue = api } }
+    rt:addFile("t.txt", "prontera,150,150,4\tscript\tGuide\t111,{\n .visits += 1; mes \"visit \" + .visits; close;\n}\nprontera,152,150,4\tduplicate(Guide)\tGuide2\t111\n")
+    rt:run("Guide", 1); rt:run("Guide2", 2); rt:run("Guide", 1)
+    print("@qh\t" .. rt.loader.npcs.Guide.vars.visits .. "\t" .. tostring(rt.loader.npcs.Guide.vars == rt.loader.npcs.Guide2.vars)
+      .. "\t" .. tostring(rt.loader.npcs.Guide.prog == rt.loader.npcs.Guide2.prog))
+  )");
+  auto r = host.records("@qh");
+  CHECK(r.size() == 1 && r[0][1] == "3" && r[0][2] == "true" && r[0][3] == "true");
 }
 
-PENDING("LNPC-VAR-009", frame_locals_isolated_per_callsub_frame, "needs interpreter") {
-  throw legacy_npc::NotImplemented("heap frame locals");
+// `.@` locals belong to the call frame: callsub gets a fresh set, the caller's survive
+ACCEPT_LUAU("LNPC-VAR-009", frame_locals_isolated_per_callsub_frame) {
+  struct Rec : HostApi {
+    InMemoryVariableStore s;
+    std::vector<std::string> mes;
+    VariableStore& vars() override { return s; }
+    void emit(std::string_view c, const std::vector<Value>& a) override {
+      if (c == "mes" && !a.empty()) if (auto* t = std::get_if<std::string>(&a[0])) mes.push_back(*t);
+    }
+  } h;
+  auto f = parse_file("-\tscript\tt\t-1,{\n .@a = 1; callsub L_S, 7; mes \"caller a=\" + .@a; end;\nL_S: .@a = getarg(0) * 100; mes \"callee a=\" + .@a; return;\n}\n", "t.txt");
+  auto reg = CommandRegistry::with_defaults();
+  Interpreter in(f.npcs.at(0).program, h, reg, {});
+  CHECK(in.run() == RunOutcome::Finished);
+  CHECK(h.mes.size() == 2 && h.mes[0] == "callee a=700" && h.mes[1] == "caller a=1");
 }

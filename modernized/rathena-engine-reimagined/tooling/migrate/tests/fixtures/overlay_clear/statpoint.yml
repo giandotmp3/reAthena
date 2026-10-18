@@ -1,0 +1,10 @@
+Header:
+  Type: STATPOINT_DB
+  Version: 2
+  Clear: true
+
+Body:
+  - Level: 1
+    Points: 48
+  - Level: 5
+    Points: 55

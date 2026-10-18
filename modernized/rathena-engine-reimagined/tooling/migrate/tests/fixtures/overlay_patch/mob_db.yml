@@ -1,0 +1,82 @@
+# Test overlay (db/import/mob_db.yml): Index-patching of drop lists, mode bit patching, new mob, rejects.
+Header:
+  Type: MOB_DB
+  Version: 5
+
+Body:
+  - Id: 1002                     # Poring has 8 drops (indices 0..7)
+    Level: 3
+    Modes:
+      Aggressive: true
+      Looter: true
+    RaceGroups:
+      Goblin: true
+    Drops:
+      - Index: 0                 # overwrite entry 0
+        Item: Jellopy
+        Rate: 5000
+      - Index: 3                 # overwrite entry 3 and set StealProtected
+        Item: Red_Potion
+        Rate: 123
+        StealProtected: true
+      - Index: 8                 # == current size: append
+        Item: Orange_Potion
+        Rate: 10
+      - Index: 20                # >= MAX_MOB_DROP: skipped
+        Item: Apple
+        Rate: 1
+      - Item: Yellow_Potion      # no Index: append (10th entry)
+        Rate: 5
+      - Item: White_Potion       # list is full: skipped
+        Rate: 5
+      - Index: 1                 # unknown item: skipped, entry 1 unchanged
+        Item: No_Such_Item_Xyz
+        Rate: 5
+      - Index: 15                # Index > size (and < MAX): silently ignored
+        Item: Apple
+        Rate: 5
+    MvpDrops:
+      - Item: Red_Potion
+        Rate: 1000
+  - Id: 31990                    # new mob
+    AegisName: TEST_MOB
+    Name: Test Mob
+    Level: 50
+    Hp: 12345
+    BaseExp: 100
+    JobExp: 50
+    Attack: 100
+    Attack2: 150
+    Defense: 20
+    MagicDefense: 10
+    Str: 10
+    Agi: 20
+    AttackRange: 2
+    SkillRange: 10
+    ChaseRange: 12
+    Size: Large
+    Race: Demon
+    Element: Dark
+    ElementLevel: 2
+    WalkSpeed: 200
+    AttackDelay: 1000
+    AttackMotion: 500
+    DamageMotion: 300
+    Class: Boss
+    Ai: 25
+    Modes:
+      NoCast: true
+      Looter: true
+    MvpDrops:
+      - Item: Red_Potion
+        Rate: 500
+    Drops:
+      - Item: Jellopy
+        Rate: 100
+      - Item: Apple
+        Rate: 200
+  - Id: 31991                    # missing Name -> rejected
+    AegisName: NO_NAME_MOB
+  - Id: 999                      # invalid Id range -> rejected
+    AegisName: BAD_ID
+    Name: Bad Id

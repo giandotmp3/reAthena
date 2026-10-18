@@ -1,0 +1,70 @@
+# Test overlay (db/import/item_db.yml): exercises per-field patching of an existing Id, partial failure, new entries.
+Header:
+  Type: ITEM_DB
+  Version: 3
+
+Body:
+  - Id: 501                      # patch an existing item: only these fields change
+    Buy: 77
+    Weight: 55
+    Script: |
+      itemheal rand(20,30),0;
+  - Id: 502                      # partial failure: Buy is applied, the invalid Weight rejects the rest
+    Buy: 123
+    Weight: heavy
+    Slots: 3
+  - Id: 1101                     # Jobs resets the whole set, Classes patches the existing mask
+    Jobs:
+      Novice: true
+      Swordman: true
+    Classes:
+      Upper: false
+    Slots: 3
+  - Id: 31990                    # new item, only Buy given -> Sell derived in loadingFinished
+    AegisName: Test_Custom_Potion
+    Name: Test Custom Potion
+    Type: Healing
+    Buy: 50
+    Weight: 10
+    Script: |
+      itemheal 10,0;
+  - Id: 31991                    # new armor with caps and equip scripts
+    AegisName: Test_Custom_Helm
+    Name: Test Custom Helm
+    Type: Armor
+    Defense: 3
+    Slots: 1
+    Locations:
+      Head_Top: true
+    EquipLevelMin: 10
+    EquipLevelMax: 5
+    Flags:
+      BindOnEquip: true
+    EquipScript: |
+      bonus bStr,1;
+    UnEquipScript: |
+      /* nothing to do */
+  - Id: 31992                    # duplicate AegisName -> rejected
+    AegisName: Red_Potion
+    Name: Duplicate
+  - Id: 31993                    # armor without Locations -> becomes Etc
+    AegisName: Test_No_Location
+    Name: No Location
+    Type: Armor
+  - Id: 31994                    # Sell only, delay-consume type, delay/stack/trade blocks
+    AegisName: Test_Delay_Item
+    Name: Delay Item
+    Type: Delayconsume
+    Sell: 30
+    Delay:
+      Duration: 5
+    Stack:
+      Amount: 100
+      Cart: true
+    Trade:
+      NoDrop: true
+      Override: 50
+    NoUse:
+      Sitting: true
+    Flags:
+      NoConsume: true

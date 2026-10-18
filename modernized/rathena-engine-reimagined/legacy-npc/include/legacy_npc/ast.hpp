@@ -18,7 +18,7 @@ struct Expr {
 };
 
 // Lowered flat statement list: control flow is pc assignment, not recursion.
-enum class Op { Nop, Command, Assign, Jump, JumpIfFalse, Goto, Callsub, Return, Switch, End };
+enum class Op { Nop, Command, Assign, Jump, JumpIfFalse, Goto, Callsub, Return, Switch, End, JumpIfTrue, Callfunc, Menu };
 
 struct Instr {
   Op op = Op::Nop;
@@ -32,6 +32,11 @@ struct Program {
   std::vector<Instr> code;
   std::map<std::string, std::int32_t> labels;
   std::uint64_t source_hash = 0;
+  // Filled by parse_file: the script body and every command it calls (nested calls included). The Luau runtime lowers the body lazily
+  // and keeps the flat ops itself; this C++ value is the facade's view of one NPC (what the report and the Interpreter facade use).
+  std::string body;
+  std::vector<std::string> used_commands;
+  std::uint32_t name_line = 0;  // line of the declaration header in the source file
 };
 
 struct Npc {

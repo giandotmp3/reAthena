@@ -1,0 +1,71 @@
+# Test overlay (db/import/skill_db.yml)
+Header:
+  Type: SKILL_DB
+  Version: 4
+
+Body:
+  - Id: 5                        # SM_BASH patch: list + linear extrapolation, scalar fill, ItemCost, CopyFlags quirk
+    Description: Bash (patched)
+    CastTime:
+      - Level: 1
+        Time: 100
+      - Level: 2
+        Time: 200
+      - Level: 3
+        Time: 300
+    Requires:
+      SpCost: 12
+      ItemCost:
+        - Item: Red_Potion
+          Amount: 2
+    CopyFlags:
+      Skill:
+        Plagiarism: false
+  - Id: 29990                    # new skill
+    Name: TEST_NEW_SKILL
+    Description: Test New Skill
+    MaxLevel: 5
+    Type: Magic
+    TargetType: Attack
+    Range: 9
+    Hit: Multi_Hit
+    HitCount:
+      - Level: 1
+        Count: 1
+      - Level: 5
+        Count: 5
+    Element:
+      - Level: 1
+        Element: Fire
+      - Level: 2
+        Element: Water
+    DamageFlags:
+      Splash: true
+    Flags:
+      NoCastSelf: true
+    Duration1: 30000
+    Requires:
+      SpCost:
+        - Level: 1
+          Amount: 10
+        - Level: 2
+          Amount: 20
+      Status:
+        Poison: true
+      State: Riding
+      Equipment:
+        Red_Potion: true
+    Unit:
+      Id: Firewall
+      Layout: 2
+      Range: 2
+      Interval: 100
+      Target: Enemy
+      Flag:
+        NoReiteration: true
+        NoMob: true
+    Status: Poison
+  - Id: 29991                    # invalid: MaxLevel out of bounds -> rejected
+    Name: BAD_SKILL
+    Description: Bad
+    MaxLevel: 99

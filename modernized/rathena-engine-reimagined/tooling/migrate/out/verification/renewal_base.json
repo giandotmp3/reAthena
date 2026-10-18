@@ -1,0 +1,153 @@
+{
+ "dbs": [
+  {
+   "common": 29357,
+   "db": "item_db",
+   "entries_identical": 29357,
+   "explained": {},
+   "field_checks": 1614635,
+   "field_matches": 1614635,
+   "legacy_entries": 29357,
+   "migrator_entries": 29357,
+   "mismatched_fields": {},
+   "only_in_legacy": [],
+   "only_in_legacy_count": 0,
+   "only_in_migrator": [],
+   "only_in_migrator_count": 0
+  },
+  {
+   "common": 2675,
+   "db": "mob_db",
+   "entries_identical": 2675,
+   "explained": {},
+   "field_checks": 115025,
+   "field_matches": 115025,
+   "legacy_entries": 2675,
+   "migrator_entries": 2675,
+   "mismatched_fields": {},
+   "only_in_legacy": [],
+   "only_in_legacy_count": 0,
+   "only_in_migrator": [],
+   "only_in_migrator_count": 0
+  },
+  {
+   "common": 1635,
+   "db": "skill_db",
+   "entries_identical": 1635,
+   "explained": {
+    "unit_layout": {
+     "class": "loader-quirk",
+     "count": 12,
+     "note": "special layout -1 is replaced by a hard-coded layout-table index in skill_init_unit_layout()"
+    }
+   },
+   "field_checks": 93195,
+   "field_matches": 93183,
+   "legacy_entries": 1635,
+   "migrator_entries": 1635,
+   "mismatched_fields": {},
+   "only_in_legacy": [],
+   "only_in_legacy_count": 0,
+   "only_in_migrator": [],
+   "only_in_migrator_count": 0
+  },
+  {
+   "common": 1018,
+   "db": "status",
+   "entries_identical": 1018,
+   "explained": {},
+   "field_checks": 17306,
+   "field_matches": 17306,
+   "legacy_entries": 1018,
+   "migrator_entries": 1018,
+   "mismatched_fields": {},
+   "only_in_legacy": [],
+   "only_in_legacy_count": 0,
+   "only_in_migrator": [],
+   "only_in_migrator_count": 0
+  },
+  {
+   "common": 24,
+   "db": "size_fix",
+   "entries_identical": 24,
+   "explained": {},
+   "field_checks": 96,
+   "field_matches": 96,
+   "legacy_entries": 24,
+   "migrator_entries": 24,
+   "mismatched_fields": {},
+   "only_in_legacy": [],
+   "only_in_legacy_count": 0,
+   "only_in_migrator": [],
+   "only_in_migrator_count": 0
+  },
+  {
+   "common": 4,
+   "db": "attr_fix",
+   "entries_identical": 4,
+   "explained": {},
+   "field_checks": 8,
+   "field_matches": 8,
+   "legacy_entries": 4,
+   "migrator_entries": 4,
+   "mismatched_fields": {},
+   "only_in_legacy": [],
+   "only_in_legacy_count": 0,
+   "only_in_migrator": [],
+   "only_in_migrator_count": 0
+  },
+  {
+   "common": 275,
+   "db": "statpoint",
+   "entries_identical": 275,
+   "explained": {},
+   "field_checks": 825,
+   "field_matches": 825,
+   "legacy_entries": 275,
+   "migrator_entries": 275,
+   "mismatched_fields": {},
+   "only_in_legacy": [],
+   "only_in_legacy_count": 0,
+   "only_in_migrator": [],
+   "only_in_migrator_count": 0
+  },
+  {
+   "common": 175,
+   "db": "job_stats",
+   "entries_identical": 175,
+   "explained": {
+    "max_param": {
+     "class": "not-stored-by-yaml",
+     "count": 175,
+     "note": "defaults come from battle.conf max_parameter & class family (loadingFinished); only explicit MaxStats are modelled"
+    }
+   },
+   "field_checks": 3325,
+   "field_matches": 3150,
+   "legacy_entries": 175,
+   "migrator_entries": 175,
+   "mismatched_fields": {},
+   "only_in_legacy": [],
+   "only_in_legacy_count": 0,
+   "only_in_migrator": [],
+   "only_in_migrator_count": 0
+  },
+  {
+   "common": 160,
+   "db": "refine",
+   "entries_identical": 160,
+   "explained": {},
+   "field_checks": 1440,
+   "field_matches": 1440,
+   "legacy_entries": 160,
+   "migrator_entries": 160,
+   "mismatched_fields": {},
+   "only_in_legacy": [],
+   "only_in_legacy_count": 0,
+   "only_in_migrator": [],
+   "only_in_migrator_count": 0
+  }
+ ],
+ "import_dir": "db/import",
+ "mode": "renewal"
+}

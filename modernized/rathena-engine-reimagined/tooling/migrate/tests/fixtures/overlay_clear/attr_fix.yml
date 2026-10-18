@@ -1,0 +1,9 @@
+Header:
+  Type: ATTRIBUTE_DB
+  Version: 1
+  Clear: true
+
+Body:
+  - Level: 2
+    Water:
+      Fire: 150

@@ -1,0 +1,10 @@
+Header:
+  Type: SIZE_FIX_DB
+  Version: 1
+  Clear: true
+
+Body:
+  - Weapon: Dagger
+    Medium: 10
+  - Weapon: Mace
+    Large: 20

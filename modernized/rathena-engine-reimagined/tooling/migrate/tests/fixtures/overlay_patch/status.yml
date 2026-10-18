@@ -1,0 +1,22 @@
+# Test overlay (db/import/status.yml)
+Header:
+  Type: STATUS_DB
+  Version: 4
+
+Body:
+  - Status: Poison               # patch: scalar, list add/remove (Fail), duplicates allowed in lists
+    MinRate: 50
+    MinDuration: 1000
+    Fail:
+      Poison: false
+      Curse: true
+    EndOnStart:
+      Blind: true
+    Flags:
+      NoClearance: true
+    Options:
+      Hiding: true
+  - Status: Stone
+    Script: |
+      bonus bStr,-1;
+  - Status: Not_A_Status         # rejected

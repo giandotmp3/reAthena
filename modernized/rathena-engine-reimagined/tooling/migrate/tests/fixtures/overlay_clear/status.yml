@@ -1,0 +1,11 @@
+Header:
+  Type: STATUS_DB
+  Version: 4
+  Clear: true
+
+Body:
+  - Status: Poison
+    Opt2:
+      Poison: true
+  - Status: Stone
+    DurationLookup: NPC_PETRIFYATTACK
