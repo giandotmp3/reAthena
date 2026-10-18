@@ -138,7 +138,8 @@ def compare_case(c):
     mm = []  # mismatches
     def add(kind, detail, l=None, u=None, cmd=None):
         mm.append(dict(kind=kind, detail=detail, legacy=l['raw'] if l else None, luau=u['raw'] if u else None,
-                       legacy_line=l['n'] if l else None, luau_line=u['n'] if u else None, cmd=cmd or (l or u)['name']))
+                       legacy_line=l['n'] if l else None, luau_line=u['n'] if u else None, cmd=cmd or (l or u)['name'],
+                       lrec=l, urec=u))
     lc, uc = L['calls'], U['calls']
     sm = difflib.SequenceMatcher(None, [x['name'] for x in lc], [x['name'] for x in uc], autojunk=False)
     luau_err = U['end'] is not None and U['end'].startswith('error:')
@@ -163,6 +164,16 @@ def compare_case(c):
             add('missing_in_luau', 'legacy-only call', x, None)
         for y in ub[m:]:
             add('extra_in_luau', 'legacy_interp-only call', None, y)
+    # a call that only moved (same name + args, legacy-only here and luau-only nearby) is an ordering difference
+    lonly = [m for m in mm if m['kind'] == 'missing_in_luau' and m['urec'] is None]
+    uonly = [m for m in mm if m['kind'] == 'extra_in_luau' and m['lrec'] is None]
+    for a in lonly:
+        for b in uonly:
+            if b in mm and a['lrec']['name'] == b['urec']['name'] and a['lrec']['args'] == b['urec']['args'] and abs(a['lrec']['n'] - b['urec']['n']) <= 12:
+                mm.remove(b)
+                a['kind'] = 'ordering'; a['detail'] = 'call moved: legacy line %d, luau line %d' % (a['lrec']['n'], b['urec']['n'])
+                a['luau'] = b['luau']; a['luau_line'] = b['luau_line']
+                break
     le, ue = L['end'], U['end']
     if le != ue and not (luau_err and any(x['kind'] == 'luau_stopped' for x in mm)):
         add('end_reason', 'legacy=%s luau=%s' % (le, ue), None, None, cmd='<end>')
