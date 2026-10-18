@@ -3,6 +3,9 @@
 // applied before any ticket lookup. First failing check wins.
 #include <cstddef>
 #include <cstdint>
+#include <optional>
+
+#include "netproto/codec_set.hpp"
 
 namespace netproto {
 
@@ -25,6 +28,11 @@ enum class ConnectError : std::uint8_t {
   kInvalidChar,
   kInvalidSex,
 };
+
+/// The decode-from-wire path: reads account_id, char_id, login_id1, client_tick and sex out of a decoded
+/// connect packet (CZ_ENTER of the catalog; the offsets are per client version in the layout, nothing is
+/// hard-coded here). nullopt when the packet is not a connect packet or a field is missing / not an integer.
+[[nodiscard]] std::optional<ConnectPacket> connect_packet_from(const DecodedPacket& p);
 
 [[nodiscard]] ConnectError validate_connect(std::size_t packet_len, std::size_t expected_len,
                                             const ConnectPacket& p, bool session_already_authed);

@@ -124,8 +124,4 @@ std::vector<ResolvedPacket> PacketCatalog::resolve(const ClientVersion& v) const
   return out;
 }
 
-PacketCatalog load_catalog_yaml(const std::string&) {
-  not_implemented("load_catalog_yaml (CAP-E02)");
-}
-
 }  // namespace netproto

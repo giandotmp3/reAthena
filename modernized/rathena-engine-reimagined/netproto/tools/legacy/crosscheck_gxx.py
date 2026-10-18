@@ -104,6 +104,8 @@ def probe_inc(spec) -> str:
             struct_probe(e["struct"], e["fields"], e.get("repeat"))
             lines.append(f'std::printf("H {e["name"]} %d\\n", (int)HEADER_{e["name"]});')
     for sname, s in spec["structs"].items():
+        if spec["_model"].structs[sname].synthetic:
+            continue   # an anonymous member struct has no C++ name to take sizeof of
         struct_probe(sname, s["fields"])
     return "\n".join(lines) + "\n"
 

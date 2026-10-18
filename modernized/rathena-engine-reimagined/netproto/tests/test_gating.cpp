@@ -37,7 +37,7 @@ TEST("BR-MAP-059", at_most_three_packets_per_socket_per_cycle) {
   CHECK(b.try_consume());
 }
 
-PENDING_TEST("BR-MAP-059", obfuscated_opcode_is_deobfuscated_before_table_lookup_and_gating) {
+TEST("BR-MAP-059", obfuscated_opcode_is_deobfuscated_before_table_lookup_and_gating) {
   // Stateful: the 2nd frame decodes with the key advanced by the 1st.
   const ObfuscationKeys keys{{0x11111111u, 0x22222222u, 0x33333333u}};  // FAKE
   OpcodeObfuscator client(keys), server(keys);

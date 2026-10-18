@@ -61,7 +61,7 @@ TEST("CAP-E02", overlapping_layouts_of_one_name_are_a_spec_error) {
   CHECK(threw);
 }
 
-PENDING_TEST("CAP-E02", yaml_spec_loads_and_matches_the_hand_built_catalog) {
+TEST("CAP-E02", yaml_spec_loads_and_matches_the_hand_built_catalog) {
   const auto c = load_catalog_yaml(std::string(NETPROTO_SOURCE_DIR) + "/proto/client_packets.yaml");
   CHECK(c.resolve(v2021()).size() >= 5);
 }

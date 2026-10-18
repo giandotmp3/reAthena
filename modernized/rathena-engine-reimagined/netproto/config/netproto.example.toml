@@ -17,7 +17,14 @@ autoreset_ms = 600000
 
 [codecs]
 proto_dir = "proto"
+# The full catalog (generated tables are compiled in; the same file can be loaded with load_catalog_yaml).
+catalog = "proto/packets_re_20211103.yaml"
 # Client versions the server accepts. re/20211103 is what a stock legacy build selects for the
 # default PACKETVER (src/config/packets.hpp defines PACKETVER_RE for 20200902..20211118);
 # main/20211103 is a hypothetical target kept from the first scaffold (see README, version model).
 supported = ["re/20211103", "main/20211103"]
+
+[obfuscation]
+# Keys are deployment data: only the NAME of the environment variable appears here and in proto/*.yaml
+# (obfuscation.keys_env). Its value is three words, e.g. 0xAAAAAAAA,0xBBBBBBBB,0xCCCCCCCC. Unset = no keys.
+re_20211103 = "${NETPROTO_KEYS_RE_20211103}"

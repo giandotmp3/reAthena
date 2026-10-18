@@ -11,6 +11,8 @@
 #include "netproto/gating.hpp"
 #include "netproto/obfuscation.hpp"
 #include "netproto/pos_codec.hpp"
+#include <fstream>
+#include <sstream>
 
 namespace fx {
 using namespace netproto;
@@ -40,7 +42,10 @@ inline PacketCatalog catalog() {
   PacketCatalog c;
   c.add(packet("CA_LOGIN", Direction::ClientToServer, Phase::PreSession, 0x0064, fixed(55)));
   c.add(packet("CZ_ENTER", Direction::ClientToServer, Phase::PreSession, 0x0436, fixed(19),
-               "MAIN>=20180000"));
+               "MAIN>=20180000",
+               {field("account_id", 2, FieldType::U32), field("char_id", 6, FieldType::U32),
+                field("login_id1", 10, FieldType::U32), field("client_tick", 14, FieldType::U32),
+                field("sex", 18, FieldType::U8)}));
   c.add(packet("CZ_NOTIFY_ACTORINIT", Direction::ClientToServer, Phase::PreMapLoad, 0x007d, fixed(2)));
   c.add(packet("CZ_REQUEST_MOVE", Direction::ClientToServer, Phase::InWorld, 0x0085, fixed(5), "MAIN>=20000000",
                {field("dest", 2, FieldType::Pos3)}));

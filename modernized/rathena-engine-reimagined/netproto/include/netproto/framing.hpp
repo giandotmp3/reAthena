@@ -8,6 +8,7 @@
 #include <unordered_map>
 
 #include "netproto/common.hpp"
+#include "netproto/obfuscation.hpp"
 #include "netproto/spec.hpp"
 
 namespace netproto {
@@ -46,6 +47,12 @@ enum class LinkAction : std::uint8_t { kContinue, kWait, kDisconnect };
 /// Inspect the front of `buf` without consuming it. Detects an invalid length
 /// as soon as the 4-byte header is present, never waiting for the payload.
 [[nodiscard]] FrameResult peek_frame(ByteView buf, const FrameTable& table,
+                                     const FrameLimits& limits = {});
+
+/// Same, for a session with opcode obfuscation: the wire opcode is de-obfuscated (without advancing
+/// `obf`) before the table lookup; `result.opcode` is the PLAIN opcode. Call obf.commit() once the
+/// frame was accepted and consumed (BR-MAP-059).
+[[nodiscard]] FrameResult peek_frame(ByteView buf, const FrameTable& table, const OpcodeObfuscator& obf,
                                      const FrameLimits& limits = {});
 
 [[nodiscard]] LinkAction action_for(FrameStatus s);

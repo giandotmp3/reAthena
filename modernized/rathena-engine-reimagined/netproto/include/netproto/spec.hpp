@@ -9,6 +9,7 @@
 #include <compare>
 #include <cstdint>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -40,7 +41,10 @@ struct VersionPredicate {
   static std::optional<VersionPredicate> parse(const std::string& expr);
 };
 
-enum class Direction : std::uint8_t { ClientToServer, ServerToClient, Inter };
+/// `Any`: the legacy packet DB lists the opcode and its length but neither a handler nor a typed struct, so
+/// the direction is not known (length-only frames). They are accepted by receivers of server-to-client
+/// streams (to skip them) and never by the client-to-server frame table (unknown opcode = disconnect).
+enum class Direction : std::uint8_t { ClientToServer, ServerToClient, Inter, Any };
 
 /// Session phase that must be reached before a packet is accepted (gating).
 enum class Phase : std::uint8_t { PreSession, PreMapLoad, InWorld };
@@ -51,16 +55,34 @@ enum class FieldType : std::uint8_t {
   Raw,          // opaque bytes, `width` bytes
   Pos3,         // packed 3-byte x/y/dir
   Pos6,         // packed 6-byte src/dst
+  U64,          // carried in an int64 (bit pattern)
+  F32,          // IEEE-754 binary32, carried as a double
 };
 
 struct FieldSpec {
   std::string name;
-  std::uint16_t offset = 0;
+  std::uint16_t offset = 0;     // from the start of the packet, or of the row when `row`
   FieldType type = FieldType::U8;
-  std::uint16_t width = 0;      // bytes for FixedString/Raw; implied otherwise
-  std::uint16_t array_len = 1;  // fixed repeat count
-  VersionPredicate present_when;  // empty = always present
+  /// Bytes for FixedString/Raw; implied otherwise. FixedString/Raw with width 0 is a TAIL: it runs from
+  /// `offset` to the end of the (variable-length) packet. A string tail is NUL-terminated on the wire.
+  std::uint16_t width = 0;
+  std::uint16_t array_len = 1;  // fixed repeat count (integer types)
+  VersionPredicate present_when;  // empty = always present; otherwise the field exists on matching clients only
+  /// Field of the repeat group (LengthRule::repeat): `offset` is relative to the start of the row. The
+  /// legacy gateway convention (name starts with "[].") is accepted as well, see is_row_field().
+  bool row = false;
+  /// Bit-field inside the integer storage of `type` (little-endian, first declared = least significant,
+  /// as the compiler lays out the legacy structs). bit_width 0 = the whole integer.
+  std::uint8_t bit_shift = 0;
+  std::uint8_t bit_width = 0;
 };
+
+/// True for repeat-group fields: `row`, or the gateway's "[]." name prefix.
+[[nodiscard]] inline bool is_row_field(const FieldSpec& f) { return f.row || f.name.rfind("[].", 0) == 0; }
+/// Field name as it appears in DecodedPacket (the "[]." prefix is not part of the key).
+[[nodiscard]] inline std::string field_key(const FieldSpec& f) {
+  return f.name.rfind("[].", 0) == 0 ? f.name.substr(3) : f.name;
+}
 
 enum class LengthKind : std::uint8_t { Fixed, Variable };
 
@@ -88,6 +110,10 @@ struct PacketVersion {
   /// carries the legacy pos[] list (offsets the handler reads), whose types are unknown.
   bool fields_known = true;
   std::vector<std::uint16_t> handler_offsets;
+  /// Provenance of the layout: "typed-struct" (packets_struct.hpp / packets.hpp), "common-struct"
+  /// (src/common/packets.hpp), "handler-derived" (straight RFIFO reads of a clif_parse_* body),
+  /// "length-only" (packet DB lists only the length), "" (hand-built / unknown).
+  std::string source;
 };
 
 struct PacketDef {
@@ -123,8 +149,20 @@ struct SpecError : std::runtime_error {
   using std::runtime_error::runtime_error;
 };
 
-/// Reads proto/*.yaml. Runtime servers use generated tables instead; this is
-/// for tools and the sim client.
+/// Reads proto/*.yaml with the built-in YAML-subset reader (netproto/yaml.hpp). Runtime servers can use
+/// the tables generated from the same files instead; tests prove the two are identical. Throws SpecError
+/// ("yaml line N: ...") on malformed input, unknown keys, bad types or duplicate packet names.
 PacketCatalog load_catalog_yaml(const std::string& path);
+PacketCatalog load_catalog_yaml_text(const std::string& text);
+
+/// `client_versions:` of a proto file. `keys_env` is the NAME of the environment variable that carries
+/// the packet-obfuscation keys of that client (never a value).
+struct ClientVersionInfo {
+  ClientVersion version;
+  bool hypothetical = false;
+  std::string keys_env;
+};
+std::vector<ClientVersionInfo> load_client_versions_yaml(const std::string& path);
+std::vector<ClientVersionInfo> load_client_versions_yaml_text(const std::string& text);
 
 }  // namespace netproto

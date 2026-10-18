@@ -128,6 +128,7 @@ class Member:
         self.struct = None    # struct name for struct members
         self.bits = None      # [(name, width)] for bitfield groups
         self.flex = False     # flexible array member (T name[])
+        self.inner = None     # char name[outer][inner]: width of each string
         self.elem = None      # element size
         self.ctype = None     # legacy C type name for scalars
 
@@ -139,6 +140,7 @@ class Struct:
         self.size: int | None = 0
         self.flex: Member | None = None
         self.problems: list[str] = []
+        self.synthetic = False   # an anonymous struct member given a generated name (no C++ name to probe)
 
 
 class Model:
@@ -338,6 +340,7 @@ class Model:
         if stmt[i][:2] == ("id", "union"):
             raise CppError("union member")
         anon = None
+        anon_struct = None
         if stmt[i][:2] == ("id", "struct") and i + 1 < len(stmt) and stmt[i + 1][:2] == ("op", "{"):
             depth, j = 0, i + 1
             while True:
@@ -346,9 +349,22 @@ class Model:
                     depth -= 1
                     if depth == 0: break
                 j += 1
-            anon = self.parse_bitgroup(stmt[i + 2:j])
+            body = stmt[i + 2:j]
+            try:
+                anon = self.parse_bitgroup(body)
+            except CppError:
+                # not a bit-field group: an anonymous struct of ordinary members (possibly an array of them)
+                if j + 1 >= len(stmt) or stmt[j + 1][0] != "id":
+                    raise
+                synth = f"{st.name}_{stmt[j + 1][1]}"
+                sub = self.parse_struct(synth, body, line)
+                sub.synthetic = True
+                if sub.size is None:
+                    raise CppError("anonymous struct: " + "; ".join(sub.problems)[:120])
+                self.structs[synth] = sub
+                anon_struct = synth
             i = j + 1
-            type_name, is_struct = None, False
+            type_name, is_struct = (anon_struct, True) if anon_struct else (None, False)
         else:
             is_struct = stmt[i][:2] == ("id", "struct")
             if is_struct:
@@ -378,7 +394,11 @@ class Model:
                 counts.append(0)
             else:
                 counts.append(self.eval(self.expand(d)))
-        if len(counts) > 1:
+        inner = None
+        if len(counts) == 2 and type_name == "char" and anon is None and counts[0] > 0 and counts[1] > 0:
+            inner = counts[1]        # char names[10][NAME_LENGTH]: an array of fixed strings
+            counts = [counts[0]]
+        elif len(counts) > 1:
             raise CppError(f"multi-dimensional array {name}")
         count = counts[0] if counts else None
         if anon is not None:
@@ -394,13 +414,17 @@ class Model:
             if type_name not in BASE_TYPES:
                 raise CppError(f"unknown type {type_name}")
             elem, m_type = BASE_TYPES[type_name]
+            if inner:
+                elem = elem * inner
             m = Member(name, offset, elem * (count if count is not None else 1), line)
             m.type = m_type
             m.ctype = type_name
+            m.inner = inner
         m.count, m.flex, m.elem = count, flex, elem
         return m
 
     def parse_bitgroup(self, toks):
+        kind = None
         bits, total, cur = [], 0, []
         stmts = []
         for t in toks:
@@ -412,8 +436,12 @@ class Model:
             s = self.expand(s)
             if not s:
                 continue
-            if len(s) != 4 or s[0][1] not in ("uint8",) or s[2][:2] != ("op", ":") or s[3][0] != "num":
-                raise CppError("unsupported anonymous struct (only uint8 bit groups)")
+            if len(s) != 4 or s[0][1] not in ("uint8", "uint16", "uint32") or s[2][:2] != ("op", ":") or s[3][0] != "num":
+                raise CppError("unsupported anonymous struct (only uint8/uint16/uint32 bit groups)")
+            if kind is None:
+                kind = s[0][1]
+            elif kind != s[0][1]:
+                raise CppError("bit group mixes storage types")
             bits.append((s[1][1], s[3][1]))
             total += s[3][1]
         return bits, (total + 7) // 8
@@ -709,7 +737,9 @@ def field_list(st: Struct, model: Model, structs_used: dict):
             t = _scalar_type(m)
             f["type"] = t
             if t == "string":
-                f["width"] = m.count
+                f["width"] = m.inner if m.inner else m.count
+                if m.inner:
+                    f["array_len"] = m.count
             elif m.count is not None:
                 f["array_len"] = m.count
         out.append(f)

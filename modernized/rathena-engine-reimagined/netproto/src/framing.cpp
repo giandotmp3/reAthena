@@ -4,10 +4,10 @@
 
 namespace netproto {
 
-FrameResult peek_frame(ByteView buf, const FrameTable& table, const FrameLimits& limits) {
+namespace {
+FrameResult peek_opcode(ByteView buf, std::uint16_t opcode, const FrameTable& table, const FrameLimits& limits) {
   FrameResult r;
-  if (buf.size() < 2) return r;
-  r.opcode = static_cast<std::uint16_t>(buf[0] | (buf[1] << 8));
+  r.opcode = opcode;
   const auto it = table.find(r.opcode);
   if (it == table.end()) {
     r.status = FrameStatus::kUnknownOpcode;
@@ -29,6 +29,18 @@ FrameResult peek_frame(ByteView buf, const FrameTable& table, const FrameLimits&
   }
   r.status = buf.size() >= r.length ? FrameStatus::kComplete : FrameStatus::kNeedMore;
   return r;
+}
+}  // namespace
+
+FrameResult peek_frame(ByteView buf, const FrameTable& table, const FrameLimits& limits) {
+  if (buf.size() < 2) return FrameResult{};
+  return peek_opcode(buf, static_cast<std::uint16_t>(buf[0] | (buf[1] << 8)), table, limits);
+}
+
+FrameResult peek_frame(ByteView buf, const FrameTable& table, const OpcodeObfuscator& obf, const FrameLimits& limits) {
+  if (buf.size() < 2) return FrameResult{};
+  // legacy clif_parse: the opcode is decoded before the table lookup; the key only advances for a valid frame
+  return peek_opcode(buf, obf.peek_decode(static_cast<std::uint16_t>(buf[0] | (buf[1] << 8))), table, limits);
 }
 
 LinkAction action_for(FrameStatus s) {

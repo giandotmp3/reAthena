@@ -29,9 +29,9 @@ counts:
   live_opcodes: 948
   parseable: 400
   variable_length: 283
-  with_struct_fields: 161
+  with_struct_fields: 162
   handler_parsed_fields_unknown: 786
-  fields_unresolved: 1
+  fields_unresolved: 0
   struct_only_packets: 318
   opcodes_redefined_live: 117
   opcodes_defined_in_more_than_one_block_any_target: 272
@@ -1374,8 +1374,10 @@ packets:
     pos: []
     struct: "PACKET_ZC_POSITION_ID_NAME_INFO"
     src: "map/clif_packetdb.hpp:157"
-    fields: unresolved   # struct could not be laid out
-    fields_problem: "line 4875: unsupported anonymous struct (only uint8 bit groups)"
+    fields:
+      - { name: "PacketType", offset: 0, type: "i16" }
+      - { name: "PacketLength", offset: 2, type: "i16" }
+      - { name: "posInfo", offset: 4, struct: "PACKET_ZC_POSITION_ID_NAME_INFO_posInfo", width: 28, array_len: 20 }
   - opcode: 0x0168
     name: "CZ_REQ_JOIN_GUILD"
     len: 14
@@ -8178,11 +8180,17 @@ struct_only_packets:   # typed structs with a HEADER id that packet_db does not 
   - opcode: 0x0219
     name: "ZC_BLACKSMITH_RANK"
     struct: "PACKET_ZC_BLACKSMITH_RANK"
-    fields: unresolved
+    size: 282
+    fields:
+      - { name: "packetType", offset: 0, type: "i16" }
+      - { name: "list", offset: 2, struct: "RANKLIST", width: 280 }
   - opcode: 0x021a
     name: "ZC_ALCHEMIST_RANK"
     struct: "PACKET_ZC_ALCHEMIST_RANK"
-    fields: unresolved
+    size: 282
+    fields:
+      - { name: "packetType", offset: 0, type: "i16" }
+      - { name: "list", offset: 2, struct: "RANKLIST", width: 280 }
   - opcode: 0x021b
     name: "ZC_BLACKSMITH_POINT"
     struct: "PACKET_ZC_BLACKSMITH_POINT"
@@ -8224,7 +8232,10 @@ struct_only_packets:   # typed structs with a HEADER id that packet_db does not 
   - opcode: 0x0226
     name: "ZC_TAEKWON_RANK"
     struct: "PACKET_ZC_TAEKWON_RANK"
-    fields: unresolved
+    size: 282
+    fields:
+      - { name: "packetType", offset: 0, type: "i16" }
+      - { name: "list", offset: 2, struct: "RANKLIST", width: 280 }
   - opcode: 0x0230
     name: "ZC_CHANGESTATE_MER"
     struct: "PACKET_ZC_CHANGESTATE_MER"
@@ -8260,7 +8271,10 @@ struct_only_packets:   # typed structs with a HEADER id that packet_db does not 
   - opcode: 0x0238
     name: "ZC_KILLER_RANK"
     struct: "PACKET_ZC_KILLER_RANK"
-    fields: unresolved
+    size: 282
+    fields:
+      - { name: "packetType", offset: 0, type: "i16" }
+      - { name: "list", offset: 2, struct: "RANKLIST", width: 280 }
   - opcode: 0x0239
     name: "ZC_HOSKILLINFO_UPDATE"
     struct: "PACKET_ZC_HOSKILLINFO_UPDATE"
@@ -8613,7 +8627,12 @@ struct_only_packets:   # typed structs with a HEADER id that packet_db does not 
   - opcode: 0x097d
     name: "ZC_ACK_RANKING"
     struct: "PACKET_ZC_ACK_RANKING"
-    fields: unresolved
+    size: 288
+    fields:
+      - { name: "packetType", offset: 0, type: "i16" }
+      - { name: "type", offset: 2, type: "u16" }
+      - { name: "list", offset: 4, struct: "RANKLIST", width: 280 }
+      - { name: "mypoints", offset: 284, type: "u32" }
   - opcode: 0x097e
     name: "ZC_UPDATE_RANKING_POINT"
     struct: "PACKET_ZC_UPDATE_RANKING_POINT"
@@ -10221,6 +10240,11 @@ structs:   # layouts of structs referenced by packet fields (little-endian, pack
       - { name: "exp", offset: 1, type: "i32" }
       - { name: "death", offset: 5, type: "i32" }
       - { name: "drop", offset: 9, type: "i32" }
+  PACKET_ZC_POSITION_ID_NAME_INFO_posInfo:
+    size: 28
+    fields:
+      - { name: "positionID", offset: 0, type: "i32" }
+      - { name: "posName", offset: 4, type: "string", width: 24 }
   PACKET_ZC_POSITION_INFO_sub:
     size: 16
     fields:
@@ -10261,6 +10285,11 @@ structs:   # layouts of structs referenced by packet fields (little-endian, pack
     size: 24
     fields:
       - { name: "name", offset: 0, type: "string", width: 24 }
+  RANKLIST:
+    size: 280
+    fields:
+      - { name: "names", offset: 0, type: "string", width: 24, array_len: 10 }
+      - { name: "points", offset: 240, type: "u32", array_len: 10 }
   RELATED_GUILD_INFO:
     size: 32
     fields:
