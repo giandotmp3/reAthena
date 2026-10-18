@@ -1,0 +1,14 @@
+command set:	base only
+function registry (re set): 149 lowered, 0 failed, 0.261s
+FILE npc/re/quests/quests_16_1.txt (18841 lines)
+  script bodies=254 parseFail=0 lowerFail=0  
+  NPCs driven=254 entry-points=363 (main + On* labels)  labels=116  goto-ops=0 call(sub|func)-ops=39  hoisted-calls=4 nested-calls-left=0
+  DFS runs=1596 (entry x profile DFS trees fully exhausted: 726/726) distinct end states=754 maxMenuDepth=9
+  max callsub/callfunc frame depth=2  frames pushed=22  nested(host-recursive) calls=0  yields=842
+  op coverage (union of all DFS runs, main+On* entries): 2247/16240 = 13.8%
+  branch-flip DFS (every JZ/JNZ/switch is a choice point, <=3 flips/run): runs=19190 distinct end states=2198 op coverage natural+flip=15402/16240 = 94.8%  max frame depth=2
+  time: parse+lower 0.192s  drive 4.201s
+  commands executed (soft passes, recorded stub calls): close2=49 close=359 getitem=10 mes=2150 monster=12 next=508 select=223 setquest=5 sleep2=58 sleep=32 warp=4
+  run-end errors (strict mode, count of DFS runs ending that way): UNSUPPORTED:achievementinfo=14 UNSUPPORTED:basicskillcheck=2 UNSUPPORTED:eaclass=14 UNSUPPORTED:getgmlevel=6 UNSUPPORTED:getmapxy=2 UNSUPPORTED:mesitemlink=2 UNSUPPORTED:npcskill=1 UNSUPPORTED:readbook=2 UNSUPPORTED:replacestr=4 UNSUPPORTED:sscanf=6
+  NPCs disabled by >=1 UNSUPPORTED command (strict): 25/254
+  unsupported commands behind the first (soft pass; call counts): achievementinfo=14 achievementupdate=14 basicskillcheck=2 eaclass=16 getgmlevel=6 getmapxy=10 logmes=6 mesitemlink=2 npcskill=1 openstorage=1 readbook=2 replacestr=4 sscanf=6 unitwarp=2

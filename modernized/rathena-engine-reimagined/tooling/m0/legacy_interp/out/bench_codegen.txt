@@ -1,0 +1,7 @@
+ns per executed flat op (best of 5):
+  for-loop, local arith   (4 ops/iter: JZ, EXPR body, EXPR i++, JMP)       counted:   80.6 ns/op   no-counter:   86.0 ns/op   counter overhead: -6.3%
+  while-loop, 3 stmts     (JZ + 3 EXPR + JMP = 5 ops/iter)                 counted:  116.2 ns/op   no-counter:  108.4 ns/op   counter overhead: +7.1%
+  global-var writes       ($x scope, 4 ops/iter)                           counted:   81.7 ns/op   no-counter:   71.4 ns/op   counter overhead: +14.4%
+  callsub/return          (per iter: JZ, CALLSUB, RETURN, EXPR i++, JMP = 5 ops) counted:  164.0 ns/op   no-counter:  147.5 ns/op   counter overhead: +11.2%
+  switch dispatch         (JZ, SWITCH, EXPR, JMP(break), EXPR i++, JMP = 6 ops) counted:   65.5 ns/op   no-counter:   48.3 ns/op   counter overhead: +35.5%
+  reference: native Luau for-loop with the same body: 2.67 ns/iteration (s=7000000)

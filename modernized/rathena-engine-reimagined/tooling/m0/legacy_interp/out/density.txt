@@ -1,0 +1,26 @@
+corpus totals (both sets, union): goto=107 callsub=2196 callfunc=1843 menu=5 labels=11850 freeloop=14 getd=216 setd=138 donpcevent=4964
+top 12 files by (goto + callsub + labels):
+ 1 npc/quests/quests_juperos.txt                        lines=  5056 goto=  0 callsub=   0 callfunc=   2 labels= 403 menu=   0 freeloop=0  score=403
+ 2 npc/re/instances/TempleOfDemonGod.txt                lines=  2296 goto=  0 callsub=  22 callfunc=   1 labels= 208 menu=   0 freeloop=0  score=230
+ 3 npc/re/instances/FacewormsNest.txt                   lines=  2847 goto=  0 callsub=  15 callfunc=  16 labels= 201 menu=   0 freeloop=0  score=216
+ 4 npc/re/instances/SarahAndFenrir.txt                  lines=  2348 goto=  0 callsub=  21 callfunc=   4 labels= 189 menu=   0 freeloop=0  score=210
+ 5 npc/re/instances/OldGlastHeim.txt                    lines=  2250 goto=  0 callsub=   0 callfunc=   0 labels= 206 menu=   0 freeloop=0  score=206
+ 6 npc/re/guild/invest_main.txt                         lines=  1672 goto=  0 callsub= 165 callfunc=  17 labels=  40 menu=   0 freeloop=0  score=205
+ 7 npc/other/arena/arena_aco.txt                        lines=  1789 goto=  0 callsub=   0 callfunc=   2 labels= 205 menu=   0 freeloop=0  score=205
+ 8 npc/quests/quests_13_2.txt                           lines=  7400 goto=  0 callsub=   0 callfunc=  32 labels= 203 menu=   0 freeloop=0  score=203
+ 9 npc/re/instances/DevilTower.txt                      lines=  2213 goto=  0 callsub=   5 callfunc=   0 labels= 188 menu=   0 freeloop=0  score=193
+10 npc/quests/quests_gonryun.txt                        lines=  3818 goto=  0 callsub=   0 callfunc=   0 labels= 188 menu=   0 freeloop=0  score=188
+11 npc/re/jobs/3-1/ranger.txt                           lines=  1813 goto=  0 callsub=   2 callfunc=   2 labels= 184 menu=   0 freeloop=0  score=186
+12 npc/re/jobs/3-1/guillotine_cross.txt                 lines=  3959 goto=  2 callsub=   2 callfunc=  23 labels= 173 menu=   0 freeloop=0  score=177
+requested files (rank among	987	):
+rank   6 npc/re/guild/invest_main.txt                  lines=  1672 goto=0 callsub=165 callfunc=17 labels=40 menu=0 freeloop=0
+rank  13 npc/re/merchants/enchan_mal.txt               lines=   686 goto=0 callsub=175 callfunc=6 labels=1 menu=0 freeloop=0
+rank  26 npc/re/quests/quests_16_1.txt                 lines= 18841 goto=0 callsub=16 callfunc=8 labels=116 menu=0 freeloop=0
+rank 107 npc/guild2/agit_main_se.txt                   lines=  1847 goto=0 callsub=5 callfunc=1 labels=41 menu=0 freeloop=4
+rank 746 npc/cities/prontera.txt                       lines=   730 goto=0 callsub=0 callfunc=0 labels=0 menu=0 freeloop=0
+top files by goto count:
+  npc/quests/cooking_quest.txt                         goto=54 lines=2391
+  npc/other/marriage.txt                               goto=18 lines=1000
+  npc/quests/quests_lighthalzen.txt                    goto=7 lines=12048
+  npc/quests/thana_quest.txt                           goto=4 lines=2316
+  npc/quests/quests_rachel.txt                         goto=4 lines=7508

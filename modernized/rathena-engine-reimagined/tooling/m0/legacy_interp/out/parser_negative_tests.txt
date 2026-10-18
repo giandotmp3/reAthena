@@ -1,0 +1,18 @@
+FAIL	mes;	too_few_args mes/0 spec=v*
+FAIL	foo "x";	unknown_command foo
+FAIL	close "x";	too_many_args close/1 spec=
+FAIL	mes "a"	expected_; <eof>
+FAIL	if (1) { mes "a"; 	unexpected_eof_in_block nil
+FAIL	x = ;	unexpected_token ;
+FAIL	case 1: mes "a";	unexpected_case nil
+OK  	break;	
+FAIL	mes "a;	lex_unterminated_string nil
+FAIL	switch (1) { case x y: }	expected_: y
+OK  	mes "ok"; close;	
+OK  	if (a) && (b) mes "x";	
+OK  	for (.@i = 0; .@i < 3; .@i++) { mes "x"; }	
+OK  	.@a = 1 + 2 * 3 << 1;	
+OK  	menu "a",-,"b",L_x; L_x:	
+OK  	while (1) { break; } do { continue; } while (0);	
+OK  	set .@a, getarg(0, 1) ? 1 : 2;	
+OK  	switch (select("a:b")) { case 1: mes "a"; break; default: mes "d"; }	

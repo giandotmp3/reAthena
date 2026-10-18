@@ -1,0 +1,11 @@
+SET pre, command set: base+ext; function registry: 96 lowered
+files=527 script bodies=4386 (parse failures 0, lower failures 0) NPC entry-points driven=9937
+scripts driven=4386  natural-DFS runs (strict+soft)=45291  branch-flip runs=60878  total wall time=7.0s
+op coverage natural=25.4% natural+flip=62.4% (309234 ops)  max frame depth=5 (npc/kafras/cool_event_corp.txt)  max menu-choice depth=25  host-recursive nested calls=0  frames pushed=7767
+INTERNAL (interpreter bug) errors:	0
+natural-DFS run-end typed errors (non-UNSUPPORTED) (2 distinct): DEPTH_CAP=502 GETARG_OUT_OF_RANGE=2
+branch-flip run-end typed errors (non-UNSUPPORTED; forced branches make some inconsistent) (4 distinct): DEPTH_CAP=1386 GETARG_OUT_OF_RANGE=453 BUDGET_EXCEEDED=32 UNDEFINED_FUNCTION=2
+scripts with >=1 UNSUPPORTED command hit in the strict pass: 378/4386
+NPCs reaching each unsupported command (dynamic, soft pass) (42 distinct): flagemblem=72 getbattleflag=64 killmonsterall=37 areawarp=32 vip_status=30 warpwaitingpc=22 enablewaitingroomevent=22 disablewaitingroomevent=21 bg_monster=20 makeitem=20 getpartnerid=18 soundeffectall=17 getbrokenid=15 waitingroom2bg=14 bg_warp=13 bg_leave=12 areapercentheal=10 bg_get_data=7 getwaitingroomstate=7 is_guild_leader=6 nude=5 bg_updatescore=4 instance_warpall=3 getlook=3 consumeitem=2 bg_team_setxy=2 insertchar=2 instance_check_party=2 mercenary_get_faith=1 areaannounce=1
+slow files (>2s): 
+sample GETARG_OUT_OF_RANGE: npc/guild2/agit_main_se.txt:1447 [gard#template]

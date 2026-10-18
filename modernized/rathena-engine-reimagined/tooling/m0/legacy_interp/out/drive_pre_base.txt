@@ -1,0 +1,10 @@
+SET pre, command set: base; function registry: 96 lowered
+files=527 script bodies=4386 (parse failures 0, lower failures 0) NPC entry-points driven=9937
+scripts driven=4386  natural-DFS runs (strict+soft)=44853  branch-flip runs=60890  total wall time=6.3s
+op coverage natural=25.4% natural+flip=62.4% (309234 ops)  max frame depth=5 (npc/kafras/cool_event_corp.txt)  max menu-choice depth=25  host-recursive nested calls=0  frames pushed=2367
+INTERNAL (interpreter bug) errors:	0
+natural-DFS run-end typed errors (non-UNSUPPORTED) (1 distinct): DEPTH_CAP=454
+branch-flip run-end typed errors (non-UNSUPPORTED; forced branches make some inconsistent) (4 distinct): DEPTH_CAP=1338 GETARG_OUT_OF_RANGE=449 BUDGET_EXCEEDED=32 UNDEFINED_FUNCTION=2
+scripts with >=1 UNSUPPORTED command hit in the strict pass: 518/4386
+NPCs reaching each unsupported command (dynamic, soft pass) (83 distinct): flagemblem=72 getbattleflag=64 getmapxy=55 getgmlevel=47 logmes=47 implode=43 killmonsterall=37 areawarp=32 vip_status=30 getmapusers=23 enablewaitingroomevent=22 warpwaitingpc=22 disablewaitingroomevent=21 makeitem=20 bg_monster=20 getpartnerid=18 soundeffectall=17 getbrokenid=15 waitingroom2bg=14 openstorage=13 bg_warp=13 bg_leave=12 charat=12 basicskillcheck=12 areapercentheal=10 setunitdata=9 setwall=8 getequipisequiped=8 getwaitingroomstate=7 bg_get_data=7
+slow files (>2s): 

@@ -1,0 +1,16 @@
+command set:	base + ext
+function registry (re set): 149 lowered, 0 failed, 0.243s
+FILE npc/re/guild/invest_main.txt (1672 lines)
+  script bodies=12 parseFail=0 lowerFail=0  
+  NPCs driven=12 entry-points=48 (main + On* labels)  labels=40  goto-ops=0 call(sub|func)-ops=180  hoisted-calls=13 nested-calls-left=0
+  DFS runs=1018 (entry x profile DFS trees fully exhausted: 94/96) distinct end states=128 maxMenuDepth=25
+  max callsub/callfunc frame depth=2  frames pushed=111  nested(host-recursive) calls=0  yields=19646
+  op coverage (union of all DFS runs, main+On* entries): 684/1633 = 41.9%
+  branch-flip DFS (every JZ/JNZ/switch is a choice point, <=3 flips/run): runs=18584 distinct end states=268 op coverage natural+flip=1276/1633 = 78.1%  max frame depth=3
+  time: parse+lower 0.008s  drive 3.261s
+  commands executed (soft passes, recorded stub calls): close2=2 close=177 donpcevent=18 getitem=37 mes=10545 next=4911 select=4733
+  run-end errors (strict mode, count of DFS runs ending that way): DEPTH_CAP=352 GETARG_OUT_OF_RANGE=2
+  first GETARG_OUT_OF_RANGE at npc/re/guild/invest_main.txt:609 [Revoting Manager#Invest2]
+  first DEPTH_CAP at npc/re/guild/invest_main.txt:nil [nil]
+  NPCs disabled by >=1 UNSUPPORTED command (strict): 0/12
+  unsupported commands behind the first (soft pass; call counts): (none)

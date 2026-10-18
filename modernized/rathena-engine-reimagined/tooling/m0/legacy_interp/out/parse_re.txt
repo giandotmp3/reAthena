@@ -1,0 +1,17 @@
+SET re lower=false
+files=835 (with parse failures: 0) split-errors=0 lines=721587 bodyBytes=21133133
+  decl	duplicate	10498
+  decl	function	149
+  decl	mapflag	5805
+  decl	monster	3889
+  decl	script	9219
+  decl	shop	347
+  decl	shop:marketshop	45
+  decl	shop:shop	302
+  decl	warp	4105
+script bodies parsed: 9219 scripts + 149 function scripts = 9368; failures=0; ok=100.000%
+tokens=2463365  split_time=0.492s  parse_time=2.077s  lower_time=0.000s
+retained AST memory delta = 251.5 MB (107.1 bytes/token)
+FAILURE CAUSES:
+rA-quirk statement terminators accepted (',' ')' ':' in place of ';'): )=1 ,=1 :=1
+lenient paren-less zero-arg calls in expression position (real parser would reject): total=0 

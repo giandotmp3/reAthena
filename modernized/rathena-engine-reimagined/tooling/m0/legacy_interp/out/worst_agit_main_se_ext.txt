@@ -1,0 +1,15 @@
+command set:	base + ext
+function registry (re set): 149 lowered, 0 failed, 0.264s
+FILE npc/guild2/agit_main_se.txt (1847 lines)
+  script bodies=11 parseFail=0 lowerFail=0  
+  NPCs driven=11 entry-points=52 (main + On* labels)  labels=41  goto-ops=0 call(sub|func)-ops=6  hoisted-calls=1 nested-calls-left=0
+  DFS runs=212 (entry x profile DFS trees fully exhausted: 104/104) distinct end states=106 maxMenuDepth=1
+  max callsub/callfunc frame depth=2  frames pushed=16  nested(host-recursive) calls=0  yields=12
+  op coverage (union of all DFS runs, main+On* entries): 246/1522 = 16.2%
+  branch-flip DFS (every JZ/JNZ/switch is a choice point, <=3 flips/run): runs=6331 distinct end states=255 op coverage natural+flip=1315/1522 = 86.4%  max frame depth=2
+  time: parse+lower 0.011s  drive 0.670s
+  commands executed (soft passes, recorded stub calls): close2=2 close=8 donpcevent=44 freeloop=8 mes=48 monster=4 next=4 select=4 sleep=2 warp=2
+  run-end errors (strict mode, count of DFS runs ending that way): GETARG_OUT_OF_RANGE=2
+  first GETARG_OUT_OF_RANGE at npc/guild2/agit_main_se.txt:1447 [gard#template]
+  NPCs disabled by >=1 UNSUPPORTED command (strict): 0/11
+  unsupported commands behind the first (soft pass; call counts): (none)

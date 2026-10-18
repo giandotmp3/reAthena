@@ -1,0 +1,3 @@
+{'re': 835, 'pre': 527} union 987 bom 0
+builtins 671
+consts 40132 params 33 item aegis 35525

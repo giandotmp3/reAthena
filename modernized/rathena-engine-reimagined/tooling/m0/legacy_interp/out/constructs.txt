@@ -1,0 +1,45 @@
+lowered programs=9518 (lower failures=0); programs with >=2 labels=1924
+programs whose `.@` locals are used in >=2 label regions: 246 (401 names) - in a compile-to-Luau-locals design these need liveness analysis across labels; here they are fields of one frame table
+  ...excluding regions that start at callsub targets / On* event labels (intra-frame labels only): 1 programs
+    e.g. npc/quests/quests_brasilis.txt [Lucia#brasilis] .@nqstate2
+    e.g. npc/quests/quests_brasilis.txt [Lucia#brasilis] .@nqstate1
+switch statements=5088, case entries=20186
+labels defined INSIDE a nested block (if/loop/switch/{}) - jumping into the middle of a block: 25
+   by name: ontalk=4 onstartquest=1 l_mes=1 l_mission=2 l_jobchange=1 l_kick=1 l_quest1=1 l_quest2=1 l_askquestions=1 ontouch_=1 ontalk2=1 l_search=1 l_enter=1 onstart=1 ontimer7980000=1 l_quest=1 oninvasionmonsters=1 ondialogue=1 l_whathappen=1 onloddead=1 dfault=1
+   npc/quests/quests_ayothaya.txt:547 (ontouch_ depth 2)
+   npc/quests/quests_brasilis.txt:190 (l_whathappen depth 3)
+   npc/quests/quests_brasilis.txt:1733 (ontalk depth 2)
+   npc/quests/quests_lighthalzen.txt:7669 (l_mission depth 3)
+   npc/quests/quests_lighthalzen.txt:9623 (l_enter depth 6)
+   npc/quests/quests_lighthalzen.txt:9747 (l_search depth 2)
+   npc/quests/quests_rachel.txt:7445 (l_mes depth 2)
+   npc/jobs/2-2/sage.txt:712 (l_askquestions depth 4)
+   npc/re/instances/CorOperation.txt:311 (ontalk depth 2)
+   npc/re/instances/CorOperation.txt:472 (ontalk depth 2)
+   npc/re/merchants/enchan_verus.txt:777 (dfault depth 1)
+   npc/re/quests/eden/eden_tutorial.txt:22 (onstartquest depth 3)
+callsub/callfunc/user-function calls under ?: && || that cannot be hoisted (need host-stack recursion): 111
+   by name: f_getpositionname=6 f_ischarm=1 callfunc=104
+   npc/other/Global_Functions.txt:518 (callfunc)
+   npc/merchants/advanced_refiner.txt:194 (callfunc)
+   npc/merchants/advanced_refiner.txt:194 (callfunc)
+   npc/merchants/refine.txt:813 (callfunc)
+   npc/merchants/refine.txt:814 (callfunc)
+   npc/merchants/refine.txt:935 (callfunc)
+   npc/merchants/refine.txt:936 (callfunc)
+   npc/quests/seals/mjolnir_seal.txt:2045 (callfunc)
+   npc/quests/seals/mjolnir_seal.txt:2045 (callfunc)
+   npc/quests/seals/mjolnir_seal.txt:2264 (callfunc)
+   npc/quests/seals/mjolnir_seal.txt:2264 (callfunc)
+   npc/re/instances/FridayDungeon.txt:599 (callfunc)
+goto/callsub whose target is not a statically known label (dynamic): 0
+inline `function name { }` definitions: 27
+   by name: effect_1_10_gen=1 guardiandata=1 f_sealfail=1 smonster=1 checkstatusquest=1 cell=3 brief=1 calcjobexp=1 choice=1 catwarp=2 func_juphist=1 mn=1 f_equip_menu=1 mob_brief=1 module_check=1 woetimer=1 getnumber=1 eldicastes_dp=1 calcexp=1 equip_check=1 rname=2 f_enchant=1 effect_gen=1
+   npc/other/monster_race.txt:1682 (mn)
+   npc/other/turbo_track.txt:205 (rname)
+   npc/other/turbo_track.txt:1924 (getnumber)
+   npc/other/turbo_track.txt:2065 (rname)
+   npc/quests/okolnir.txt:369 (smonster)
+   npc/quests/okolnir.txt:824 (cell)
+parser: rAthena statement-terminator quirks accepted: )=1 ,=1 :=1
+parser: lenient paren-less calls in expression position: 0

@@ -1,0 +1,14 @@
+command set:	base only
+function registry (re set): 149 lowered, 0 failed, 0.286s
+FILE npc/re/instances/TempleOfDemonGod.txt (2296 lines)
+  script bodies=65 parseFail=0 lowerFail=0  
+  NPCs driven=65 entry-points=266 (main + On* labels)  labels=208  goto-ops=0 call(sub|func)-ops=23  hoisted-calls=1 nested-calls-left=0
+  DFS runs=1068 (entry x profile DFS trees fully exhausted: 532/532) distinct end states=534 maxMenuDepth=1
+  max callsub/callfunc frame depth=3  frames pushed=34  nested(host-recursive) calls=0  yields=44
+  op coverage (union of all DFS runs, main+On* entries): 1017/1824 = 55.8%
+  branch-flip DFS (every JZ/JNZ/switch is a choice point, <=3 flips/run): runs=1220 distinct end states=668 op coverage natural+flip=1745/1824 = 95.7%  max frame depth=3
+  time: parse+lower 0.017s  drive 0.049s
+  commands executed (soft passes, recorded stub calls): close=10 donpcevent=98 getitem=2 mes=48 monster=120 next=10 select=4 setquest=4 sleep=40 warp=10
+  run-end errors (strict mode, count of DFS runs ending that way): UNSUPPORTED:getgmlevel=2 UNSUPPORTED:getunitdata=62 UNSUPPORTED:setunitdata=2 UNSUPPORTED:unitskilluseid=50 UNSUPPORTED:unitskillusepos=42
+  NPCs disabled by >=1 UNSUPPORTED command (strict): 30/65
+  unsupported commands behind the first (soft pass; call counts): getgmlevel=2 getmapxy=2 getunitdata=70 logmes=2 setunitdata=10 unitskilluseid=56 unitskillusepos=210

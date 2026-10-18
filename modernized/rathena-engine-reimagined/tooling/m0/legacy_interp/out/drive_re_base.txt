@@ -1,0 +1,11 @@
+SET re, command set: base; function registry: 149 lowered
+files=835 script bodies=9219 (parse failures 0, lower failures 0) NPC entry-points driven=20642
+scripts driven=9219  natural-DFS runs (strict+soft)=92200  branch-flip runs=127174  total wall time=17.6s
+op coverage natural=25.3% natural+flip=65.7% (590072 ops)  max frame depth=5 (npc/kafras/cool_event_corp.txt)  max menu-choice depth=25  host-recursive nested calls=0  frames pushed=26365
+INTERNAL (interpreter bug) errors:	0
+natural-DFS run-end typed errors (non-UNSUPPORTED) (2 distinct): DEPTH_CAP=1293 GETARG_OUT_OF_RANGE=12
+branch-flip run-end typed errors (non-UNSUPPORTED; forced branches make some inconsistent) (4 distinct): DEPTH_CAP=3444 GETARG_OUT_OF_RANGE=641 BUDGET_EXCEEDED=238 DIV_BY_ZERO=2
+scripts with >=1 UNSUPPORTED command hit in the strict pass: 1206/9219
+NPCs reaching each unsupported command (dynamic, soft pass) (154 distinct): getmapxy=127 getgmlevel=97 logmes=97 flagemblem=84 getbattleflag=74 getunitdata=55 implode=54 setunitdata=52 callshop=51 setunittitle=51 replacestr=44 getmapusers=40 charat=38 killmonsterall=38 areawarp=35 vip_status=33 makeitem=30 mesitemlink=30 openstorage=28 setcell=27 getequipid=27 warpwaitingpc=26 enablewaitingroomevent=25 getequipisequiped=24 disablewaitingroomevent=24 basicskillcheck=24 unitskilluseid=23 unitexists=22 bg_monster=20 unitwarp=19
+slow files (>2s): 
+sample GETARG_OUT_OF_RANGE: npc/re/instances/BakonawaLake.txt:207 [#Bakonawan1] | npc/re/instances/OctopusCave.txt:609 [oct_boss_con] | npc/re/guild/invest_main.txt:609 [Revoting Manager#Invest2]

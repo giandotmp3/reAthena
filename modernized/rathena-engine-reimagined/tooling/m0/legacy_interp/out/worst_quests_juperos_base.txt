@@ -1,0 +1,14 @@
+command set:	base only
+function registry (re set): 149 lowered, 0 failed, 0.291s
+FILE npc/quests/quests_juperos.txt (5056 lines)
+  script bodies=89 parseFail=0 lowerFail=0  
+  NPCs driven=89 entry-points=492 (main + On* labels)  labels=404  goto-ops=0 call(sub|func)-ops=20  hoisted-calls=1 nested-calls-left=0
+  DFS runs=2042 (entry x profile DFS trees fully exhausted: 984/984) distinct end states=1017 maxMenuDepth=3
+  max callsub/callfunc frame depth=2  frames pushed=2  nested(host-recursive) calls=0  yields=263
+  op coverage (union of all DFS runs, main+On* entries): 2316/3879 = 59.7%
+  branch-flip DFS (every JZ/JNZ/switch is a choice point, <=3 flips/run): runs=2665 distinct end states=1247 op coverage natural+flip=3726/3879 = 96.1%  max frame depth=2
+  time: parse+lower 0.033s  drive 0.142s
+  commands executed (soft passes, recorded stub calls): close2=37 close=58 donpcevent=138 getitem=4 mes=1192 monster=406 next=150 select=77 warp=44
+  run-end errors (strict mode, count of DFS runs ending that way): UNSUPPORTED:getgmlevel=2 UNSUPPORTED:getmapusers=2 UNSUPPORTED:getpartnerid=2 UNSUPPORTED:killmonsterall=2 UNSUPPORTED:soundeffectall=41
+  NPCs disabled by >=1 UNSUPPORTED command (strict): 20/89
+  unsupported commands behind the first (soft pass; call counts): getgmlevel=2 getmapusers=2 getmapxy=2 getpartnerid=2 killmonsterall=4 logmes=2 soundeffectall=57

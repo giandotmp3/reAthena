@@ -21,7 +21,7 @@ The spec and architecture were derived from legacy code. Follow their design, bu
 
 > The engine knows how things move, connect, persist and are scheduled. It does not know what anything is.
 
-The generic core (`engine-core`, `netproto`, `persistence`, `gateway`, `script-host`, `mods`) has no skill, item, status, job or formula identifiers and no game numbers (`engine-core` has a lint test, `EC-LINT-001`; it is a smoke check, so also review numeric literals). Native fast paths live in the separate `native-defaults` plug-in, which rulesets opt into by stage ID; it is built only for stages that milestone M0(a) shows are too slow in pure Luau.
+The generic core (`engine-core`, `netproto`, `persistence`, `gateway`, `script-host`, `mods`) has no skill, item, status, job or formula identifiers and no game numbers (`engine-core` has a lint test, `EC-LINT-001`; it is a smoke check, so also review numeric literals). Native fast paths live in the separate `native-defaults` plug-in, which rulesets opt into by stage ID; M0(a) showed pure Luau damage is fast enough, so only the default mob AI is required there.
 
 ## Units (each a standalone project)
 
@@ -30,7 +30,7 @@ The generic core (`engine-core`, `netproto`, `persistence`, `gateway`, `script-h
 | `engine-core/` | C++20, CMake | ECS, attrs, grid, A*, tick/timers, movement hooks, instances | 13 / 30 |
 | `native-defaults/` | C++20 + Luau refs | Opt-in named native stages, default mob AI, differential tests | 16 / 26 |
 | `netproto/` | C++20 + YAML spec + codegen | Packet spec, generated codecs, gating, obfuscation, fuzz targets | 40 / 12 |
-| `script-host/` | C++20 + Luau (not linked yet) | VM, bus, coroutines, budgets, reload generations, storage API, `.d.luau` generation | 9 / 41 |
+| `script-host/` | C++20 + Luau (M0 host in `tooling/m0` is the seed) | VM, bus, coroutines, budgets, reload generations, storage API, `.d.luau` generation | 9 / 41 |
 | `persistence/` | C++20 + GoogleTest | Generic records and KV, write-behind, WAL, id_map, quotas | 7 / 34 skipped |
 | `gateway/` | C++20 | Login, tickets, char-select plumbing, seams, `--role` | 25 / 68 |
 | `mods/` | C++20 + `base/` Luau | Loader, manifest, permissions, ID registry, `rathena.base` | 10 / 36 |
@@ -53,14 +53,17 @@ cmake --build build/<unit> -j && ctest --test-dir build/<unit> --output-on-failu
 
 `persistence` uses GoogleTest and skips backend tests until the SQLite/PostgreSQL connection layer is lifted. `ruleset-prerenewal`: `python3 -I tools/run_tests.py` in that directory (runs the Lua-subset sources under plain Lua). `ruleset-renewal`: `python3 -m unittest discover -s tests`. Luau, `luau-analyze` and a YAML library are **not installed** in this environment, so nothing has been type-checked as Luau yet.
 
-## Milestones and the M0 gate
+## M0 is done (2026-10-18): the forks are unblocked
 
-HITL #2 authorized skeletons and **M0 spikes only**; the forked parts wait for a written M0 go/no-go (`AI_NATIVE_SPEC_ENGINE.md` §8, architecture §12):
+Real Luau 0.690; code in `tooling/m0/`, report `analysis/rathena/M0_RESULTS.md`. Outcomes that change what you build:
 
-- M0(a) pure-Luau damage cost at AoE burst scale with the budget interrupt on (decides whether `native-defaults` damage stages are built).
-- M0(b) the Luau-hosted interpreter on the worst goto-heavy NPC files (`enchan_mal.txt`, `invest_main.txt`, `quests_16_1.txt`, `agit_main_se.txt`, `prontera.txt`).
-- M0(c) hook dispatch cost at 1,000 CCU, and per-mod memory accounting feasibility.
-- M0(d) the `ctx` int64/f32 approach reproduces worked examples E-1…E-10 exactly.
+- **No native damage stages** in the first milestone: pure-Luau damage measured 0.4 to 4 µs/hit and 25 AoE-50 bursts fit in 5 ms. `native-defaults` damage stages stay stubs; only the default mob AI is required native.
+- **One `lua_State` per mod** (236 KB each, per-mod memory caps, bomb isolation verified). Mod environments drop `getfenv` and wrap `table.sort`.
+- **Legacy NPC layer = Luau-hosted interpreter** (0 parse failures on 13,850 bodies). Required changes: legacy-VM record/replay before calling it done, lazy per-file parsing with flat ops, call-by-reference, host-stack depth cap, long command tail. Prototype: `tooling/m0/legacy_interp/` (parser, lowering, interpreter, scripted-client driver).
+- **Numerics:** `ctx` int64/f32 methods reproduce 17/17 worked examples. Ruleset code must not use `//` or `/` on signed values (Luau floors, legacy truncates); add the lint when `ruleset-*` packages are implemented.
+- **Still unmeasured:** real PRE/RE pipelines against golden traces, cross-state call cost, reload with live coroutines, the compact AST cache.
+
+Next work, in order: (1) legacy-VM record/replay harness (precondition for the NPC layer); (2) `script-host` implemented with the M0 host as its starting point; (3) `engine-core` and `netproto` implementation behind their pending tests; (4) `rathena-migrate` for `db/pre-re`, then pre-renewal pipeline vs golden traces; (5) renewal as the architecture proof.
 
 ## Decisions in force (HITL #1 and #2)
 

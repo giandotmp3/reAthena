@@ -1,0 +1,11 @@
+host-recursive nested callsub (under &&) depth=100 -> 1
+host-recursive nested callsub (under &&) depth=190 -> 1
+host-recursive nested callsub (under &&) depth=250 -> 1
+host-recursive nested callsub (under &&) depth=1000 -> 1
+host-recursive nested callsub (under &&) depth=1500 -> 1
+host-recursive nested callsub (under &&) depth=2000 -> 1
+host-recursive nested callsub (under &&) depth=2500 -> 1
+host-recursive nested callsub (under &&) depth=3000 -> 1
+host-recursive nested callsub (under &&) depth=4000 -> 1
+host-recursive nested callsub (under &&) depth=5000 ->  ERR HOST_STACK_OVERFLOW ./interp.luau:291: stack overflow
+semantics tests: 14 passed, 0 failed

@@ -1,0 +1,14 @@
+command set:	base + ext
+function registry (re set): 149 lowered, 0 failed, 0.295s
+FILE npc/other/marriage.txt (1000 lines)
+  script bodies=11 parseFail=0 lowerFail=0  
+  NPCs driven=11 entry-points=26 (main + On* labels)  labels=18  goto-ops=18 call(sub|func)-ops=11  hoisted-calls=3 nested-calls-left=0
+  DFS runs=114 (entry x profile DFS trees fully exhausted: 52/52) distinct end states=55 maxMenuDepth=2
+  max callsub/callfunc frame depth=2  frames pushed=6  nested(host-recursive) calls=0  yields=55
+  op coverage (union of all DFS runs, main+On* entries): 358/857 = 41.8%
+  branch-flip DFS (every JZ/JNZ/switch is a choice point, <=3 flips/run): runs=1865 distinct end states=93 op coverage natural+flip=737/857 = 86.0%  max frame depth=2
+  time: parse+lower 0.006s  drive 0.208s
+  commands executed (soft passes, recorded stub calls): close2=8 close=12 donpcevent=14 mes=1217 next=187 select=10
+  run-end errors (strict mode, count of DFS runs ending that way): UNSUPPORTED:getpartnerid=3 UNSUPPORTED:vip_status=1
+  NPCs disabled by >=1 UNSUPPORTED command (strict): 2/11
+  unsupported commands behind the first (soft pass; call counts): getpartnerid=3 vip_status=1

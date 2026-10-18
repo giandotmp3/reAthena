@@ -1,0 +1,12 @@
+SET re, command set: base+ext; function registry: 149 lowered
+files=835 script bodies=9219 (parse failures 0, lower failures 0) NPC entry-points driven=20642
+scripts driven=9219  natural-DFS runs (strict+soft)=92899  branch-flip runs=127182  total wall time=18.8s
+op coverage natural=25.4% natural+flip=65.7% (590072 ops)  max frame depth=5 (npc/kafras/cool_event_corp.txt)  max menu-choice depth=25  host-recursive nested calls=0  frames pushed=34255
+INTERNAL (interpreter bug) errors:	0
+natural-DFS run-end typed errors (non-UNSUPPORTED) (3 distinct): DEPTH_CAP=1398 GETARG_OUT_OF_RANGE=14 BUDGET_EXCEEDED=4
+branch-flip run-end typed errors (non-UNSUPPORTED; forced branches make some inconsistent) (4 distinct): DEPTH_CAP=3529 GETARG_OUT_OF_RANGE=644 BUDGET_EXCEEDED=237 DIV_BY_ZERO=2
+scripts with >=1 UNSUPPORTED command hit in the strict pass: 669/9219
+NPCs reaching each unsupported command (dynamic, soft pass) (99 distinct): flagemblem=84 getbattleflag=74 setunittitle=51 killmonsterall=38 areawarp=35 vip_status=33 makeitem=31 warpwaitingpc=26 enablewaitingroomevent=25 disablewaitingroomevent=24 unitexists=22 bg_monster=20 getpartnerid=18 unitwalk=17 soundeffectall=17 getbrokenid=16 unitskillusepos=16 waitingroom2bg=14 instance_enter=13 bg_warp=13 npcspeed=13 bg_leave=12 getstatus=11 areapercentheal=10 instance_warpall=10 viewpointmap=10 instance_live_info=9 getwaitingroomstate=8 bg_get_data=7 insertchar=7
+slow files (>2s): npc/re/merchants/malangdo_costume.txt 2.3s
+sample GETARG_OUT_OF_RANGE: npc/guild2/agit_main_se.txt:1447 [gard#template] | npc/re/instances/BakonawaLake.txt:207 [#Bakonawan1] | npc/re/instances/OctopusCave.txt:609 [oct_boss_con] | npc/re/guild/invest_main.txt:609 [Revoting Manager#Invest2]
+sample BUDGET_EXCEEDED: npc/re/merchants/card_separation.txt:149 [::CardSeparation_mal] | npc/re/guild3/agit_main_te.txt:692 [invest_TE]

@@ -1,0 +1,15 @@
+command set:	base only
+function registry (re set): 149 lowered, 0 failed, 0.291s
+FILE npc/cities/prontera.txt (730 lines)
+  script bodies=20 parseFail=0 lowerFail=0  
+  NPCs driven=20 entry-points=20 (main + On* labels)  labels=0  goto-ops=0 call(sub|func)-ops=0  hoisted-calls=0 nested-calls-left=0
+  DFS runs=1904 (entry x profile DFS trees fully exhausted: 34/40) distinct end states=64 maxMenuDepth=25
+  max callsub/callfunc frame depth=1  frames pushed=0  nested(host-recursive) calls=0  yields=136860
+  op coverage (union of all DFS runs, main+On* entries): 473/597 = 79.2%
+  branch-flip DFS (every JZ/JNZ/switch is a choice point, <=3 flips/run): runs=9212 distinct end states=140 op coverage natural+flip=570/597 = 95.5%  max frame depth=1
+  time: parse+lower 0.003s  drive 4.446s
+  commands executed (soft passes, recorded stub calls): close=102 mes=113694 next=53806 select=14964
+  run-end errors (strict mode, count of DFS runs ending that way): DEPTH_CAP=1092
+  first DEPTH_CAP at npc/cities/prontera.txt:nil [nil]
+  NPCs disabled by >=1 UNSUPPORTED command (strict): 0/20
+  unsupported commands behind the first (soft pass; call counts): (none)

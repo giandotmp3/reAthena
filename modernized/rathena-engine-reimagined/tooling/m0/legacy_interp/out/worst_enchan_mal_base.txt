@@ -1,0 +1,14 @@
+command set:	base only
+function registry (re set): 149 lowered, 0 failed, 0.299s
+FILE npc/re/merchants/enchan_mal.txt (686 lines)
+  script bodies=1 parseFail=0 lowerFail=0  
+  NPCs driven=1 entry-points=1 (main + On* labels)  labels=1  goto-ops=0 call(sub|func)-ops=177  hoisted-calls=2 nested-calls-left=4
+  DFS runs=16 (entry x profile DFS trees fully exhausted: 2/2) distinct end states=6 maxMenuDepth=2
+  max callsub/callfunc frame depth=1  frames pushed=0  nested(host-recursive) calls=0  yields=32
+  op coverage (union of all DFS runs, main+On* entries): 35/804 = 4.4%
+  branch-flip DFS (every JZ/JNZ/switch is a choice point, <=3 flips/run): runs=2206 distinct end states=18 op coverage natural+flip=299/804 = 37.2%  max frame depth=2
+  time: parse+lower 0.006s  drive 0.128s
+  commands executed (soft passes, recorded stub calls): close=8 mes=56 next=20 select=12
+  run-end errors (strict mode, count of DFS runs ending that way): UNSUPPORTED:getequipisequiped=4
+  NPCs disabled by >=1 UNSUPPORTED command (strict): 1/1
+  unsupported commands behind the first (soft pass; call counts): getequipisequiped=4

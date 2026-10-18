@@ -1,0 +1,14 @@
+command set:	base + ext
+function registry (re set): 149 lowered, 0 failed, 0.262s
+FILE npc/re/instances/FacewormsNest.txt (2847 lines)
+  script bodies=67 parseFail=0 lowerFail=0  
+  NPCs driven=67 entry-points=263 (main + On* labels)  labels=201  goto-ops=0 call(sub|func)-ops=31  hoisted-calls=16 nested-calls-left=0
+  DFS runs=1064 (entry x profile DFS trees fully exhausted: 526/526) distinct end states=526 maxMenuDepth=3
+  max callsub/callfunc frame depth=2  frames pushed=36  nested(host-recursive) calls=0  yields=246
+  op coverage (union of all DFS runs, main+On* entries): 1445/2485 = 58.1%
+  branch-flip DFS (every JZ/JNZ/switch is a choice point, <=3 flips/run): runs=20522 distinct end states=636 op coverage natural+flip=2215/2485 = 89.1%  max frame depth=2
+  time: parse+lower 0.019s  drive 1.535s
+  commands executed (soft passes, recorded stub calls): close2=20 close=18 donpcevent=128 mes=224 monster=430 next=85 select=23 setquest=4 sleep=118 warp=18
+  run-end errors (strict mode, count of DFS runs ending that way): UNSUPPORTED:getnpctimer=6 UNSUPPORTED:instance_enter=1 UNSUPPORTED:makeitem=2 UNSUPPORTED:sprintf=8 UNSUPPORTED:unitexists=10
+  NPCs disabled by >=1 UNSUPPORTED command (strict): 14/67
+  unsupported commands behind the first (soft pass; call counts): getnpctimer=6 instance_enter=1 makeitem2=4 makeitem=14 sprintf=8 unitexists=10

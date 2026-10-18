@@ -1,0 +1,14 @@
+command set:	base only
+function registry (re set): 149 lowered, 0 failed, 0.256s
+FILE npc/quests/cooking_quest.txt (2391 lines)
+  script bodies=5 parseFail=0 lowerFail=0  
+  NPCs driven=5 entry-points=8 (main + On* labels)  labels=5  goto-ops=54 call(sub|func)-ops=3  hoisted-calls=0 nested-calls-left=0
+  DFS runs=48 (entry x profile DFS trees fully exhausted: 16/16) distinct end states=22 maxMenuDepth=1
+  max callsub/callfunc frame depth=1  frames pushed=0  nested(host-recursive) calls=0  yields=38
+  op coverage (union of all DFS runs, main+On* entries): 260/2218 = 11.7%
+  branch-flip DFS (every JZ/JNZ/switch is a choice point, <=3 flips/run): runs=549 distinct end states=101 op coverage natural+flip=1846/2218 = 83.2%  max frame depth=2
+  time: parse+lower 0.009s  drive 0.021s
+  commands executed (soft passes, recorded stub calls): close2=8 close=10 getitem=1 mes=568 next=76 select=16
+  run-end errors (strict mode, count of DFS runs ending that way): UNSUPPORTED:getequipid=2
+  NPCs disabled by >=1 UNSUPPORTED command (strict): 1/5
+  unsupported commands behind the first (soft pass; call counts): getequipid=6

@@ -1,0 +1,18 @@
+0.7607809389999147
+duplicate@pre	5427
+duplicate@re	10498
+function@pre	96
+function@re	149
+mapflag@pre	3595
+mapflag@re	5805
+monster@pre	3911
+monster@re	3889
+script@pre	4386
+script@re	9219
+shop:marketshop@re	45
+shop:shop@pre	186
+shop:shop@re	302
+shop@pre	186
+shop@re	347
+warp@pre	3120
+warp@re	4105
