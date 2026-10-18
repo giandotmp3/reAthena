@@ -13,8 +13,7 @@ set(PERSIST_TEST_SOURCES
   kv_store_test.cpp
   wal_recovery_test.cpp
   write_behind_service_test.cpp
-  failure_injection_test.cpp
-  mass_save_test.cpp)
+  failure_injection_test.cpp)
 if(RATHENA_PERSIST_HAVE_SCRIPT_HOST)
   list(APPEND PERSIST_TEST_SOURCES script_host_adapter_test.cpp)
 endif()
@@ -34,3 +33,18 @@ else()
 endif()
 # Discover by test name so `ctest -R BR_CHAR_032` selects a rule's tests.
 gtest_discover_tests(persist_tests DISCOVERY_MODE PRE_TEST)
+
+# Timing tests run alone (RUN_SERIAL): a parallel ctest would oversubscribe the CPUs and measure
+# the scheduler instead of the hand-off.
+add_executable(persist_perf_tests mass_save_test.cpp)
+target_link_libraries(persist_perf_tests PRIVATE rathena::persist)
+target_compile_options(persist_perf_tests PRIVATE ${_warn})
+if(NOT RATHENA_PERSIST_SANITIZE STREQUAL "none")
+  target_compile_definitions(persist_perf_tests PRIVATE RATHENA_PERSIST_SANITIZED=1)
+endif()
+if(TARGET GTest::gtest_main)
+  target_link_libraries(persist_perf_tests PRIVATE GTest::gtest_main)
+else()
+  target_link_libraries(persist_perf_tests PRIVATE gtest_main)
+endif()
+gtest_discover_tests(persist_perf_tests PROPERTIES RUN_SERIAL TRUE DISCOVERY_MODE PRE_TEST)

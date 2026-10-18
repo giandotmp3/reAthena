@@ -17,7 +17,7 @@
    "identical_code": 1,
    "modified": 5,
    "pre_lines": 808,
-   "re_lines": 987,
+   "re_lines": 1000,
    "re_only": 0,
    "shared": 595,
    "shared_masked": 653
@@ -253,7 +253,7 @@
     "file": "conformance/golden_gen/gen_tables.py",
     "kind": "modified",
     "pre_lines": 60,
-    "re_lines": 60,
+    "re_lines": 73,
     "shared": 56,
     "shared_masked": 56
    },

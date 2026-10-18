@@ -10,3 +10,13 @@ permissions = []
 
 [depends]
 "rathena.base" = "^0.1"
+
+[ruleset]
+mode = "renewal"
+db_set = "db/re"
+# Bundle default (Q-C): all sub-flags on. Other combinations are unsupported advanced overrides (package.toml allow_unsupported_subflags).
+subflags = { cast = true, drop = true, exp = true, lvdmg = true, aspd = true, stat = true, edp = true }
+# Legacy defects ship as-is behind this flag (HITL #2 item 6); the golden-validated pipeline reproduces them (e.g. the doubled monster
+# crit multiplier, the weapon_damage_rate[16] aliasing).
+legacy_quirks = true
+strict_parity = true

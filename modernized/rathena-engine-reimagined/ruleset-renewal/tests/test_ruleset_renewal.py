@@ -66,6 +66,15 @@ class Manifest(unittest.TestCase):
         self.assertIn("ruleset.prerenewal", MOD["conflicts"])
         self.assertIn("rathena.base", MOD["depends"])
 
+    def test_BR_RULESET_118_ruleset_table_matches_the_mods_loader_schema(self):
+        # the mods unit's manifest parser (mods/src/manifest.cpp) validates [ruleset]: mode, db_set, subflags, legacy_quirks, strict_parity
+        r = MOD["ruleset"]
+        self.assertEqual(r["mode"], "renewal")
+        self.assertEqual(r["db_set"], "db/re")
+        self.assertEqual(set(r["subflags"]), set(PKG["subflags"]))
+        self.assertTrue(all(r["subflags"].values()))
+        self.assertTrue(r["legacy_quirks"] and r["strict_parity"])
+
     def test_BR_RULESET_118_mode_and_defaults(self):
         self.assertEqual(PKG["mode"], "renewal")
         self.assertEqual(PKG["db_set"], "re")
