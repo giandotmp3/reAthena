@@ -88,7 +88,8 @@ class SkillTests(unittest.TestCase):
     def test_element_sequence_and_scalar(self):
         a = skills(SK, "  - Id: 5\n    Element:\n      - Level: 1\n        Element: Fire\n      - Level: 2\n        Element: Water\n")
         c = a.c
-        self.assertEqual(a.rows[5]["element"][:3], [c.get("ELE_FIRE"), c.get("ELE_WATER"), c.get("ELE_WEAPON") if False else a.rows[5]["element"][2]])
+        self.assertEqual(a.rows[5]["element"][:2], [c.get("ELE_FIRE"), c.get("ELE_WATER")])
+        self.assertEqual(a.rows[5]["element"][2:], [a.rows[5]["element"][2]] * 11)       # unlisted levels keep the previous value
         b = skills(SK, "  - Id: 5\n    Element: Dark\n")
         self.assertEqual(set(b.rows[5]["element"]), {c.get("ELE_DARK")})
 

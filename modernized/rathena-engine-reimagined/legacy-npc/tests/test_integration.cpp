@@ -293,3 +293,53 @@ ACCEPT_LUAU("LNPC-EVT-013", renewal_set_registers_its_event_hooks_on_the_real_bu
   CHECK(!rm.bus().order("legacy:OnTouch").empty());
   CHECK(!rm.bus().order("legacy:OnTimer1000").empty());
 }
+
+// ---- known gaps, kept as expected failures with the reason (they fail for real: the assertion is the behaviour, not a placeholder) ----------------------
+
+// npc.cpp npc_timerevent_quit (:1594-1650): when a player with an NPC timer attached logs out, the NPC's OnTimerQuit label runs once for that player.
+PENDING("LNPC-TIMER-005", on_timer_quit_runs_when_the_attached_player_logs_out, "OnTimerQuit is not implemented: dropPlayer cancels the player's timers without running the label") {
+  auto& host = shared_host();
+  host.clear_log();
+  host.run_ok("quit", R"(
+    local rt = LEGACY.new{}
+    rt:addFile("t.txt", "-\tscript\tTm\t-1,{\n end;\nOnTimer5000:\n end;\nOnTimerQuit:\n $quit = $quit + 1; end;\n}\n")
+    local p = rt:player(1, {})
+    rt:timerStart(rt.loader.npcs.Tm, p)
+    rt:dropPlayer(1)
+    print("@quit\t" .. tostring(rt.backend.storage.world():get("legacy:world/quit")))
+  )");
+  CHECK(host.records("@quit").at(0)[1] == "1");
+}
+
+// the Luau flat ops could be cached across restarts like the C++ ParsedFile (architecture 7: "parse once, cache as binary, invalidate by file hash")
+PENDING("LNPC-PARSE-007", flat_op_cache_roundtrip_skips_the_parse, "no serialiser for the Luau flat ops yet: a restart parses every used NPC again") {
+  auto& host = shared_host();
+  host.clear_log();
+  host.run_ok("cache", R"(
+    local L = LEGACY.loader.new{}
+    L:addFile("t.txt", "-\tscript\tn\t-1,{\n mes \"x\"; close;\n}\n")
+    local prog = L:program(L.npcs.n)
+    local blob = LEGACY.cache.encode(prog, 1234)
+    local back = LEGACY.cache.decode(blob, 1234)
+    print("@cache\t" .. tostring(#back.code == #prog.code) .. "\t" .. tostring(LEGACY.cache.decode(blob, 1) == nil))
+  )");
+  auto r = host.records("@cache").at(0);
+  CHECK(r[1] == "true" && r[2] == "true");
+}
+
+// instance variables (') exist while the script runs inside an instance (env.instanceId set by the instance layer) and are refused outside
+ACCEPT_LUAU("LNPC-VAR-018", instance_variables_are_writable_inside_an_instance_only) {
+  auto& host = shared_host();
+  host.clear_log();
+  host.run_ok("inst", R"(
+    local rt = LEGACY.new{}
+    rt:addFile("t.txt", "-\tscript\tn\t-1,{\n 'a = 5; $r = 'a; end;\n}\n")
+    rt:runLabel(rt.loader.npcs.n, nil, nil)
+    local outside = tostring(rt.backend.storage.world():get("legacy:world/r"))
+    rt.env.instanceId = 7
+    rt:runLabel(rt.loader.npcs.n, nil, nil)
+    print("@inst\t" .. outside .. "\t" .. tostring(rt.backend.storage.world():get("legacy:world/r")))
+  )");
+  auto r = host.records("@inst").at(0);
+  CHECK(r[1] == "nil" && r[2] == "5");
+}

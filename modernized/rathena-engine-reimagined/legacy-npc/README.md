@@ -122,10 +122,20 @@ The report (`tools/unsupported_report.py`, `Runtime:report()`, `report.luau`) li
 `Loader:addFile` indexes a file (declaration splitter without bodies plus a text scan for event labels); a body is parsed and lowered on first use and only the
 flat ops are kept; duplicates share one program table. Over the renewal load set (835 files, 19,717 NPC entries, 9,368 bodies, 23.0 MB of text, measured
 as `collectgarbage("count")` deltas with all texts resident, `tests/memory_test.py`): eager prototype pipeline 320.1 MB, lazy index 16.4 MB (0.9 s), after 200
-random NPCs were used 23.1 MB. The index scan finds exactly the labels the parser finds in all 13,605 script NPCs of both sets.
+random NPCs were used 23.1 MB. The index scan finds exactly the labels the parser finds in all 13,605 script NPCs of both sets. Inside a script-host sandbox (limiting allocator, text retained)
+indexing the renewal set grows the mod's memory by 52 MB in 2 s (`LNPC-LAZY-010`), so a mod that loads the corpus needs a memory cap above the 32 MB
+default; registering the 27,017 event hooks of the renewal set on the real bus, with load and validation, takes about 7 s (`LNPC-EVT-013`). Persistent
+variables count against the storage quota of the mod (default 1 MiB, `storage.default_quota_bytes`).
 
 ## Not done
 
-See the report of the task that produced this state; in short: no serialised cache for the Luau flat ops (the C++ `serialize_ast` caches the facade's
-`ParsedFile`), instances (`'` variables outside the empty instance), `attachrid`/multi-player command families, geometry-driven events (`OnTouch` area tests belong
-to the engine), interactive dialogues started from bus hooks, and the 1,606 renewal / 381 pre-renewal NPCs that use commands outside the supported set.
+* No serialised cache for the Luau flat ops (the C++ `serialize_ast` caches the facade's `ParsedFile`, keyed by the source hash); the lazy parse is the only mitigation.
+* `OnTimerQuit` (player-attached timer abort at logout), `attachrid`/`detachrid` and the other multi-player command families, instances (the `'` scope works once the instance layer sets `env.instanceId`; there is no instance
+  lifecycle and the `instance_*` commands fail outside one), `OnTouch` area tests (engine geometry), `unloadnpc`, `sleep` precision beyond the timer tick.
+* Event handlers run by the bus or a timer are non-interactive (see above); an interactive run for them is started by the engine through `DialogueManager::start`.
+  The engine must call `rt:endDialogue(rid)` when it cancels a dialogue (disconnect, idle timeout, reload drain): none of this package's code runs after a cancel.
+* `granted` (`mods.lock` grants) is handed to `LEGACY.new` by the host; there is no Luau API to read the sandbox's own grants. `query_sql` and `setunitdata` have no
+  entry in the mods unit's permission vocabulary, so `mod.toml` declares them only under `[legacy] optional_permissions`.
+* 1,606 renewal NPCs (of 19,660) and 381 pre-renewal NPCs (of 9,813) use commands outside the supported set and are disabled by the report rule
+  (`tools/unsupported_report.py`); the most frequent are `achievementexists`, `jobcanentermap`, `achievementcomplete`, `consumeitem`, `setcart`.
+* Luau type-checking: `luau-analyze` reports lints and a few nonstrict `TypeError`s in the ported prototype modules (kept as they are); the new modules are clean.

@@ -43,13 +43,6 @@ def validation_summary(loaded):
     out = {}
     for name in sorted(loaded.dbs):
         a = loaded.dbs[name]
-        cats = {}
-        ex = []
-        for f, m in a.r.warnings:
-            k = m.split(" ")[0] + " " + (m.split(" ")[1] if len(m.split(" ")) > 1 else "")
-            cats[m[:60]] = cats.get(m[:60], 0) + 1
-        for f, m in a.r.warnings[:5]:
-            ex.append("%s: %s" % (f, m))
         out[name] = {"files": a.files, "entries_parsed": a.parsed, "entries_rejected": len(a.rejected),
                      "rejects_by_reason": _count(a.rejected), "warnings": len(a.r.warnings), "missing_optional_files": a.missing,
                      "file_errors": a.file_errors, "clears": a.clears}

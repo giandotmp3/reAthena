@@ -136,4 +136,18 @@ H.case("LNPC-FLOW-004", "call depth: callsub on heap frames reaches 2048 frames,
 	H.eq(U.play(rt, "E", {}, 1).err.type, "CALL_DEPTH")
 end)
 
+H.case("LNPC-PARAM-002", "param variables (Zeny, BaseLevel) read and write the engine attributes, they are not stored as variables", function()
+	local attrs = { ["legacy:param/zeny"] = 1000, ["legacy:param/baselevel"] = 42 }
+	local params = setmetatable({}, {
+		__index = function(_, name) return attrs["legacy:param/" .. name] or 0 end,
+		__newindex = function(_, name, v) attrs["legacy:param/" .. name] = v end,
+	})
+	local rt = U.rt1(U.npc("P", [[ Zeny -= 300; .@lv = BaseLevel; $lv = .@lv; Zeny += 1; ]]))
+	rt:player(1, { attributes = params })
+	U.play(rt, "P", {}, 1)
+	H.eq(attrs["legacy:param/zeny"], 701)
+	H.eq(U.worldGet(rt, "lv"), 42)
+	H.eq(U.charGet(rt, 1, "zeny"), nil, "a param is never a stored variable")
+end)
+
 return true

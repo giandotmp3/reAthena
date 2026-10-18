@@ -112,6 +112,10 @@ function Rt:newPlayerObject(rid, fields)
 	for k, v in fields do
 		if k == "params" then
 			for pk, pv in v do p.params[pk] = pv end
+		elseif k == "attributes" then
+			-- param variables (Zeny, BaseLevel, ...) are not variables: reads and writes go to the engine's attributes. Any table works;
+			-- the engine passes one whose metatable maps lower-case param names to attribute ids ("legacy:param/<name>", see ParamShim).
+			p.params = v
 		elseif k ~= "profile" then
 			p[k] = v
 		end
