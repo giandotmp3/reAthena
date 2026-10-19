@@ -39,8 +39,8 @@ struct ModEnvironmentSpec {
   std::uint32_t max_sort_elements = 65536;  // bounded table.sort
   std::map<std::string, ConfigValue> config;  // becomes the read-only `config` table of every generation
   // Also define the global `engine` table (events, storage, dialogue, timers, definitions, rng, num, pipeline, config) for a loader
-  // whose bundler hands it to a package's register(engine). Off by default: mods' bundler calls register(engine) on EVERY entry
-  // module when `engine` exists, and rathena.base has a module whose register(name, handler) means something else. The globals
+  // whose bundler hands it to a package's register(engine). Off by default; mods' bundler turns it on only for a mod whose manifest
+  // opts in with `[entry] register = true` (rathena.base has a module whose register(name, handler) means something else). The globals
   // `pipeline`, `num` and `config` are always there.
   bool expose_engine = false;
 };

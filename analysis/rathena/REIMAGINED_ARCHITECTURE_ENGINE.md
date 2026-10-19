@@ -139,7 +139,7 @@ mods/<id>/
   types/*.d.luau    # optional exported types
 ```
 
-`mod.toml` fields: `id`, `version` (semver), `engine_api` (range), `depends = {"rathena.base" = "^0.1"}`, `conflicts`, `provides = ["ruleset"]`, `load_after`, `load_before`, `permissions` (e.g. `storage.account`, `storage.read:other`, `http.route`, `unbounded_loop`, `atcommand`, `net.raw`). Permissions are granted by the operator in `mods.lock`. A mod using an ungranted API is refused at load with a precise error.
+`mod.toml` fields: `id`, `version` (semver), `engine_api` (range), `depends = {"rathena.base" = "^0.1"}`, `conflicts`, `provides = ["ruleset"]`, `load_after`, `load_before`, `permissions` (e.g. `storage.account`, `storage.read:other`, `pipeline.protected_stages`, `http.route`, `unbounded_loop`, `atcommand`, `net.raw`). Permissions are granted by the operator in `mods.lock`. A mod using an ungranted API is refused at load with a precise error.
 
 ### 6.2 Namespaced IDs and client-visible numbers
 
@@ -369,3 +369,9 @@ Renewal basic weapon attack, implemented as its own package and validated agains
 3. `legacy_quirks` is read by nothing; two legacy defects ship unconditionally: the doubled monster crit multiplier and the `weapon_damage_rate[16]` aliasing (`pc.hpp:577`).
 4. Three latent gaps in the PRE package that PRE goldens never exercise: no `weapon_damage_rate`, no monster ranged flag, no Weaponry Research hit bonus.
 5. BR_RULESET corrections (RE order of target cards, crit, RES, weapon roll draws): `ruleset-renewal/docs/BR_RULESET_CORRECTIONS.md`.
+
+## 22. Pipeline permissions and the `engine` global (recorded 2026-10-19)
+
+- `pipeline.protected_stages` is a permission: a mod needs it to cancel, replace or move a stage the ruleset registered as protected (`init` and `final` for the weapon pipelines). Inserting next to a protected stage needs nothing. The 23-operation PRE-to-RE edit set needs it because it replaces `init`. Least privilege applies: a grant for something the manifest did not request is dropped; a request that is not granted blocks the generation before any code runs.
+- The manifest's `[ruleset]` values reach packages as the read-only `config` table (`mode`, `db_set`, `renewal`, `legacy_quirks`, `strict_parity`, `subflag_<name>`). Renewal golden case 2520 gives 1072 with `legacy_quirks = true` and 740 with `false`.
+- The `engine` global exists only for a mod whose manifest opts in with `[entry] register = true`; the ruleset packages self-register from the `pipeline`, `num` and `config` globals and do not opt in.

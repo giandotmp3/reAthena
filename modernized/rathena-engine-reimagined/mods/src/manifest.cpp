@@ -18,6 +18,7 @@ std::string Permission::str() const {
     case PermissionKind::UnboundedLoop: return "unbounded_loop";
     case PermissionKind::AtCommand: return "atcommand";
     case PermissionKind::NetRaw: return "net.raw";
+    case PermissionKind::ProtectedStages: return "pipeline.protected_stages";
   }
   return {};
 }
@@ -29,6 +30,7 @@ std::optional<Permission> parse_permission(const std::string& s) {
       {"unbounded_loop", PermissionKind::UnboundedLoop},
       {"atcommand", PermissionKind::AtCommand},
       {"net.raw", PermissionKind::NetRaw},
+      {"pipeline.protected_stages", PermissionKind::ProtectedStages},
   };
   for (auto& [name, kind] : plain)
     if (s == name) return Permission{kind, {}};
@@ -163,12 +165,27 @@ public:
     }
 
     // entry
-    if (const Value* en = top("entry")) {
-      if (!en->is_array()) type_fail(*en, "entry", "array");
+    // `entry = [..]` (module list) or the table form `[entry] modules = [..]; register = true|false`
+    if (const Value* en0 = top("entry")) {
+      const Value* en = en0;
+      std::string base = "entry";
+      if (!en0->is_table() && !en0->is_array()) type_fail(*en0, "entry", "array or table");
+      if (en0->is_table()) {
+        for (const auto& kv : en0->t)
+          if (kv.first != "modules" && kv.first != "register")
+            fail("manifest.unknown_key", kv.second, "entry." + kv.first, "unknown key (known: modules, register)");
+        if (const Value* r = en0->find("register")) {
+          if (!r->is_bool()) type_fail(*r, "entry.register", "boolean");
+          m.entry_register = r->b;
+        }
+        en = en0->find("modules");
+        base = "entry.modules";
+      }
+      if (en && !en->is_array()) type_fail(*en, base, "array");
       std::set<std::string> seen;
-      for (std::size_t k = 0; k < en->a.size(); ++k) {
+      for (std::size_t k = 0; en && k < en->a.size(); ++k) {
         const Value& e = en->a[k];
-        std::string key = "entry[" + std::to_string(k) + "]";
+        std::string key = base + "[" + std::to_string(k) + "]";
         if (!e.is_string()) type_fail(e, key, "string");
         const std::string& s = e.s;
         bool bad = s.empty() || s[0] == '/' || s.find('\\') != std::string::npos ||
@@ -277,11 +294,11 @@ private:
   }
   static std::string permission_reason(const std::string& s) {
     std::string r = "unknown permission \"" + s + "\"; the vocabulary is storage.account, storage.read:<mod>, "
-                    "http.route, unbounded_loop, atcommand, net.raw";
+                    "http.route, unbounded_loop, atcommand, net.raw, pipeline.protected_stages";
     if (s == "sql.read" || s.rfind("sql.", 0) == 0)
       r = "unknown permission \"" + s + "\": there is no general SQL permission (architecture section 5); "
           "SQL access is scoped to the mod's own namespace. The vocabulary is storage.account, "
-          "storage.read:<mod>, http.route, unbounded_loop, atcommand, net.raw";
+          "storage.read:<mod>, http.route, unbounded_loop, atcommand, net.raw, pipeline.protected_stages";
     else if (s == "storage.read")
       r = "\"storage.read\" needs a target mod, written storage.read:<mod>";
     else if (s.rfind("storage.read:", 0) == 0)

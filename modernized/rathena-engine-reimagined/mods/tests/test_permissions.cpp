@@ -199,3 +199,34 @@ TEST("MOD-PERM-015", lock_file_validation_and_canonical_round_trip) {
   CHECK(r.entries.at("b.mod").granted == l.entries.at("b.mod").granted && r.entries.at("b.mod").digest == kFakeDigest);
   CHECK(write_mods_lock(r) == text);
 }
+
+// ---- pipeline.protected_stages: least-privilege grant semantics ---------------------------------------------------------------
+TEST("MOD-PERM-015", protected_stages_requested_but_not_granted_blocks_the_generation) {
+  auto m = mk_with({"pipeline.protected_stages"});
+  ModsLock none;
+  auto msg = load_error([&] { authorize(m, none, kAccept, kFakeDigest); }, "permission.ungranted");
+  CHECK(msg.find("example.mod") != std::string::npos && msg.find("pipeline.protected_stages") != std::string::npos);
+  ModsLock other;   // a grant of something else does not help
+  other.entries["example.mod"].granted.insert(*parse_permission("storage.account"));
+  load_error([&] { authorize(m, other, kAccept, kFakeDigest); }, "permission.ungranted");
+  ModsLock ok;
+  ok.entries["example.mod"].granted.insert(*parse_permission("pipeline.protected_stages"));
+  authorize(m, ok, kAccept, kFakeDigest);   // granted: accepted
+  CHECK(effective_grants(m, ok).count(*parse_permission("pipeline.protected_stages")) == 1);
+}
+
+TEST("MOD-PERM-016", protected_stages_granted_but_not_requested_is_dropped_and_the_lock_file_round_trips) {
+  auto plain = mk_with({});
+  ModsLock lock = parse_mods_lock("[mod.\"example.mod\"]\ngrants = [\"pipeline.protected_stages\", \"storage.account\"]\n");
+  CHECK(lock.entries.at("example.mod").granted.size() == 2);
+  CHECK(effective_grants(plain, lock).empty());                          // least privilege: nothing requested, nothing in force
+  authorize(plain, lock, kAccept, kFakeDigest);                           // an extra grant is not an error
+  auto asks = mk_with({"pipeline.protected_stages"});
+  auto eff = effective_grants(asks, lock);
+  CHECK(eff.size() == 1 && eff.count(*parse_permission("pipeline.protected_stages")) == 1);   // storage.account was not requested
+  ModsLock back = parse_mods_lock(write_mods_lock(lock));
+  CHECK(back.entries.at("example.mod").granted == lock.entries.at("example.mod").granted);
+  CHECK(write_mods_lock(back) == write_mods_lock(lock));
+  try { parse_mods_lock("[mod.\"a\"]\ngrants = [\"pipeline.protected\"]\n"); CHECK(false); }
+  catch (const LoadError& e) { CHECK(e.code() == "lock.unknown_grant"); }
+}

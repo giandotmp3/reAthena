@@ -142,9 +142,11 @@ std::string bundle_package(const fs::path& root, const BundleOptions& opt) {
       throw LoadError("package.entry", "entry module '" + e + "' does not exist under " + root.string());
   out += "local __entries = {";
   for (const auto& e : entries) out += lua_quote(e) + ",";
-  out += "}\nfor _, n in ipairs(__entries) do\n  local m = __load(n)\n"
-         "  if type(m) == 'table' and type(m.register) == 'function' and type(engine) == 'table' then m.register(engine) end\n"
-         "end\n";
+  out += "}\nfor _, n in ipairs(__entries) do\n  local m = __load(n)\n";
+  // Opt-in (manifest `[entry] register = true`): without it a module's own `register` is never called by the host
+  if (opt.register_entries)
+    out += "  if type(m) == 'table' and type(m.register) == 'function' and type(engine) == 'table' then m.register(engine) end\n";
+  out += "end\n";
   return out;
 }
 
@@ -156,8 +158,20 @@ HostPermission to_host_permission(PermissionKind k) {
     case PermissionKind::UnboundedLoop: return HostPermission::UnboundedLoop;
     case PermissionKind::AtCommand: return HostPermission::Atcommand;
     case PermissionKind::NetRaw: return HostPermission::NetRaw;
+    case PermissionKind::ProtectedStages: return HostPermission::ProtectedStages;
   }
   return HostPermission::NetRaw;
+}
+
+static void fill_config(ModEnvironmentSpec& spec, const Manifest& m) {
+  if (!m.ruleset) return;
+  const RulesetMeta& r = *m.ruleset;
+  spec.config["mode"] = r.mode;
+  if (!r.db_set.empty()) spec.config["db_set"] = r.db_set;
+  spec.config["renewal"] = r.renewal();
+  if (r.legacy_quirks) spec.config["legacy_quirks"] = *r.legacy_quirks;
+  if (r.strict_parity) spec.config["strict_parity"] = *r.strict_parity;
+  for (const auto& [name, on] : r.flags) spec.config["subflag_" + name] = on;
 }
 
 // ---- world ----------------------------------------------------------------------
@@ -206,6 +220,11 @@ private:
     auto bl = rt_.cfg_.budget_for.find(id);
     spec.budget = bl != rt_.cfg_.budget_for.end() ? bl->second : rt_.cfg_.budget;
     if (auto q = rt_.cfg_.storage_quota.find(id); q != rt_.cfg_.storage_quota.end()) w_->storage->set_quota(id, q->second);
+    fill_config(spec, *info.manifest);
+    const BundleOptions* override_opts = nullptr;
+    if (auto b = rt_.cfg_.bundle_for.find(id); b != rt_.cfg_.bundle_for.end()) override_opts = &b->second;
+    // the `engine` global exists exactly when the bundler will call register(engine) on the entry modules
+    spec.expose_engine = override_opts ? override_opts->register_entries : info.manifest->entry_register;
     w_->rm->set_environment(spec);
     w_->rm->bus().set_mod_load_order(id, static_cast<int>(w_->order.size()));
     w_->order.push_back(id);
@@ -214,8 +233,8 @@ private:
     std::string chunk;
     if (!info.package_dir.empty()) {
       BundleOptions bo;
-      if (auto b = rt_.cfg_.bundle_for.find(id); b != rt_.cfg_.bundle_for.end()) bo = b->second;
-      else bo.entry = info.manifest->entry;
+      if (override_opts) bo = *override_opts;
+      else { bo.entry = info.manifest->entry; bo.register_entries = info.manifest->entry_register; }
       chunk = bundle_package(info.package_dir, bo);
     }
     w_->chunk[id] = chunk;

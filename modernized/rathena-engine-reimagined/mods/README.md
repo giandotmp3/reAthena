@@ -1,7 +1,7 @@
 # mods
 
 Mod loader and the mechanism-only `rathena.base` package (C++20, per
-`REIMAGINED_ARCHITECTURE.md` sections 5, 6 and 10). **Implemented**; 111 acceptance
+`REIMAGINED_ARCHITECTURE.md` sections 5, 6 and 10). **Implemented**; 124 acceptance
 tests pass, none are pending.
 
 Scope: TOML-subset parser, `mod.toml` manifest, dependency/ordering resolution with
@@ -18,8 +18,8 @@ and the CI check that `base/rathena.base` references no ruleset-specific name.
 
 The Luau VM is found through `RATHENA_LUAU_ROOT` / `RATHENA_LUAU_LIB_DIR` (see
 `script-host/README.md`). Without it the core still builds and every test that needs
-the VM reports `SKIP` (102 pass + 9 skip). `-DMODS_WITH_HOST=OFF` builds the core only
-(99 tests). Warnings are errors (`-Wall -Wextra -Wpedantic -Werror`); for sanitizers
+the VM reports `SKIP` (107 pass + 17 skip). `-DMODS_WITH_HOST=OFF` builds the core only
+(103 tests). Warnings are errors (`-Wall -Wextra -Wpedantic -Werror`); for sanitizers
 pass `-DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=undefined"
 -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"` so script-host is instrumented
 too. The core also builds warning-free with clang++ (script-host itself does not build
@@ -29,7 +29,8 @@ Test conventions: `TEST` must pass; `PENDING_TEST` is expected-failure and an
 unexpected pass fails the run (the macro is kept, no test uses it now); `SKIP_TEST`
 reports a test that needs something absent from the build. Rule IDs:
 `MOD-TOML|MANIFEST|DEP|PERM|ID|OPS|BASE|INT-nnn` (mods-service rules derived from
-architecture 5/6; the only `BR-*` rule here is BR-RULESET-118, the ruleset manifest).
+architecture 5/6; the only `BR-*` rule here is BR-RULESET-118, the ruleset manifest). The pipeline-runtime
+integration tests (config table, protected stages, opt-in register) are in `tests/test_pipeline_host.cpp`.
 
 `ctest` runs two tests: `acceptance` and `base_purity` (the CI gate, see below).
 
@@ -83,12 +84,38 @@ interpreted (legacy-npc's `[legacy]`).
   table or a `[depends]` table; keys are mod ids; a mod cannot depend on or conflict
   with itself, and a dependency cannot also be a conflict. `load_after` and
   `load_before` may not overlap.
-* `permissions`: strings from the closed vocabulary `storage.account`,
-  `storage.read:<mod>`, `http.route`, `unbounded_loop`, `atcommand`, `net.raw` (it is
-  script-host's `Permission` enum; `storage.read:<mod>` is `StorageReadOther` plus a
-  per-target `grant_read`). Unknown strings and duplicates are errors. **`sql.read` is
-  rejected** with a message that points at architecture section 5.
-* `entry`: relative `.luau` module paths run at load (see Host integration).
+* `permissions`: strings from the closed vocabulary below (script-host's `Permission`
+  enum). Unknown strings and duplicates are errors. **`sql.read` is rejected** with a
+  message that points at architecture section 5.
+
+  | String | script-host `Permission` | Enforced end to end |
+  |---|---|---|
+  | `storage.account` | `StorageAccount` | yes |
+  | `storage.read:<mod>` | `StorageReadOther` + per-target `grant_read` | yes |
+  | `unbounded_loop` | `UnboundedLoop` (lifts the step limit) | yes |
+  | `pipeline.protected_stages` | `ProtectedStages` | yes (below) |
+  | `http.route`, `atcommand`, `net.raw` | `HttpRoute`, `Atcommand`, `NetRaw` | no host API yet |
+
+  **`pipeline.protected_stages`**: replace, cancel or move a pipeline stage that its
+  defining ruleset registered `protected` (both rulesets: `init` and `final` of
+  `weapon`), or cancel a run that would skip one. Inserting stages next to a protected
+  stage needs nothing. Take-away for the PRE -> RE delta: its 23 operations (3 cancel,
+  12 insert_after, 8 replace, `ruleset-renewal/docs/pipeline_diff.json`) include
+  `replace('init')`, so a package that applies them must request this permission.
+  Grant semantics are those of every permission (see `mods.lock`): not requested means
+  not in force even when granted; requested and not granted stops the whole generation
+  (`permission.ungranted`) before any code runs. A mod that does not request it and
+  edits a protected stage is refused by script-host's reload with `cannot <replace|cancel|move>
+  protected stage weapon/<stage> without the protected-stage permission`.
+* `entry`: either the array form `entry = ["scripts/main.luau"]` (relative `.luau` module
+  paths run at load, see Host integration) or the table form
+
+      [entry]
+      modules = ["scripts/init.luau"]   # optional; same rules as the array
+      register = true                   # optional, default false
+
+  `register` is the opt-in for `register(engine)` (see Host integration). Any other key
+  in `[entry]` is an error (`entry.<key>`); `entry` cannot be both forms.
 * `[ruleset]` (needs `provides = ["ruleset"]`): `mode` (`renewal`, `prerenewal` or
   `pre-renewal`), `db_set` (`re`, `pre-re`, `db/re`, `db/pre-re`, consistent with
   `mode`), the sub-flags `cast drop exp lvdmg aspd stat edp` as booleans in `flags`
@@ -141,7 +168,8 @@ the failure message names the requiring mod and the range.
     signature = "..."                    # optional
 
 Nothing is granted unless listed. `effective_grants` = requested AND granted (a grant for
-something the manifest did not request is dropped: least privilege). `authorize` throws
+something the manifest did not request is dropped: least privilege; e.g. `grants =
+["pipeline.protected_stages"]` on a mod that does not request it changes nothing). `authorize` throws
 `signature.missing|signature.invalid` (a present signature is always verified, the
 policy only makes it mandatory), `digest.mismatch`, `permission.ungranted` (names the
 mod and every missing permission). `write_mods_lock` produces canonical text.
@@ -216,13 +244,34 @@ with the precise text.
   cross-mod two-phase commit. Per-mod hot reload of the live world is `reload_mod`
   (script-host generations). Storage content survives through the shared backend;
   grants are rebuilt per generation (script-host cannot revoke).
-* Bundling: `bundle_package(dir)` turns `scripts/`, `data/` and `luau/` (not `tests`,
+* **`config` table.** For a mod with a `[ruleset]` table the activator fills
+  `ModEnvironmentSpec::config`, which script-host exposes as the read-only global
+  `config` (and `engine.config`). Keys (flat, values are booleans or strings):
+  `mode` (as written: `renewal`, `prerenewal` or `pre-renewal`), `db_set` (when set),
+  `renewal` (bool), `legacy_quirks` and `strict_parity` (only when the manifest sets
+  them; script-host defaults `legacy_quirks` to true when absent), and one
+  `subflag_<name>` (`subflag_cast`, `subflag_drop`, `subflag_exp`, `subflag_lvdmg`,
+  `subflag_aspd`, `subflag_stat`, `subflag_edp`) per sub-flag the manifest lists. Mods
+  without `[ruleset]` get only script-host's default (`legacy_quirks = true`); other
+  manifest tables (`Manifest::config`, e.g. legacy-npc's `[legacy]`) are not copied.
+  The ruleset packages read `config.legacy_quirks` when their entry module loads, so
+  flipping it in `mod.toml` and reloading the generation switches the defect
+  reproduction (renewal golden case 2520: 1072 with `true`, 740 with `false`).
+* Bundling: `bundle_package(dir, opt)` turns `scripts/`, `data/` and `luau/` (not `tests`,
   `build`, `conformance`, `tools`, `types`) into one chunk with `require` and `import`
   shims (the sandbox has neither). Entries: manifest `entry`, else `scripts/init`, else
-  every module; an entry returning a table with `register` has `register(engine)` called
-  if the host defines a global `engine` (script-host does not yet, so for
-  `ruleset-prerenewal` the test calls it with a recording engine: 6 skills and 5 items
-  validate).
+  every module.
+* **The entry/register rule.** The call site is `bundle_package` in
+  `src/host_runtime.cpp` (the loop over `__entries` at the end of the chunk). It calls
+  `register(engine)` on an entry module only when the mod opted in with
+  `[entry] register = true` (`BundleOptions::register_entries`); the same flag makes the
+  host define the global `engine` table for that mod (`ModEnvironmentSpec::expose_engine`).
+  Without the flag nothing is called and `engine` is nil, so `rathena.base` (no `entry`,
+  so every module is an entry, and `bonus.register(name, handler)` means something else)
+  is untouched. The ruleset packages do not opt in: they register themselves from
+  their entry module with the always-present globals `pipeline`, `num`, `config`
+  (setting the flag on them would register twice and fail with a duplicate `define`).
+  `HostConfig::bundle_for[id]` replaces both the module list and the flag.
 * Kill switch: `ModLoader::disable(id)` (`mod disable <id>`) disables the mod and its
   hard dependents; the host removes their hooks from the bus and reloads an empty chunk
   (drops timers, frees the state). If script-host refuses the empty reload because the
@@ -235,9 +284,9 @@ with the precise text.
   script-host has no per-hook timer, so it is exact only when one mod ran. Real figures
   on this machine (debug build): `legacy.npc` 75 ms / 5.6 MB, `rathena.base` 0.6 ms /
   0.57 MB, `ruleset.prerenewal` 4 ms / 0.97 MB.
-* Not wired: unbounded_loop/atcommand/http.route/net.raw have no host API yet except
-  `unbounded_loop` (step limit), so only `storage.account`, `storage.read:<mod>` and
-  `unbounded_loop` are enforced end to end by tests.
+* Not wired: atcommand/http.route/net.raw have no host API yet, so only
+  `storage.account`, `storage.read:<mod>`, `unbounded_loop` and `pipeline.protected_stages`
+  are enforced end to end by tests.
 
 ## `rathena.base` purity check
 
@@ -280,10 +329,11 @@ this unit):
 5. `ruleset-renewal` keeps its mode/db_set/sub-flags in `package.toml`, not in a
    `[ruleset]` table of `mod.toml`; the loader accepts both manifests but does not read
    `package.toml`.
-6. `ruleset-prerenewal/scripts/init.luau` expects a global `engine` that script-host
-   does not define yet.
+6. ~~`ruleset-prerenewal/scripts/init.luau` expects a global `engine`~~ resolved: both
+   rulesets register themselves from the globals `pipeline`, `num`, `config`; `engine` is
+   opt-in per mod (`[entry] register = true`).
 
-Decisions where the spec was silent: unknown top-level tables are kept, other unknown
+Decisions where the spec was silent: the protected-stage permission is spelled `pipeline.protected_stages`; register(engine) is opt-in through `[entry] register` (default off); `config` keys are flat (`subflag_<name>`, `renewal`) because script-host's `ConfigValue` is a scalar; unknown top-level tables are kept, other unknown
 keys are errors; `depends` names mod ids only; load order ties break by id; a signature
 that is present is verified even when the policy is off; `lock.entries` for mods that
 are not requested are dropped, not errors; a mod may declare ids only in its own
@@ -300,9 +350,9 @@ numbers; absence of a mod never tombstones; kill switch state survives reloads;
   `HostRuntime::dispatch` attributes time as described above.
 * Extracting definitions from Luau automatically: `LoadRequest::definitions` is supplied
   by the caller (the test scans the ruleset data files with a regex).
-* Calling `register(engine)` for real packages (no `engine` global yet), reading
-  renewal's `package.toml`, and enforcing `http.route`, `atcommand` and `net.raw`
-  (no such host APIs exist).
+* Reading renewal's `package.toml`, copying other manifest tables into `config`, and
+  enforcing `http.route`, `atcommand` and `net.raw` (no such host APIs exist). No shipped
+  package uses `[entry] register = true` yet; only synthetic mods exercise it.
 * A `mod disable` command surface and a lock-file editing tool beyond `mods_tool`.
 * Renewal is not loaded in the integration test beyond manifest resolution and id
   swapping (its Luau scripts are a Python-tested subset).

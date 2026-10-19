@@ -35,14 +35,17 @@ struct BundleOptions {
   // Entry modules (path under the root, with or without .luau). Empty: scripts/init
   // when it exists, otherwise every module in path order.
   std::vector<std::string> entry;
+  // Call register(engine) on entry modules that return a table with `register` (needs the global `engine`, which the host
+  // defines for a mod exactly when this is on). From the manifest: `[entry] register = true`. Default off.
+  bool register_entries = false;
 };
 
 // One Luau chunk for a package. Modules are functions behind `require` and
 // `import` shims (the sandbox has neither): names resolve package-relative
 // ("scripts/domain", "data/items"), file-relative ("./x", "../y") or by a
 // unique file name. After the modules are defined the entry modules are
-// required, and an entry that returns a table with `register` has
-// register(engine) called when the host defines a global `engine` table.
+// required; only when opt.register_entries is set does an entry that returns a table
+// with `register` get register(engine) called (the host defines `engine` for that mod).
 std::string bundle_package(const std::filesystem::path& root, const BundleOptions& opt = {});
 
 struct HostConfig {

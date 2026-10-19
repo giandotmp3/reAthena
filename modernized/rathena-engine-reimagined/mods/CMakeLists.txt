@@ -76,7 +76,7 @@ set(MODS_TEST_SOURCES
   tests/test_ops.cpp
   tests/test_base.cpp)
 if(MODS_HOST_ON)
-  list(APPEND MODS_TEST_SOURCES tests/test_integration.cpp)
+  list(APPEND MODS_TEST_SOURCES tests/test_integration.cpp tests/test_pipeline_host.cpp)
 endif()
 add_executable(mods_tests ${MODS_TEST_SOURCES})
 target_link_libraries(mods_tests PRIVATE mods)

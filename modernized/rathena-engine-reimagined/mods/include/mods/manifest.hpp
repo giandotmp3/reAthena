@@ -24,6 +24,10 @@ enum class PermissionKind {
   UnboundedLoop,   // "unbounded_loop"      (freeloop equivalent)
   AtCommand,       // "atcommand"
   NetRaw,          // "net.raw"
+  // "pipeline.protected_stages": replace, cancel or move a pipeline stage its defining ruleset marked protected, or
+  // cancel a run that would skip one (script-host Permission::ProtectedStages). Inserting next to a protected stage
+  // needs nothing.
+  ProtectedStages,
 };
 
 struct Permission {
@@ -64,6 +68,10 @@ struct Manifest {
   // Script entry modules (relative paths under the package). Empty = the
   // package default (init.luau when present, otherwise every module).
   std::vector<std::string> entry;
+  // `[entry] register = true`: the bundler calls register(engine) on every entry module that returns a table with a
+  // `register` function, and the mod's sandbox gets the global `engine` table. Default false: a module's own
+  // `register` (rathena.base's bonus.register(name, handler)) is then never called by the host.
+  bool entry_register = false;
   std::string description;
   // Tables the mod owns (e.g. legacy-npc's [legacy]); preserved verbatim,
   // never interpreted by the loader.

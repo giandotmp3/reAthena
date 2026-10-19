@@ -227,3 +227,39 @@ TEST("MOD-MANIFEST-011", io_error_and_unknown_tables_are_kept) {
   CHECK(m.description == "d" && m.entry.size() == 1 && m.config.count("mine") == 1);
   CHECK(m.config.at("mine").find("sub")->find("y")->s == "z");
 }
+
+// ---- protected-stage permission and the [entry] table ------------------------------------------------------------------------
+TEST("MOD-MANIFEST-012", protected_stages_permission_is_in_the_vocabulary_and_round_trips) {
+  auto p = parse_permission("pipeline.protected_stages");
+  CHECK(p && p->kind == PermissionKind::ProtectedStages && p->arg.empty() && p->str() == "pipeline.protected_stages");
+  CHECK(!parse_permission("pipeline.protected_stages:x").has_value());   // takes no argument
+  CHECK(!parse_permission("protected_stages").has_value());              // only the namespaced spelling
+  CHECK(!parse_permission("pipeline.protected").has_value());
+  Manifest m = parse_manifest(std::string(kHead) + "permissions = [\"pipeline.protected_stages\", \"storage.account\"]\n");
+  CHECK(m.permissions.size() == 2 && m.permissions[0].kind == PermissionKind::ProtectedStages);
+  // duplicate and misspelling are errors with a position; the message lists the new kind
+  refusal(std::string(kHead) + "permissions = [\"pipeline.protected_stages\", \"pipeline.protected_stages\"]\n", "manifest.duplicate");
+  auto msg = refusal(std::string(kHead) + "permissions = [\"pipeline.protected\"]\n", "manifest.bad_permission");
+  CHECK(msg.find("pipeline.protected_stages") != std::string::npos && msg.find("permissions[0]") != std::string::npos);
+}
+
+TEST("MOD-MANIFEST-013", entry_table_form_sets_modules_and_the_register_opt_in) {
+  Manifest plain = parse_manifest(std::string(kHead) + "entry = [\"scripts/a.luau\"]\n");
+  CHECK(plain.entry.size() == 1 && !plain.entry_register);               // the array form never opts in
+  CHECK(!parse_manifest(kHead).entry_register);                           // default off
+  Manifest m = parse_manifest(std::string(kHead) + "[entry]\nmodules = [\"scripts/a.luau\", \"scripts/b.luau\"]\nregister = true\n");
+  CHECK(m.entry == (std::vector<std::string>{"scripts/a.luau", "scripts/b.luau"}) && m.entry_register);
+  Manifest only = parse_manifest(std::string(kHead) + "[entry]\nregister = true\n");
+  CHECK(only.entry.empty() && only.entry_register);                       // default entry selection, but register on
+  CHECK(!parse_manifest(std::string(kHead) + "[entry]\nregister = false\n").entry_register);
+  CHECK(m.config.count("entry") == 0);                                    // not a mod-owned table
+  // errors point at the key
+  auto e1 = refusal(std::string(kHead) + "[entry]\nregister = \"yes\"\n", "manifest.bad_type");
+  CHECK(e1.find("entry.register") != std::string::npos);
+  auto e2 = refusal(std::string(kHead) + "[entry]\nregistr = true\n", "manifest.unknown_key");
+  CHECK(e2.find("entry.registr") != std::string::npos);
+  auto e3 = refusal(std::string(kHead) + "[entry]\nmodules = [\"../x.luau\"]\n", "manifest.bad_value");
+  CHECK(e3.find("entry.modules[0]") != std::string::npos);
+  refusal(std::string(kHead) + "[entry]\nmodules = \"scripts/a.luau\"\n", "manifest.bad_type");
+  refusal(std::string(kHead) + "entry = \"scripts/a.luau\"\n", "manifest.bad_type");
+}
