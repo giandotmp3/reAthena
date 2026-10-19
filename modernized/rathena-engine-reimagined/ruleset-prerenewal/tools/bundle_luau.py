@@ -27,7 +27,7 @@ def main():
         name = p.relative_to(ROOT).with_suffix("").as_posix()
         parts.append(f"__src[{name!r}] = function()\n-- {name}\n{p.read_text()}\nend\n")
         n += 1
-    call = "()" if entry.endswith(("golden_report", "bench_weapon", "print_rule_cases")) else ""
+    call = "(...)" if entry.endswith(("golden_report", "bench_weapon", "print_rule_cases", "print_status_rule_cases", "status_golden_report")) else ""
     parts.append(f"local __code = import({entry!r}){call}\n"
                  "if __code ~= 0 then error('luau run failed: exit code ' .. tostring(__code), 0) end\n")
     out.parent.mkdir(parents=True, exist_ok=True)

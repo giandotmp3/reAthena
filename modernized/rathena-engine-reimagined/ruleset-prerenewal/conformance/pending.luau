@@ -3,6 +3,8 @@
 -- Remove an ID here when its rule function lands; an XPASS fails the run.
 -- Landed with the weapon-attack golden work (basic attack, no skills): 001 003 005 006 008 014 015 016 018 020 021 027 028
 -- 029 030 031 032 033 037 039 041 (each tied to a legacy record, see conformance/cases/damage.luau `golden`).
+-- Landed with the status golden work (stat aggregation, speed / ASPD, element, states, scripted statuses, recalculation guard): 051 065 066 067
+-- 068 069 071 073 075 077 (conformance/cases/status.luau `golden`: records of conformance/golden/status_pre.jsonl.gz).
 return {
 	["BR-RULESET-002"] = true,
 	["BR-RULESET-004"] = true,
@@ -27,7 +29,6 @@ return {
 	["BR-RULESET-048"] = true,
 	["BR-RULESET-049"] = true,
 	["BR-RULESET-050"] = true,
-	["BR-RULESET-051"] = true,
 	["BR-RULESET-052"] = true,
 	["BR-RULESET-053"] = true,
 	["BR-RULESET-055"] = true,
@@ -40,19 +41,10 @@ return {
 	["BR-RULESET-062"] = true,
 	["BR-RULESET-063"] = true,
 	["BR-RULESET-064"] = true,
-	["BR-RULESET-065"] = true,
-	["BR-RULESET-066"] = true,
-	["BR-RULESET-067"] = true,
-	["BR-RULESET-068"] = true,
-	["BR-RULESET-069"] = true,
 	["BR-RULESET-070"] = true,
-	["BR-RULESET-071"] = true,
 	["BR-RULESET-072"] = true,
-	["BR-RULESET-073"] = true,
 	["BR-RULESET-074"] = true,
-	["BR-RULESET-075"] = true,
 	["BR-RULESET-076"] = true,
-	["BR-RULESET-077"] = true,
 	["BR-RULESET-078"] = true,
 	["BR-RULESET-079"] = true,
 	["BR-RULESET-080"] = true,

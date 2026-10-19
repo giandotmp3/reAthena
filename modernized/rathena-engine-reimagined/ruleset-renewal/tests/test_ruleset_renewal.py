@@ -27,8 +27,8 @@ VECTORS = load("conformance/vectors/ruleset_renewal.json")["vectors"]
 MOD = tomllib.loads((ROOT / "mod.toml").read_text())
 PKG = tomllib.loads((ROOT / "package.toml").read_text())
 
-ASSIGNED = ["009", "010", "016", "019", "022", "025", "031", "034", "044", "045", "048",
-            "054", "057", "066", "068", "102", "104", "117", "118", "119"]
+ASSIGNED = ["009", "010", "016", "019", "022", "025", "031", "034", "044", "045", "048", "051",
+            "054", "057", "065", "066", "067", "068", "069", "071", "073", "075", "077", "102", "104", "117", "118", "119"]
 
 needs_luau = unittest.skipUnless(adapter.available(), "Luau CLI not found (set LUAU or RATHENA_LUAU_ROOT)")
 
@@ -244,16 +244,19 @@ class DataDiff(unittest.TestCase):
     def test_BR_RULESET_066_def2_negative_allowed(self):
         self.assertTrue(TABLES["def2"]["allow_negative"])
 
-    @pending("BR-RULESET-066")
+    @needs_luau
     def test_BR_RULESET_066_def2_behavior(self):
-        raise adapter.HostUnavailable("DEF2 contributions are status_calc_* (not run by the hook); only the DEF reduction with a negative soft DEF is covered (BR-RULESET-027)")
+        # status_calc_def / status_calc_def2 replayed against the real functions (conformance/golden_gen/golden_status_hook.inc): overrides first
+        # (Berserk, Eternal Chaos, Keeping, Defset, Nyanggrass), then terms in code order, player / monster differences, renewal DEF2 may be negative
+        luau_rule_passes(self, "BR-RULESET-066", at_least=7)
 
     def test_BR_RULESET_068_aspd_caps_data(self):
         self.assertEqual(TABLES["aspd_caps"]["quicken"], 7)
 
-    @pending("BR-RULESET-068")
+    @needs_luau
     def test_BR_RULESET_068_aspd_behavior(self):
-        raise adapter.HostUnavailable("ASPD contributions: status_calc, not damage; no golden generator")
+        # RENEWAL_ASPD: the fixed and percent groups of status_calc_aspd, status_calc_fix_aspd and status_calc_aspd_rate against the real functions
+        luau_rule_passes(self, "BR-RULESET-068", at_least=5)
 
     def test_BR_RULESET_054_tick_def2_and_stats(self):
         self.assertEqual(TABLES["tick_def2_ms"]["stun"], 500)
@@ -295,11 +298,101 @@ class Formulas(unittest.TestCase):
 
     @pending("BR-RULESET-054")
     def test_BR_RULESET_054_level_difference_resistance(self):
-        run_vectors(self, "BR-RULESET-054")   # status resistance (status_calc / sc_start), not damage
+        run_vectors(self, "BR-RULESET-054")   # status_change_start resistance (sc_def / levelAdv / tick_def2), not a status_calc_* function: the status golden hook does not run it
 
     @pending("BR-RULESET-057")
     def test_BR_RULESET_057_delayed_status_duration(self):
-        run_vectors(self, "BR-RULESET-057")   # status duration, not damage
+        run_vectors(self, "BR-RULESET-057")   # delayed application and duration (status_change_start), not a status_calc_* function: not run by the status golden hook
+
+
+class Status(unittest.TestCase):
+    """The declarative status layer (scripts/status) against the real status_calc_* functions of the renewal legacy binary."""
+
+    @needs_luau
+    def test_BR_RULESET_051_status_record_and_definition(self):
+        # records (1,018, data), the definition API with named val fields (Q-F), validation errors, the expression language
+        luau_rule_passes(self, "BR-RULESET-051", at_least=7)
+
+    @needs_luau
+    def test_BR_RULESET_065_stat_contributions(self):
+        # STR..CRT: add / rate / override in code order, cap 0..65535; the aggregation also runs through engine-core's AttributeSystem contract
+        luau_rule_passes(self, "BR-RULESET-065", at_least=13)
+
+    @needs_luau
+    def test_BR_RULESET_067_speed_model(self):
+        # E-4b: base 150, Quagmire (slow 50) and Increase AGI (haste 25): 187; haste and slow are maxima, floor 40, cart, Madogear, Free Cast
+        luau_rule_passes(self, "BR-RULESET-067", at_least=11)
+
+    @needs_luau
+    def test_BR_RULESET_069_other_stat_functions(self):
+        luau_rule_passes(self, "BR-RULESET-069", at_least=16)
+
+    @needs_luau
+    def test_BR_RULESET_071_element_and_mode_overrides(self):
+        luau_rule_passes(self, "BR-RULESET-071", at_least=4)
+
+    @needs_luau
+    def test_BR_RULESET_073_states(self):
+        luau_rule_passes(self, "BR-RULESET-073", at_least=14)
+
+    @needs_luau
+    def test_BR_RULESET_075_scripted_statuses(self):
+        luau_rule_passes(self, "BR-RULESET-075", at_least=3)
+
+    @needs_luau
+    def test_BR_RULESET_077_partial_recalculation(self):
+        luau_rule_passes(self, "BR-RULESET-077", at_least=4)
+
+    def test_status_golden_data_is_recorded_legacy_output(self):
+        path = ROOT / "conformance" / "golden" / "status_re.jsonl.gz"
+        with gzip.open(path, "rt") as f:
+            meta = json.loads(f.readline())
+            n, cats, fns = 0, set(), set()
+            for line in f:
+                c = json.loads(line)
+                n += 1
+                cats.add(c["cat"])
+                fns |= set(c["in"])
+                self.assertTrue(set(c["in"]) <= set(c["out"]), c["id"])  # every input function has a recorded output
+                if c.get("states"):
+                    self.assertIn("states", c["out"])
+        self.assertGreaterEqual(n, 8000)
+        self.assertGreaterEqual(len(cats), 10)
+        self.assertEqual(len(meta["referenced"]), 317)
+        self.assertEqual(len(meta["functions"]), 40)
+        self.assertEqual(len(fns), 41)  # every function of the hook
+        self.assertEqual(len(meta["sc_ids"]), 1025)
+
+    def test_status_fields_document_is_current(self):
+        if not adapter.available():
+            self.skipTest("Luau CLI not found")
+        r = subprocess.run([sys.executable, "-I", str(ROOT / "tools" / "gen_status_fields.py"), "--luau", adapter.luau_exe(), "--check"], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_status_enumeration_document_is_current(self):
+        # docs/STATUS_ENUMERATION.md: the statuses the RENEWAL status_calc_* functions reference, parsed from the legacy source (317 statuses, 40 functions)
+        legacy = ROOT.parents[2]
+        if not (legacy / "src" / "map" / "status.cpp").exists():
+            self.skipTest("legacy source not found")
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "enum.md"
+            r = subprocess.run([sys.executable, "-I", str(ROOT / "conformance" / "golden_gen" / "enum_statuses.py"), str(legacy), "--md", str(out)], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertEqual(out.read_text(), (ROOT / "docs" / "STATUS_ENUMERATION.md").read_text())
+        self.assertIn("317 distinct statuses", (ROOT / "docs" / "STATUS_ENUMERATION.md").read_text())
+
+    def test_status_data_records_are_current(self):
+        # data/status_records.luau is the generated data part: regenerating it from the migrated database gives the same text
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "records.luau"
+            r = subprocess.run([sys.executable, "-I", str(ROOT / "tools" / "gen_status_records.py"), str(ROOT.parent / "tooling" / "migrate" / "out" / "renewal" / "status.luau"), str(out)],
+                               capture_output=True, text=True)
+            if not (ROOT.parent / "tooling" / "migrate" / "out" / "renewal" / "status.luau").exists():
+                self.skipTest("migrated renewal data not generated (tooling/migrate)")
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertEqual(out.read_text(), (ROOT / "data" / "status_records.luau").read_text())
 
 
 class Conformance(unittest.TestCase):

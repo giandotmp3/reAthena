@@ -4,6 +4,8 @@
 # Same approach as ruleset-prerenewal/conformance/golden_gen/build.sh, minus the step that disables RENEWAL: the copy of the
 # tree keeps `#define RENEWAL` (and every RENEWAL_* sub-flag) on, so the binary loads db/re and compiles the #ifdef RENEWAL branches.
 # apply_edits.py (random-draw log, stage probes, hook include) is applied to the COPY; golden_hook.inc / golden_stage.hpp are dropped in.
+# Also: the status hook (golden_status_hook.inc, included at the end of status.cpp) and the sc_type name table it includes (enum_statuses.py --table).
+#   REGEN=1 build.sh <dir>   additionally regenerates conformance/golden/*.jsonl.gz with the new binary.
 # Needs cmake >= 3.13, ninja or make, g++ with C++20, zlib, python3.
 set -euo pipefail
 B="$(mkdir -p "${1:?usage: build.sh <build-dir> [repo-root]}" && cd "$1" && pwd)"
@@ -16,7 +18,9 @@ if [ ! -d "$B/rA/src" ]; then
 	cp -r "$REPO/modernized/rathena-reimagined" "$B/rA/modernized/"   # map-rules library the legacy CMake links
 fi
 grep -q '^#define RENEWAL$' "$B/rA/src/config/renewal.hpp" || { echo "renewal.hpp: RENEWAL is not defined in the copy"; exit 1; }
-cp "$HERE/golden_stage.hpp" "$HERE/golden_hook.inc" "$B/rA/src/map/"
+cp "$HERE/golden_stage.hpp" "$HERE/golden_hook.inc" "$HERE/golden_status_hook.inc" "$B/rA/src/map/"
+# the sc_type name table of the status hook: every status the RENEWAL status_calc_* functions reference (parsed from the copy's status.cpp)
+python3 -I "$HERE/enum_statuses.py" "$B/rA" --table "$B/rA/src/map/golden_status_table.inc" > "$B/enum_statuses.txt"
 python3 -I "$HERE/apply_edits.py" "$B/rA"
 for f in "$B"/rA/conf/import-tmpl/*; do [ -e "$B/rA/conf/import/$(basename "$f")" ] || { mkdir -p "$B/rA/conf/import"; cp "$f" "$B/rA/conf/import/"; }; done
 for f in "$B"/rA/db/import-tmpl/*; do [ -e "$B/rA/db/import/$(basename "$f")" ] || { mkdir -p "$B/rA/db/import"; cp -r "$f" "$B/rA/db/import/"; }; done
@@ -25,3 +29,8 @@ cmake -S "$B/rA" -B "$B/cm" -G "$GEN" -DCMAKE_BUILD_TYPE=Release \
 	-DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$B/rA" -DCMAKE_LIBRARY_OUTPUT_DIRECTORY="$B/lib" -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY="$B/lib" > "$B/cmake.log" 2>&1
 cmake --build "$B/cm" --target map-server --parallel "$(nproc)" > "$B/build.log" 2>&1 || { tail -30 "$B/build.log"; exit 1; }
 echo "built $B/rA/map-server"
+# REGEN=1 also rewrites both golden files from the new binary (conformance/golden/weapon_re.jsonl.gz, status_re.jsonl.gz); both are byte-identical to the committed ones
+if [ "${REGEN:-0}" = "1" ]; then
+	python3 -I "$HERE/gen_cases.py" --server "$B/rA" | head -1
+	python3 -I "$HERE/gen_status_cases.py" --server "$B/rA" --repo "$REPO" | head -1
+fi

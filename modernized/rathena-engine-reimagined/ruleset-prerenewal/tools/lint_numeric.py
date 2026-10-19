@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """Numerics lint (M0 finding): ruleset code must not use `/` or `//` (Luau floors `//` and `/` is a double divide, legacy C++ truncates
 signed integers). All integer division goes through ctx.idiv / ctx.mul_div / the accumulator methods. Also flags `%` outside the two
-documented uses (non-negative RNG output, wrap-around of narrowing). Scans scripts/damage and scripts/rules/damage.luau.
+documented uses (non-negative RNG output, wrap-around of narrowing). Scans scripts/damage, scripts/rules/damage.luau and scripts/status (every file, incl. the definitions: `%` is allowed only in scripts/status/ops.luau, the documented
+wrap-around of narrowing / int32 conversion).
 
 usage: lint_numeric.py        exit 1 with file:line on a finding
 """
 import pathlib, re, sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-FILES = sorted((ROOT / "scripts" / "damage").glob("*.luau")) + [ROOT / "scripts" / "rules" / "damage.luau"]
+FILES = sorted((ROOT / "scripts" / "damage").glob("*.luau")) + [ROOT / "scripts" / "rules" / "damage.luau"] + sorted((ROOT / "scripts" / "status").rglob("*.luau"))
+MOD_OK = {"scripts/status/ops.luau"}
 STR = re.compile(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'')
 bad = 0
 for f in FILES:
@@ -18,7 +20,7 @@ for f in FILES:
         if "/" in code:
             print(f"{f.relative_to(ROOT)}:{n}: division operator in ruleset code: {line.strip()}")
             bad += 1
-        if "%" in code and "rng.rnd()" not in code and "+ 32768" not in code and "+ 128" not in code and "% (bit * 2)" not in code:
+        if "%" in code and f.relative_to(ROOT).as_posix() not in MOD_OK and "rng.rnd()" not in code and "+ 32768" not in code and "+ 128" not in code and "% (bit * 2)" not in code:
             print(f"{f.relative_to(ROOT)}:{n}: '%' outside the documented uses: {line.strip()}")
             bad += 1
 sys.exit(1 if bad else 0)

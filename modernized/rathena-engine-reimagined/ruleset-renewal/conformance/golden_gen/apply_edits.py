@@ -9,7 +9,9 @@ Edits (all anchored on exact legacy text; the script aborts if an anchor is not 
   src/map/battle.cpp          - GSTAGE(...) stage probes inside the RENEWAL branches of battle_calc_weapon_attack (read-only
                                 observations of wd.* fields) and `#include "golden_hook.inc"` at the end, so the harness can
                                 call the file-static legacy functions.
-  src/map/map.cpp             - golden_main() call after ScriptHost::run_oninit() (no-op unless RA_GOLDEN_CASES is set).
+  src/map/map.cpp             - golden_main() call after ScriptHost::run_oninit() (no-op unless RA_GOLDEN_CASES is set), and the same for
+                                golden_status_main() (no-op unless RA_GOLDEN_ST_CASES is set).
+  src/map/status.cpp          - `#include "golden_status_hook.inc"` at the end (the status_calc_* golden runner, calls the static functions).
 The random-draw and map.cpp edits are the same as the pre-renewal generator's; the probes that sit in shared code are the same
 anchors, the ones in #ifndef RENEWAL blocks are replaced by probes in the #ifdef RENEWAL blocks.
 """
@@ -136,5 +138,19 @@ edit("src/map/map.cpp", [
  "	ScriptHost::run_oninit();	// Init npcs (OnInit)\n	::golden_main(); // golden generator (no-op unless RA_GOLDEN_CASES is set)\n"),
 ("#include \"storage.hpp\"\n",
  "void golden_main(); // golden generator (copy only)\n#include \"storage.hpp\"\n"),
+])
+
+# ---- status-calculation hook (golden_status_hook.inc): included at the end of status.cpp so it can call the static status_calc_* ----
+p = root / "src/map/status.cpp"
+s = p.read_text()
+if "golden_status_hook.inc" not in s:
+    s += '\n#include "golden_status_hook.inc" // status golden generator (copy only): synthetic units + status_calc_* runner\n'
+p.write_text(s)
+edit("src/map/map.cpp", [
+("	::golden_main(); // golden generator (no-op unless RA_GOLDEN_CASES is set)\n",
+ "	::golden_status_main(); // status golden generator (no-op unless RA_GOLDEN_ST_CASES is set)\n"
+ "	::golden_main(); // golden generator (no-op unless RA_GOLDEN_CASES is set)\n"),
+("void golden_main(); // golden generator (copy only)\n",
+ "void golden_main(); // golden generator (copy only)\nvoid golden_status_main(); // status golden generator (copy only)\n"),
 ])
 print("edits applied")

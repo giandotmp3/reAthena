@@ -13,6 +13,11 @@ modified.
 | `gen_cases.py` | builds the cases, runs the server once, writes `../golden/weapon_pre.jsonl.gz` |
 | `gen_tables.py` | generates `data/damage_tables.luau` from `db/pre-re` and cross-checks it against the tables the binary loaded |
 | `splice_rule_cases.py` | rewrites the converted rule entries of `cases/damage.luau` from the golden data |
+| `golden_status_hook.inc` | the **status calculation** hook, included at the end of `status.cpp`: builds synthetic PC / mob units with an explicit status set `{sc_type, val1..val4}` and calls the real static `status_calc_*` functions (see "Status golden" below) |
+| `st_extract.py` | parses the PRE branch of `status.cpp` (a small C subset: tokenizer, statement / expression parser); `list` prints the statuses each function reads, `incs` writes the generated include files the status hook needs (status table, constants, enum names) |
+| `st_gen_defs.py` | one-time generator of the FIRST DRAFT of `scripts/status/defs/*.luau` (the Luau files are then maintained by hand); not run by CI |
+| `gen_status_cases.py` | builds the status cases (>= 13,000), runs the patched server, writes `../golden/status_pre.jsonl.gz` |
+| `st_consts.py`, `st_records.py`, `st_fields_doc.py`, `splice_status_cases.py` | generate `scripts/status/consts.luau` from the legacy dump, `data/status_records.luau` from the migrated database, `docs/STATUS_FIELDS.md`, and the converted status rule cases |
 
 ```sh
 conformance/golden_gen/build.sh   $SCRATCH/golden            # once
@@ -55,3 +60,30 @@ attacks, plants (`is_infinite_defense`), katar, left-hand-only fists, guns, stat
 Spider Web, Fusion, Reflect Shield, ...), reflect / absorb / devotion / Poison React side effects, PK mode, battleground rates,
 `ksprotection`, `skill_min_damage`, item scripts, pets / homunculi / mercenaries as attackers. The Luau pipeline asserts (and tests
 cover the assertion) when it is given an input outside this space, e.g. `bonus.double_rate`.
+
+## Status golden (`GOLDEN_PRERE=1`)
+
+The status calculation is recorded from a **strict pre-renewal** build (`GOLDEN_PRERE=1` also enables `#define PRERE` in the copy's `renewal.hpp`, which is what
+`configure --enable-prere` does: no `RENEWAL_ASPD` / `RENEWAL_CAST` / `RENEWAL_STAT` ... either; without it `build.sh` comments out only `#define RENEWAL`, the
+configuration the basic-attack golden was recorded with -- regenerating the basic-attack golden from the strict build gives a byte-identical file, so nothing
+there depends on the sub-flags).
+
+```sh
+GOLDEN_PRERE=1 conformance/golden_gen/build.sh   $SCRATCH/golden-st-pre            # ~5 min on 4 cores, edits the COPY only
+python3 -I conformance/golden_gen/gen_status_cases.py --server $SCRATCH/golden-st-pre/rA --dump-out $SCRATCH/consts.txt   # rewrites conformance/golden/status_pre.jsonl.gz (6 s)
+python3 -I conformance/golden_gen/st_consts.py $SCRATCH/consts.txt scripts/status/consts.luau
+python3 -I tools/build_golden.py --force && python3 -I tools/run_tests.py --luau X --status-report
+```
+
+A fresh build in an empty directory regenerates the committed file byte for byte (sha256 `3e3b90c3...`). What the hook records, all through the REAL functions:
+`status_calc_str agi vit int dex luk pow sta wis spl con crt batk watk critical hit flee flee2 def def2 mdef mdef2 speed aspd_rate fix_aspd patk smatk res mres hplus crate
+element element_lv attack_element mode`, `status_get_hpbonus / status_get_spbonus` (FIX and RATE, players and mobs) and through them `status_calc_maxhp / maxsp` (mobs),
+`status_calc_pseudobuff_matk`, `status_calc_state` (the twelve `sc.cant` flags after one status starts or ends), `status_calc_bl_main` (the recalculation chain: base
+status + stale battle status + a flag set + statuses -> the new battle status), and the **Script:** of every active status through the real script engine (the log of the
+`pc_bonus*` calls, `g_golden_bonus_log`). It also dumps the status database as the real loader holds it (699 records), the constants and the `battle.conf` defaults.
+
+Case categories (`cat`): `empty` (the `sc->empty()` path, extreme bases), `single` / `single_unit` (every status the function reads, four value levels, PC and mob),
+`pair`, `multi`, `override` (early-return statuses with others), `clamp`, `all`, `speed_struct`, `aspd_struct`, `flee_struct`, `watk_struct`, `max_struct`, `max_neg`,
+`pc_bonus`, `matk_struct`, `mode_struct`, `state`, `chain`, `chain_extreme`, `script`, `script_combo`, `worked` (E-4b and one illustration per converted rule), `quirk`.
+The statuses and the `valN` each function reads, and the constants those are compared with, come from the parse of `status.cpp`, not from a hand list. Products are kept
+below 2^31 (the legacy `int` would overflow, which is undefined); the replay's ctx refuses any int32 overflow.

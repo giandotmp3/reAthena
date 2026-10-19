@@ -180,3 +180,74 @@ Renewal is within noise; pre-renewal pays about +4 us per attack (15 stage calls
 **Not done / limits.** The mods unit does not yet copy `manifest.ruleset.legacy_quirks` into `ModEnvironmentSpec::config` (so a manifest value of `false` is not honoured by the full loader) and has no permission
 kind for protected stages. A foreign-state stage sees the lane and a copied `view`, not live entity handles. `use_native`, the magic and misc bodies, and the three latent PRE gaps other than `weapon_damage_rate` (monster ranged flag,
 Weaponry Research hit bonus) are not implemented. The 153,708 / 76,660 fresh-seed fuzz runs need the legacy builds and were not repeated; the golden replays and 28 / 28 mutants were.
+
+## 13. Part 2: the status layer (status effects and stat aggregation)
+
+Question: after the weapon pipeline, is the renewal STATUS layer (what every status does to every stat, BR-RULESET-051, 065 to 077) a data diff over a shared mechanism, and did it need anything from
+engine-core or script-host? Built: `scripts/status/` (declarative `status.define`, a pure-Luau aggregator with an ordered stage list per attribute that is expressible in `engine-core/include/engine/attrs/attrs.hpp`),
+checked against the REAL `status_calc_*` functions of the legacy renewal binary (`conformance/golden_gen/golden_status_hook.inc`). Numbers below are produced by `tools/run_tests.py --status-report`,
+`tools/mutation_status.py`, `tools/status_overlap.py` (`STATUS_OVERLAP.md`) and the tests.
+
+### 13.1 Verdict
+
+| Claim | Result |
+|---|---|
+| The declarative layer reproduces the real code | **Yes.** 31,470 / 31,470 cases (85,178 recorded outputs of 41 functions, and the `sc->cant` restrictions of all 1,025 sc_type values) match with nothing tolerated. 317 statuses are read by the renewal `status_calc_*` functions (parsed from `status.cpp`, `STATUS_ENUMERATION.md`); 321 are defined; all 658 contribution sites are applied by some case and every conditional site is also skipped by some case. 51 mutants of `scripts/status`, 51 killed (48 by the golden replay, 3 only by the unit tests; section 13.5) |
+| No change to engine-core, script-host, mods or `rathena.base` | **Yes.** Nothing outside `ruleset-renewal/` was written (git status). The status layer also runs, unchanged, in script-host's REAL mod sandbox with the mods loader's module system: 31,470 / 31,470 matched, 2.3 s including the load of the golden data (`tools/host_status/`). script-host has no `attrs` namespace (`api/engine.yaml`), so the fold runs in Luau; see 13.4 |
+| Renewal status behaviour is **mostly data** over a shared mechanism | **Yes for the contributions, no for the stage lists.** 532 of the 533 (function, status) sites that exist in both modes have the identical statement text; 239 of the 296 statuses the pre-renewal functions reference (81 %; 294 of them also exist in renewal, 2 are pre-renewal only: Gravitation and Longing) are identical by structure (same statements, same relative order); the other 55 differ because renewal ADDS lines to them. Renewal adds 111 sites that pre-renewal lacks: 85 in the 13 renewal-only functions (40 for the new ASPD model, 12 for the six trait stats, 33 for the six derived stats) and 26 extra lines inside functions both modes have; 23 renewal statuses are new. The skeleton (stage list) is identical for 23 of the 27 functions that exist in both modes |
+
+### 13.2 What is data and what is logic
+
+* **Status records (data, BR-051).** 1,018 renewal records against 699 pre-renewal ones (`rathena-migrate`): 697 in both, 462 of them identical in states, calc flags, flags, options, min rate / duration, Fail / EndOnStart /
+  EndOnEnd / EndReturn lists and script (66 %); the 235 that differ differ mostly in `flags` (152) and the Fail list (64). 697 renewal records have no behaviour in any `status_calc_*` function: they are data only
+  (`data/status_records.luau`, generated, 287 KB). 321 have a hand-written definition: 1,540 code lines for 658 contributions, one `status.cpp` line each.
+* **Contributions (data in a declarative form).** `status.define(name, { fields, contributes = { attr = { op, value expression, when, at } } })`: an op name from the vocabulary of the attribute, an
+  expression in a 140-line integer language, a condition, the legacy line as the order key. A renewal-only effect is another contribution line of an existing status or a new status; nothing else changes.
+* **Logic that is the ruleset's (1,253 code lines).** The stage list of each of the 48 attributes (`attrs_re.luau`, 468 lines: plain chains (ordered ops, then `cap_value`) for 34 attributes; custom stage functions for
+  speed (9 stages) and its rate (6), the fixed ASPD group (6) and the ASPD rate (6), the maximum HP / SP / AP (uint64 wrap-around), flee's map penalty), the aggregator, the expression language, `states.luau`, `recalc.luau`, `bonus_scripts.luau`. The
+  skeleton comparison (`STATUS_OVERLAP.md` section 3) says which of these differ from pre-renewal: ASPD (renewal-only), the six trait stats and six derived stats (renewal-only, trivial chains), `watk` (the
+  pre-renewal Nibelungen weapon-level branch), `def2` (the renewal Angelus/VIT term), `mdef2` and `maxsp` (renewal branches in the clamp / the SP rate).
+* **Not factored into `rathena.base`:** as with the pipeline, 81 % identical contributions do not make a shared definition worthwhile: the PRE package would still need its own stage lists, its own
+  records and the 55 non-identical statuses, and the two packages stay independent (section 8).
+
+### 13.3 What the mechanism needed
+
+1. **engine-core `AttributeSystem` is sufficient as a contract.** A ruleset-supplied stage list per attribute folding an insertion-ordered list of `(source, tag, value)` contributions expressed everything:
+   the legacy functions are ordered statement lists, so the order key had to travel with the contribution (it is packed into the opaque `tag`: `stage|at|op|arg`; `tests/acceptance/status_model_test.luau` feeds the
+   aggregator's contributions into a Luau transcription of the C++ class, `scripts/status/engine_model.luau`, and compares 8,000+ outputs with the legacy numbers). Three things had to be done ABOVE the
+   engine class: (a) facts of the unit (skills, mounts, items, map, `sc == nullptr`) enter as contributions (`fact|0|<name>`), because a stage function sees nothing else; (b) derived attributes
+   (`speed_rate` feeding `speed`; fix and rate feeding the maximum HP / SP / AP) are materialised by the caller as contributions of the parent: the engine class has no dependency between attributes;
+   (c) early `return`s of the legacy functions are decided by every later stage looking for the same contribution again (stages are pure and only carry the accumulator).
+2. **script-host exposes no `attrs` API** (`api/engine.yaml` lists events, storage, dialogue, timers, definitions, rng, num, pipeline, config). The aggregation therefore lives in the mod as pure Luau. To
+   move the fold into the engine (cached per entity and attribute, invalidated by `add_contribution`) a binding of `AggregationStage` to a Luau function would be needed: a new API, not a change of
+   existing behaviour. `definitions.declare` (shape of a definition) exists and was not needed.
+3. **Cost.** In the Luau CLI (interpreter): 14 us for one attribute with 10 active statuses, 22 us on average over 31 attributes (0.69 ms for a full recalculation of one unit), 62 us per golden case including the
+   comparison. A full recalculation per status change for an area buff on 50 units would cost ~35 ms in this implementation; the incremental recompute by calc flag (`recalc.luau`, BR-077) and the engine
+   cache are the levers (not measured here).
+4. **Numerics.** Everything the legacy code does in `int32`, `int16` narrowing returns, `uint64` and the arithmetic shift is reproduced; `u64.luau` exists only for the maximum-HP wrap-around
+   (`maxhp += (int32)bonus` as `uint64`, then `cap_value(..., 1, UINT_MAX)`).
+
+### 13.4 Findings that changed the design or the specification
+
+* The golden hook cannot be fed the server's battle.conf defaults implicitly: three values the functions read (`gvg_flee_penalty`, `bg_flee_penalty`, `rental_mount_speed_boost`) have non-zero defaults; the first
+  replay differed in hundreds of cases until the generator wrote them explicitly (it is the same class of defect as the `rules_config_refresh` finding of the weapon proof).
+* Behaviour that only the golden replay exposed (all in `BR_RULESET_CORRECTIONS.md`): `status_calc_aspd` returns 0 before it adds the passive skills when the unit has no status; `status_calc_maxhp` ignores
+  `sc == nullptr`; the maximum HP wraps to UINT_MAX for a base below the negative fixed bonus; Camouflage's DEF term reads a value nobody assigns; the re-entrance guard resets to zero.
+* `db/re/status.yml` calc flags do not cover 14 contributions of 11 statuses, even after the `status_calc_bl_main` cascade (BR-077).
+
+### 13.5 Mutation check and coverage
+
+`tools/mutation_status.py`: 51 single-expression mutants (op semantics, clamps, order, the speed and ASPD rules, the uint64 wrap, group ranks, `sc == nullptr`, conditions, narrowing, shifts, ten data
+constants, two state rules). 48 are killed by the golden replay; 3 (the ASPD potion rank in the fixed group and in the rate, the arithmetic shift) change nothing the legacy cases can observe (the aggregator
+already reduces a rank group to its best member; `& 0xFF` hides the fill bits of a shift) and are killed by direct unit tests of the stage functions and of the expression language instead.
+
+### 13.6 Not covered (and why)
+
+* `status_calc_bl_main` composition (base + stat deltas: `hit = base + dex delta + luk / 3 ...`, DEF2 / MDEF2 deltas, amotion from AGI / DEX / weapon, MATK, maximum HP of a player from the job tables), `status_calc_pc_sub`
+  item scripts and refine contributions, `status_calc_regen`: they read the finished stat values or the item bonus vocabulary (BR-098..110); the cascade of FLAGS is transcribed and tested (`recalc.luau`) but not
+  golden-validated.
+* Applying a status: rates, durations, resistance, overlap, exclusion, strip and food rules, the tick handlers (BR-052 to 064, 072): `status_change_start` / `_end` are not run by the hook. BR-054 and 057 stay
+  expected-failure.
+* `status_calc_consumablematk` has an empty body; 701 of the 1,018 renewal statuses are read by no `status_calc_*` function (they are states, options, damage-time or timer effects).
+* The scripted statuses (BR-075) are compiled to bonus-delta lists; applying the deltas is the item-bonus vocabulary.
+* Homunculus and mercenary BASE status calculation, pets, elementals.

@@ -4,6 +4,7 @@
   python3 -I tools/run_tests.py --luau [PATH]            # the Luau CLI (PATH, $LUAU, or `luau` on PATH)
   python3 -I tools/run_tests.py --luau [PATH] --report   # golden match rate by category (tests/golden_report)
   python3 -I tools/run_tests.py --luau [PATH] --bench    # replay time per case (tests/bench_weapon)
+  python3 -I tools/run_tests.py --luau [PATH] --status-report   # status golden match rate by function / category / status (tests/status_report)
 
 The Luau CLI sandboxes require()d modules, so tools/bundle_luau.py first folds every module into build/bundle_tests.luau
 (the sources use a global `import(name)`). The golden data (conformance/golden/weapon_re.jsonl.gz, recorded from the real
@@ -39,6 +40,8 @@ def main() -> int:
     subprocess.run([sys.executable, "-I", str(TOOLS / "build_golden.py")], check=True)
     exe = find_luau(args)
     entry = "tests/golden_report" if "--report" in args else ("tests/bench_weapon" if "--bench" in args else "tests/main")
+    if "--status-report" in args:
+        entry = "tests/status_report"
     out = ROOT / "build" / "bundle_tests.luau"
     subprocess.run([sys.executable, "-I", str(TOOLS / "bundle_luau.py"), entry, str(out)], check=True, stdout=subprocess.DEVNULL)
     rc = subprocess.run([exe, str(out)], cwd=ROOT).returncode

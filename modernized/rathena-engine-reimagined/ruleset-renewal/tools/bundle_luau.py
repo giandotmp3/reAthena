@@ -7,7 +7,7 @@ instead wraps every module in a function and declares `import` as a local above 
 sources untouched.
 
 usage: bundle_luau.py <entry> <out.luau> [--lib]
-  entry: tests/main | tests/golden_report | tests/bench_weapon | tests/trace_case | (with --lib) any module, e.g. scripts/formulas
+  entry: tests/main | tests/status_report | tests/golden_report | tests/bench_weapon | tests/trace_case | (with --lib) any module, e.g. scripts/formulas
   --lib: do not run the entry; leave the local `import` in scope so the caller can append code (tests/adapter.py does)
 """
 import pathlib, sys
@@ -26,7 +26,11 @@ def main():
              "\t\t__cache[name] = c\n\tend\n\treturn c\nend\n"]
     n = 0
     dirs = ["scripts", "data"] if lib else DIRS  # a library bundle carries no tests and no golden data ...
+    # the status golden data (build/status_golden_re.luau, large) goes only into the bundles that replay it
+    status_data = entry in ("tests/extra", "tests/status_report", "tests/status_trace")
     files = [p for d in dirs for p in sorted((ROOT / d).rglob("*.luau"))] + ([] if lib else sorted((ROOT / "build").glob("golden_*.luau")))
+    if status_data:
+        files += sorted((ROOT / "build").glob("status_golden_*.luau"))
     if lib:  # ... except the fake host (engine double) the package registers with, so a library caller can import("tests/support/booted")
         files += [ROOT / "tests" / "support" / "fake_host.luau", ROOT / "tests" / "support" / "booted.luau"]
     for p in files:
@@ -38,7 +42,7 @@ def main():
         out.write_text("".join(parts))
         print(f"bundle_luau: {n} modules -> {out} (library)")
         return
-    call = "()" if entry.endswith(("golden_report", "bench_weapon", "print_rule_cases", "trace_case")) else ""
+    call = "()" if entry.endswith(("golden_report", "bench_weapon", "print_rule_cases", "trace_case", "status_report", "status_trace", "status_dump")) else ""
     parts.append(f"local __code = import({entry!r}){call}\n"
                  "if __code ~= 0 then error('luau run failed: exit code ' .. tostring(__code), 0) end\n")
     out.parent.mkdir(parents=True, exist_ok=True)

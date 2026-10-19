@@ -9,11 +9,20 @@ Edits (all anchored on exact legacy text; the script aborts if an anchor is not 
   src/map/battle.cpp          - GSTAGE(...) stage probes inside battle_calc_weapon_attack (read-only
                                 observations of wd.damage/damage2) and `#include "golden_hook.inc"` at the end,
                                 so the harness can call the file-static legacy functions.
-  src/map/map.cpp             - golden_main() call after ScriptHost::run_oninit() (no-op unless RA_GOLDEN_CASES is set).
+  src/map/map.cpp             - golden_main() call after ScriptHost::run_oninit() (no-op unless RA_GOLDEN_CASES is set), then
+                                golden_status_main() (no-op unless RA_GOLDEN_ST_CASES / RA_GOLDEN_ST_CONSTS is set).
+  src/map/pc.cpp              - a push_back in pc_bonus .. pc_bonus5 into g_golden_bonus_log (null = off): the log of what a status script's `bonus` commands do.
+  src/map/status.cpp          - `#include "golden_status_hook.inc"` at the end, so the file-static status_calc_* functions can be called.
 """
 import sys, re, pathlib
 
 root = pathlib.Path(sys.argv[1])
+
+def write_if_changed(p, text):
+    """Keeps the mtime of unchanged files, so a rebuild only recompiles what the edits really changed."""
+    if p.read_text() != text:
+        p.write_text(text)
+
 
 def edit(rel, pairs):
     p = root / rel
@@ -25,7 +34,7 @@ def edit(rel, pairs):
         if n != 1:
             sys.exit(f"{rel}: anchor found {n} times (need exactly 1): {old[:70]!r}")
         s = s.replace(old, new)
-    p.write_text(s)
+    write_if_changed(p, s)
 
 # ---- random draw log ---------------------------------------------------------------------------
 edit("src/common/random.hpp", [
@@ -33,7 +42,9 @@ edit("src/common/random.hpp", [
  "inline std::mt19937 generator = std::mt19937(device());\n\n"
  "// golden generator: optional log of every draw (kind 0 = rnd(), kind 1 = rnd_value(lo, hi)); null = off\n"
  "struct GoldenRnd { int kind; long long lo, hi, val; };\n"
- "inline std::vector<GoldenRnd>* g_golden_rnd_log = nullptr;\n"),
+ "inline std::vector<GoldenRnd>* g_golden_rnd_log = nullptr;\n"
+ "// golden status generator: optional log of the pc_bonus* calls a status script makes ({argument count, type, ..., value}); null = off\n"
+ "inline std::vector<std::vector<long long>>* g_golden_bonus_log = nullptr;\n"),
 ("	std::uniform_int_distribution<T> dist(min, max);\n	return dist(generator);\n",
  "	std::uniform_int_distribution<T> dist(min, max);\n	T golden_val_ = dist(generator);\n"
  "	if (g_golden_rnd_log) g_golden_rnd_log->push_back({1, (long long)min, (long long)max, (long long)golden_val_});\n"
@@ -108,12 +119,37 @@ p = root / "src/map/battle.cpp"
 s = p.read_text()
 if "golden_hook.inc" not in s:
     s += '\n#include "golden_hook.inc" // golden generator (copy only): synthetic units + case runner\n'
-p.write_text(s)
+write_if_changed(p, s)
 
 edit("src/map/map.cpp", [
 ("	ScriptHost::run_oninit();	// Init npcs (OnInit)\n",
  "	ScriptHost::run_oninit();	// Init npcs (OnInit)\n	::golden_main(); // golden generator (no-op unless RA_GOLDEN_CASES is set)\n"),
 ("#include \"storage.hpp\"\n",
  "void golden_main(); // golden generator (copy only)\n#include \"storage.hpp\"\n"),
+])
+
+# ---- bonus log (statuses with a Script: the bonus commands they run) ------------------------------------------------------------
+def bonus_log(n, sig):
+    args = {1: "type, val", 2: "type, type2, val", 3: "type, type2, type3, val", 4: "type, type2, type3, type4, val", 5: "type, type2, type3, type4, type5, val"}[n]
+    return (sig + "\n{\n", sig + "\n{\n\tif( g_golden_bonus_log ) g_golden_bonus_log->push_back( { " + str(n) + "LL, " + ", ".join(f"(long long){a.strip()}" for a in args.split(",")) + " } );\n")
+edit("src/map/pc.cpp", [
+    bonus_log(1, "void pc_bonus(map_session_data *sd,int32 type,int32 val)"),
+    bonus_log(2, "void pc_bonus2(map_session_data *sd,int32 type,int32 type2,int32 val)"),
+    bonus_log(3, "void pc_bonus3(map_session_data *sd,int32 type,int32 type2,int32 type3,int32 val)"),
+    bonus_log(4, "void pc_bonus4(map_session_data *sd,int32 type,int32 type2,int32 type3,int32 type4,int32 val)"),
+    bonus_log(5, "void pc_bonus5(map_session_data *sd,int32 type,int32 type2,int32 type3,int32 type4,int32 type5,int32 val)"),
+])
+
+# ---- status calculation hook (golden_status_hook.inc, generated golden_status_sc.inc / golden_status_consts.inc) ----------------
+p = root / "src/map/status.cpp"
+s = p.read_text()
+if "golden_status_hook.inc" not in s:
+    s += '\n#include "golden_status_hook.inc" // golden generator (copy only): synthetic units + status_calc_* runner\n'
+write_if_changed(p, s)
+edit("src/map/map.cpp", [
+("	::golden_main(); // golden generator (no-op unless RA_GOLDEN_CASES is set)\n",
+ "	::golden_main(); // golden generator (no-op unless RA_GOLDEN_CASES is set)\n	::golden_status_main(); // status calculation golden (no-op unless RA_GOLDEN_ST_CASES / RA_GOLDEN_ST_CONSTS is set)\n"),
+("void golden_main(); // golden generator (copy only)\n",
+ "void golden_main(); // golden generator (copy only)\nvoid golden_status_main(); // status calculation golden (copy only)\n"),
 ])
 print("edits applied")

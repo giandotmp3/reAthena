@@ -6,6 +6,7 @@
                                                  # build/bundle_tests.luau first (the CLI sandboxes require()d modules, so the
                                                  # `import` global the sources use cannot reach them otherwise)
   python3 -I tools/run_tests.py --luau [PATH] --report     # golden match rate by category (tests/golden_report)
+  python3 -I tools/run_tests.py --luau [PATH] --status-report [--full]   # status golden: match rate by function, category and status + contribution coverage
 
 Both runners execute the same tests/main.luau. The golden data (conformance/golden/*.jsonl.gz, recorded from the real legacy
 code) is expanded into build/golden_weapon_pre.luau first (tools/build_golden.py).
@@ -45,10 +46,11 @@ def run_luau(args):
     exe = path or os.environ.get("LUAU") or shutil.which("luau")
     if not exe:
         sys.exit("run_tests: Luau CLI not found (pass --luau PATH or set $LUAU)")
-    entry = "tests/golden_report" if "--report" in args else "tests/main"
+    entry = "tests/status_golden_report" if "--status-report" in args else "tests/golden_report" if "--report" in args else "tests/main"
     out = ROOT / "build" / "bundle_tests.luau"
     subprocess.run([sys.executable, "-I", str(TOOLS / "bundle_luau.py"), entry, str(out)], check=True, stdout=subprocess.DEVNULL)
-    rc = subprocess.run([exe, str(out)], cwd=ROOT).returncode
+    extra_args = ["full"] if "--full" in args else []   # (--status-report --full: every status, not only the mismatching ones)
+    rc = subprocess.run([exe, str(out)] + extra_args, cwd=ROOT).returncode
     if entry == "tests/main":  # the extra suite (tests/extra.luau) runs after the main one, in its own process
         out2 = ROOT / "build" / "bundle_extra.luau"
         subprocess.run([sys.executable, "-I", str(TOOLS / "bundle_luau.py"), "tests/extra", str(out2)], check=True, stdout=subprocess.DEVNULL)

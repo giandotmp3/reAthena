@@ -77,6 +77,68 @@ against undead-element or demon monsters only. Evidence: `mastery_atk` 150.
 **BR-RULESET-102 (legacy defect, new).** `indexed_bonus.weapon_damage_rate` has 16 slots (`pc.hpp:577`) but is indexed by the weapon type (0..23): types 16..23 (katar, revolver, rifle, gatling, shotgun, grenade, huuma, 2h staff)
 read `indexed_bonus.arrow_addele[type - 16]`, the next member. For gun users a card that adds Water element damage to arrows therefore also raises the weapon damage. Reproduced (`gun_wdr_alias` 60); needs the `legacy_quirks` flag.
 
+## Status layer: corrections and additions (BR-RULESET-051, 065 to 077)
+
+Found while replaying the declarative status layer against the real `status_calc_*` functions (`conformance/golden/status_re.jsonl.gz`: 31,470 cases, 85,178 outputs; evidence column = the golden category or
+worked example, the legacy line is `src/map/status.cpp` unless stated). `BR_RULESET.md` itself is **not** edited.
+
+**BR-RULESET-051 (record, Q-F).** Confirmed: 1,018 renewal records, 697 shared with the 699 pre-renewal ones (462 identical, 66 %). The status database never names `val1..val4`; `docs/STATUS_FIELDS.md` does, for the 321
+statuses with behaviour (247 have at least one named slot, 385 named slots). Two slots are shared by two meanings: `SC_BEYONDOFWARCRY.val3` is both the MaxHP reduction and an addition to the critical value (7550, 3281), and
+`SC_CHASEWALK.val3` is a speed value whose sign selects a different branch (8085). One slot is never assigned: `SC_CAMOUFLAGE.val3` (read by 7843 and 7927 as a DEF percentage; `status_change_start` 11970 sets only `val4`,
+`camouflage.cpp:29` passes only `val1`), so Camouflage never lowers DEF. A save-format migration is not needed: names are an overlay on the same four integers.
+
+**BR-RULESET-065 (stats).** The list is not STR..CRT only: it is the six primary stats plus the six renewal trait stats (POW STA WIS SPL CON CRT, one or two statuses each), all capped 0..65535. Evidence: `single`,
+`pair`, `override`. Additions: (a) Harmonize is the FIRST statement of every primary-stat function and returns the capped `stat - val2`; (b) `SC_CURSE` returns 0 for LUK (7144) before any later term, after Harmonize;
+(c) `SC_BLESSING.val2 == 0` (demon / undead targets) HALVES the stat with `x -= x / 2` instead of adding `val2` (worked example "Blessing halves the stat", 81 -> 41, 80 -> 40); (d) Improve Concentration adds
+`(stat - itembonus) * pct / 100`, where `itembonus` (`val3` for AGI, `val4` for DEX) is the player's item bonus captured at start, and is VOID while Quagmire is active (6857, 7069); (e) Marionette / Spirit lend three stats
+packed in `val3` / `val4` as `STR << 16 | AGI << 8 | VIT` (arithmetic shift of an int32, so a negative value would sign-extend into bits the `& 0xFF` removes); (f) a rate term multiplies the running value, so the
+order of statements matters (`stat order` worked example: +3 Cheer Up before or after +20 % Full Throttle changes the result), which is why every contribution carries the legacy line as its order key.
+
+**BR-RULESET-066 (DEF / DEF2).** Confirmed: Berserk and Eternal Chaos (RE) return 0, Keeping returns 90 (DEF only), Steel Body gives NO DEF in renewal, DEF2 may be negative. Corrections / additions: Eternal Chaos
+returns 0 for DEF2 as well (7889), Defset returns `val1` narrowed to int16 (`defType`): a value above 32767 wraps (33000 -> -32536, worked example), Nyanggrass returns 0 for players and `def / 2` for everyone else
+WITHOUT the int16 cap (7786); Provoke, Strip Shield and Poison lower the hard DEF of NON-players only but Provoke and Poison lower DEF2 for everyone (7825, 7912, 7817, 7908); the Renewal Angelus term of DEF2 is
+`vit / 2 * val2 / 100` of the unit's battle VIT, not of DEF2 (7900); MDEF2: Berserk 0, `SC_SKA` 90.
+
+**BR-RULESET-067 (speed).** E-4b is exactly right (150 with Quagmire and Increase AGI -> 187, `worked`). The model is more detailed than the rule text: `speed_rate = 100 - mount + slow - haste`, with `mount` =
+Fusion 25, or (players) riding / dragon 25, Warg rider `15 + 5 * lv`, rental mount `rental_mount_speed_boost` (8073-8085); `slow` = the maximum of ~30 statuses, except two special FIRST branches that replace the
+group (Hiding with Tunnel Drive `120 - 6 * lv`, Chase Walk with a negative `val3`), and Ensemble Fatigue before the player's dance penalty `500 - (40 + 10 * bard_link) * lesson`; the slow group is capped at 150 under Marsh
+of Abyss; `haste` = the maximum of ~30 statuses, the Dodge passive (TF_MISS) of the Assassin line and the negative item speed; the floor 40 applies after the haste; Free Cast or Exceed
+Break replace the whole rate by `175 - 5 * lv` / `160 - 10 * lv` and skip the groups AND the floor. After the rate: cart `speed += speed * (50 - 5 * Pushcart lv) / 100`, Paralysis +50 %, `speed * rate / 100`,
+Steel Body = 200, Defender / Armor `max(speed, 200)`, Walk Speed `speed * 100 / val1`, cap 20..1000. Madogear ignores all statuses: `+50 - 10 * license` % (-25 at level 5), -25 with Acceleration. `permanent_speed` and
+`sc == nullptr` skip everything. Evidence: `speed_facts`, `facts`, `worked`.
+
+**BR-RULESET-068 (ASPD, RENEWAL_ASPD).** Correction of the names: the quicken group of 7 is Two-Hand Quicken, One-Hand Quicken, Mercenary Quicken, **Adrenaline Rush** (`SC_ADRENALINE`) and Spear Quicken; **Full
+Adrenaline Rush** (`SC_ADRENALINE2`) is 6 and Fleet 5 (8270-8274); none of them while Quagmire is active; Assassin Cross of Sunset ADDS its `val2` when `bonus < val2` (no weapon test in renewal); Madness Cancel 20 and
+Berserk 15 are assignments when the running bonus is lower; of the ASPD potions only the strongest present one (3 > 2 > 1 > 0) adds its `val1` (8306). The percent group is a plain sum narrowed to int16, and the
+player's Musical / Dancing Lesson and Plagiarism levels are added only when the unit has some status: `if (sc == nullptr || sc->empty()) return 0` comes first (8262; the golden category `facts` found it). `aspd_rate`
+(1000 = 100 %, used by non-players) takes the best of the quicken family through `max < val` comparisons with Star Comfort as an unconditional assignment first. `fix_aspd` returns a fixed value under Overed Boost.
+
+**BR-RULESET-069 (the other stats).** (a) Maximum HP / SP / AP are `uint64` computations: `maxhp += (int32 bonus)` wraps modulo 2^64 when a negative fixed bonus (Marionette -1000, a negative `bonus_hp`) exceeds the
+value, and the final `cap_value(maxhp, 1, UINT_MAX)` then returns UINT_MAX (a 500 HP monster under Marionette has 4,294,967,295 HP; worked example, category `wrap`: 259 of 480 cases). The rate bonus is capped at -100
+before `rate += 100`. These functions read the status set themselves (`status_get_hpbonus`), so `sc == nullptr` does not remove statuses from them. (b) FLEE: for players the GvG / battleground penalty is applied before
+anything else, even without a status; Poison Mist returns 0 and Overed Boost returns its `val2` ahead of every term; fixed terms precede the rate terms except Saturday Night Fever, which subtracts a fixed amount in
+the middle of the rate block. (c) Minimums: CRI 10, HIT 1, FLEE 1, FLEE2 10, P.ATK / S.MATK / RES / MRES / H.PLUS / C.RATE 0..32767. (d) The flat MATK of Transcendence is added before the `sc == nullptr` test.
+
+**BR-RULESET-071 (overrides).** The first applicable statement in code order returns: defense element (Freeze / Crystal Armor option water, Stone / Strong Protection earth, ... Elemental Change, Shape Shift), element
+level (1 for most, `val1` for Elemental Change), attack element (Enchant Arms first, then water, earth, fire, wind, poison, holy, dark, ghost, tidal), mode (`MODECHANGE`: replace the bits under `MD_MASK` with `val2`,
+add `val3`, remove `val4`, each only when non-zero). The unsigned-char results wrap (`val1` above 255).
+
+**BR-RULESET-073 (states).** `status_calc_state` is a union over the active set: 75 records list states, 9 of them conditional (`NOMOVECOND`, `NOCASTCOND`, `NOCHATCOND`, `NOPICKITEMCOND`, `NODROPITEMCOND`,
+`NOCONSUMEITEMCOND`: Hiding, Gospel, Dancing, Fear, Camouflage, Crystallize, Wink Charm, Oblivion Curse, No Chat). A conditional state without a condition is never restrictive, and an unconditional flag on the same
+status makes the conditional one dead code (Dancing: `NOATTACK` is unconditional, so the attack rule of the lambda is never consulted). Pick-up, drop, equip, unequip, consume, death penalty and interact apply to
+players only. Evidence: `states` (6,138 cases, every sc_type) and 13 named worked examples.
+
+**BR-RULESET-075 (scripts).** 168 renewal statuses carry a script, all in the subset `bonus[2..4] name, args;` / `.@v = expr;` / `if (!getstatus(SC_X)) { ... }` with `getstatus(SC_X, n)` reading the n-th val of a
+status: they are status contributions expressed as bonus deltas through the SAME val slots. `scripts/status/bonus_scripts.luau` compiles them to delta lists; applying the deltas is the item-bonus vocabulary
+(BR-RULESET-098..110), not covered here.
+
+**BR-RULESET-077 (recalculation).** (a) The re-entrance guard is a static counter that every call raises (`if (++calculating > 10) return -1`, 3784), that a call which runs to the end resets to ZERO (5012), and that the
+outer call tests after each item script (`if (!calculating) return 1`): a nested recalculation that completes makes the outer one abort; a refused call leaves the counter raised. (b) Calc flags select the recomputation
+and `status_calc_bl_main` cascades them (STR -> BATK, AGI -> FLEE / DEF2 / ASPD, VIT -> DEF2 / MDEF2 / MAXHP, LUK -> BATK CRI FLEE2 and, in renewal, MATK HIT FLEE, ...). (c) **Data gaps in `db/re/status.yml`:** 14
+contributions of 11 statuses are not covered by their own calc flags even after the cascade, so starting or ending the status does not recompute that stat until something else does: Angriffs Modus (WATK), Attack
+Stance (PATK, SMATK), Beyond of Warcry (CRI), Burning (MDEF2), Camouflage (DEF, DEF2), Crossbow Clan (DEX), Defset (DEF2), Mdefset (MDEF2), Party Flee (FLEE: no calc flag at all), Tidal Weapon (ATK_ELE, WATK),
+Invisibility (DEF_ELE for the element level); Marionette's -1000 HP is reachable only through VIT for players (a monster has no MAXHP cascade from VIT). Test: `tests/acceptance/status_define_test.luau`.
+
 ## Latent gaps found in the pre-renewal package (shared legacy code the PRE golden set never exercised)
 
 * `battle_add_weapon_damage` is shared by both modes and applies `weapon_damage_rate`; `ruleset-prerenewal/scripts/damage/weapon.luau` implements only the over-refine part.

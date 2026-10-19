@@ -11,6 +11,10 @@ tree in a scratch directory; the repository's legacy sources are never modified.
 | `golden_hook.inc` | included at the end of `battle.cpp` (so it can call the file-static legacy functions): builds synthetic `map_session_data` / `mob_data` units with explicit status data, seeds the RNG, calls `battle_calc_attack(BF_WEAPON, ...)` |
 | `golden_stage.hpp` | the stage-probe macro `GSTAGE(name, damage, damage2)` (byte-identical to the pre-renewal one) |
 | `gen_cases.py` | builds the cases, runs the server once (10 s for 8,858 cases), writes `../golden/weapon_re.jsonl.gz` |
+| `golden_status_hook.inc` | the status hook: included at the end of `status.cpp` (so it can call the file-static `status_calc_*`), builds a synthetic player / monster / homunculus with explicit facts and an explicit status set `{sc_type, val1..val4}` and calls the real functions; see "Status golden" below |
+| `enum_statuses.py` | parses `status.cpp` (RENEWAL branches) and lists which statuses each `status_calc_*` function references (317 statuses, 40 functions; `docs/STATUS_ENUMERATION.md`); also writes the `sc_type` name table the hook includes |
+| `gen_status_cases.py` | builds the status cases from that list, runs the server once (about 10 s for 31,000 cases) and writes `../golden/status_re.jsonl.gz` |
+| `gen_status_consts.py` | writes `scripts/status/consts.luau` from the constants dump of the binary (`RA_GOLDEN_ST_DUMP`) |
 | `gen_tables.py` | generates `data/damage_tables.luau` from `db/re` + `db/size_fix.yml` and cross-checks it, and `data/damage_cfg.luau`, against what the binary loaded (400 element cells, 24 weapon rows, 22 battle config values) |
 
 ```sh
@@ -21,6 +25,31 @@ python3 -I conformance/golden_gen/gen_cases.py --server $SCRATCH/golden-re/rA --
 GOLDEN_SRC=/tmp/fuzz.jsonl.gz python3 -I tools/build_golden.py --force && LUAU=<luau> python3 -I tools/run_tests.py --report
 ```
 
+## Status golden (`golden_status_hook.inc`)
+
+Same copy, same binary: `RA_GOLDEN_ST_CASES=<cases> RA_GOLDEN_ST_OUT=<out> map-server --run-once` runs `golden_status_main()` before `golden_main()`. The hook is included at the end of
+`status.cpp`, so the functions under test are the real static ones: `status_calc_str agi vit int dex luk pow sta wis spl con crt batk watk hit critical flee flee2 def def2 mdef mdef2
+speed aspd (fixed and percent) fix_aspd aspd_rate patk smatk res mres hplus crate maxhp maxsp maxap element element_lv attack_element mode` and `status_calc_pseudobuff_matk`, plus
+`status_calc_state` (the `sc->cant` restrictions) for every one of the 1,025 `sc_type` values. A case is one unit (`bl=0` player, `1` monster, `2` homunculus) with explicit facts
+(`vit`, `weapon`, `sex`, `class_`, `option` bits, `perm_speed`, `skilltimer`, `ud_skill_*`, `bonus_*`, `map` 0/1 GvG/2 battleground, `cfg.*` battle.conf values, `skill.NAME=lv`),
+`sc.SC_NAME=v1,v2,v3,v4` entries and `in.<function>=value` inputs; `nosc=1` passes `sc == nullptr`. Nothing is derived. Output: `id=N fn=value ...` (and `states=<bit mask>`).
+The battle.conf values the functions read (`gvg_flee_penalty` 20, `bg_flee_penalty` 20, `rental_mount_speed_boost`) are ALWAYS written explicitly: the hook would otherwise keep the
+server's defaults (found while bringing up the replay: several hundred cases differed because a Luau default of 0 met a binary default of 20).
+
+Categories (31,470 cases at the committed seed, `gen_status_cases.py` header): `single` (every referenced status x player / monster / homunculus x ten val patterns: a level series,
+the values the source's conditions compare with, random), `pair_site` (statuses read by one statement) and `pair` (a sample per function), `override` (the statuses that `return`
+early against random others), `combo` (2..12 statuses), `extreme` (negative and out-of-clamp inputs), `facts` and `speed_facts` (mounts, skills, items, cart, Madogear, Free Cast, GvG,
+maximum HP / SP / AP bonuses), `wrap` (uint64 wrap-around of the maximum HP), `clamp` (the edges of every function's range), `worked` (E-4b and the named semantic points the tests
+pin), `states` and `states_combo`. Intermediate int32 overflows are undefined behaviour in the legacy C++, so the generator keeps products inside int32 (the replay counts overflow
+cases: 0).
+
+```sh
+conformance/golden_gen/build.sh $SCRATCH/golden-st-re                       # once (the same build as above)
+python3 -I conformance/golden_gen/gen_status_cases.py --server $SCRATCH/golden-st-re/rA        # rewrites conformance/golden/status_re.jsonl.gz, byte-identical for the seed
+python3 -I tools/run_tests.py --luau <luau> --status-report                  # match rate by function, category and status + contribution coverage
+python3 -I tools/mutation_status.py --luau <luau>                            # 51 mutants of scripts/status
+```
+
 ## What the copy is changed to do (all read-only observations of the original code path)
 
 * `random.hpp/.cpp`: an optional log of every `rnd()` / `rnd_value(lo, hi)` result (no effect on the stream). Identical to the pre-renewal edit.
@@ -29,7 +58,8 @@ GOLDEN_SRC=/tmp/fuzz.jsonl.gz python3 -I tools/build_golden.py --force && LUAU=<
   the constant addition, RES, the DEF reduction, post-DEF, the element step, the crit multiplier, the target card fix, hands, map rates, final; plus
   the float32 weapon ATK range actually rolled in (`watk_mm`), the final hit rate and crit chance compared with the draw, the DEF values used, the
   weapon elements. 34 distinct probe names; they fix the stage order of `scripts/pipeline.luau` (`tests/acceptance/weapon_golden_test.luau`).
-* `map.cpp`: `golden_main()` is called after `ScriptHost::run_oninit()` (a no-op unless `RA_GOLDEN_CASES` is set).
+* `map.cpp`: `golden_main()` is called after `ScriptHost::run_oninit()` (a no-op unless `RA_GOLDEN_CASES` is set); `golden_status_main()` before it (a no-op unless `RA_GOLDEN_ST_CASES` or `RA_GOLDEN_ST_DUMP` is set).
+* `status.cpp`: `#include "golden_status_hook.inc"` at the very end (read-only calls of the static functions; `golden_status_table.inc`, the sc_type name table, is generated by `enum_statuses.py --table`).
 
 Differences from the pre-renewal hook (`golden_hook.inc`, 303 code lines, 261 of them shared with the pre-renewal one):
 

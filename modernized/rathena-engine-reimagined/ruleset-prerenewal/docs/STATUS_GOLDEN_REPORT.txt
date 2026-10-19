@@ -1,0 +1,76 @@
+Error opening ./full
+-- by function
+  agi             242 / 242    
+  aspd_rate       543 / 543    
+  atk_element     252 / 252    
+  batk            184 / 184    
+  chain           981 / 981    
+  con             147 / 147    
+  crate           143 / 143    
+  cri             175 / 175    
+  crt             147 / 147    
+  def             366 / 366    
+  def2            218 / 218    
+  dex             242 / 242    
+  element         217 / 217    
+  element_lv      223 / 223    
+  fix_aspd        174 / 174    
+  flee            486 / 486    
+  flee2           153 / 153    
+  hit             224 / 224    
+  hp_fix          342 / 342    
+  hp_rate         282 / 282    
+  hplus           143 / 143    
+  int             246 / 246    
+  luk             226 / 226    
+  matk            284 / 284    
+  maxhp           428 / 428    
+  maxsp           311 / 311    
+  mdef            224 / 224    
+  mdef2           172 / 172    
+  mode            222 / 222    
+  mres            155 / 155    
+  patk            183 / 183    
+  pow             147 / 147    
+  res             171 / 171    
+  script          537 / 537    
+  smatk           179 / 179    
+  sp_fix          240 / 240    
+  sp_rate         240 / 240    
+  speed          1420 / 1420   
+  spl             147 / 147    
+  sta             147 / 147    
+  state           500 / 500    
+  str             241 / 241    
+  vit             226 / 226    
+  watk            423 / 423    
+  wis             147 / 147    
+-- by category
+  all               252 / 252    
+  aspd_struct       220 / 220    
+  chain             900 / 900    
+  chain_extreme      80 / 80     
+  clamp            1050 / 1050   
+  empty             303 / 303    
+  flee_struct       160 / 160    
+  matk_struct        90 / 90     
+  max_neg            20 / 20     
+  max_struct        240 / 240    
+  mode_struct        80 / 80     
+  multi            1704 / 1704   
+  override          192 / 192    
+  pair             2680 / 2680   
+  pc_bonus          180 / 180    
+  quirk               7 / 7      
+  script            335 / 335    
+  script_combo      200 / 200    
+  single           2728 / 2728   
+  single_unit       320 / 320    
+  speed_struct      700 / 700    
+  state             498 / 498    
+  watk_struct       140 / 140    
+  worked             21 / 21     
+-- by status: 435 statuses appear in the cases, 0 with a mismatch
+-- entry coverage: 603 of 606 contributions fire in at least one golden case; never fired: DEFENCE.def@7802 OVERED_BOOST.def@7854 PYROCLASTIC.batk@7332
+golden status_pre: 13100 / 13100 matched (100.00%), 0 runtime errors
+  load 0.01s, replay 0.24s (18.1 us/case)

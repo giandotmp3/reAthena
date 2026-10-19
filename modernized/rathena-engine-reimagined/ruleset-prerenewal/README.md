@@ -19,7 +19,10 @@ Stack: Luau package (`mod.toml`, `scripts/`, `data/`, `types/*.d.luau`), checked
   (documented in the header of `weapon.luau`: injected `rng`, truncating `idiv` / `mul_div`, int64 accumulators). The 15 stage bodies
   are `weapon.STAGES.*` (registered with the engine by `weapon.register`); `calc_attack` builds the attack state, runs the prelude
   (lucky dodge, crit, hit) and calls `pipeline.run("weapon", S, ...)`. `rules/damage.luau` calls the pure stage functions.
-- `data/`: PROVISIONAL starter statuses, skills, items, resistance, tables. `rathena-migrate` overwrites them.
+- `scripts/status/`: the declarative **status layer** (stat aggregation, speed / ASPD, element / mode, states, scripted statuses, recalculation),
+  validated against the real legacy `status_calc_*` functions (see "Status layer" below and `docs/STATUS_AGGREGATION.md`).
+- `data/status_records.luau`: the 699 status records of `db/pre-re/status.yml` (generated from the migrated database, cross-checked against the
+  real loader). `data/`: PROVISIONAL starter statuses, skills, items, resistance, tables. `rathena-migrate` overwrites them.
   `damage_tables.luau` (element matrix, size modifiers) is generated from `db/pre-re` and cross-checked against the legacy binary;
   `damage_cfg.luau` holds the `conf/battle` tunables the weapon pipeline reads.
 - `conformance/`: cases keyed by BR-RULESET ID (`cases/*.luau`), `required.luau`, `pending.luau`, `golden/` (recorded legacy
@@ -32,6 +35,19 @@ Stack: Luau package (`mod.toml`, `scripts/`, `data/`, `types/*.d.luau`), checked
   `scripts/init.luau` registers the package with the real globals when it loads.
 - `tools/`: `run_tests.py` (lupa or `--luau`), `build_golden.py`, `bundle_luau.py`.
 
+## Status layer (`scripts/status/`)
+
+`status.define(name, { fields = {val1 = "lv", val2 = "agi_inc"}, contributes = { agi = { {at = 6882, op = "add", v = fn} } }, ... })` is the front
+end; the aggregator (`aggregate.luau`) builds the ordered contribution list of an attribute from the active set and folds it with the attribute's
+stage list (`attrs.luau`). 319 statuses are defined (`defs/*.luau` first draft generated from `status.cpp` by `conformance/golden_gen/st_gen_defs.py`, then
+maintained by hand together with `defs_hand.luau`); every contribution carries `at = status.cpp line`, the citation and the evaluation order.
+`speed.luau`, `aspd.luau`, `mode.luau`, `maxhp.luau`, `states.luau`, `scripted.luau`, `chain.luau` (`status_calc_bl_main`), `recalc.luau`,
+`engine_model.luau` (the same value from engine-core `Contribution{source, tag, value}` records), `ops.luau`, `consts.luau` (generated from the
+legacy build). `docs/STATUS_FIELDS.md` answers Q-F (names of `val1..val4`). Golden: `conformance/golden/status_pre.jsonl.gz` (13,100 cases recorded from
+the real code, strict `PRERE` build; `conformance/golden_gen/gen_status_cases.py`), replayed by `tests/acceptance/status_golden_test.luau`
+(`python3 -I tools/run_tests.py --luau X --status-report` prints the match rate by function, category and status, and the contribution coverage).
+`tools/mutation_status.py --luau X` breaks the Luau in 45 ways; every mutant must fail the replay.
+
 ## Assigned rules (109)
 
 BR-RULESET rules marked PRE or B in 001-110, minus RE-only 009, 010, 011, 019, 025, 034, 054,
@@ -41,10 +57,10 @@ Worked examples E-1, E-3, E-4, E-4b, E-5, E-6, E-7, E-8, E-10 (PRE branch) are e
 
 ## Test status
 
-Implemented and passing: BR-RULESET-018, 118, 119. The other 106 are expected-failure, tagged with
-the rule ID in `conformance/pending.luau`. `python3 -I tools/run_tests.py` (plain Lua through lupa) and `--luau` both give
-115 pass / 86 expected-failure (before the pipeline runtime work: 96 / 86): the new tests are the pipeline API and the
-`legacy_quirks` behaviour. An expected-failure test that passes (XPASS) fails the run,
+Implemented and passing: the basic attack rules (see the header of `conformance/pending.luau`), 118, 119 and, with the status layer, BR-RULESET-051, 065, 066, 067, 068, 069,
+071, 073, 075, 077. The rest are expected-failure, tagged with the rule ID in `conformance/pending.luau`. `python3 -I tools/run_tests.py` (plain Lua through lupa) and `--luau`
+run the main suite (**106 pass / 76 expected-failure**; it was 96 / 86 before the ten status rules landed) and the extra suite (`tests/extra.luau`: pipeline API,
+`legacy_quirks`, the status golden replay and quirks: 92 tests, all pass). An expected-failure test that passes (XPASS) fails the run,
 so remove the ID from `pending.luau` when the rule lands. Cases with `expected = nil` still need a
 golden-trace recording.
 
