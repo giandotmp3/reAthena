@@ -143,7 +143,7 @@ void Sim::client_close(int session) {
 void Sim::send(Session& s, const wire::Bytes& frame) {
   if (s.idx < 0) return;
   char buf[64];
-  std::snprintf(buf, sizeof buf, "out s=%d %04x/%zu h=%016llx", s.idx, frame.size() >= 2 ? wire::get16(frame, 0) : 0u, frame.size(),
+  std::snprintf(buf, sizeof buf, "out s=%d %04x/%zu h=%016llx", s.idx, frame.size() >= 2 ? static_cast<unsigned>(frame[0] | frame[1] << 8) : 0u, frame.size(),
                 static_cast<unsigned long long>(fnv_bytes(frame)));
   trace(buf);
   s.out.insert(s.out.end(), frame.begin(), frame.end());
@@ -175,7 +175,7 @@ void Sim::drop_session(Session& s, const std::string& why) {
       for (uint32_t g : watchers) {
         if (Unit* v = unit_of_gid(g)) {
           v->view.erase(s.gid);
-          if (Session* vs = session_of_gid(g)) send(*vs, wire::zc_notify_vanish(s.gid, 3));  // 3: logged out
+          if (Session* vs = session_of_gid(g)) send(*vs, "ZC_NOTIFY_VANISH", {{"gid", wire::I(s.gid)}, {"type", wire::I(3)}});  // 3: logged out
         }
       }
       spatial_->remove(u->ent);
@@ -212,10 +212,23 @@ void Sim::process_inbound(Session& s) {
       drop_session(s, "packet " + entry.name + " is not valid in this session phase");
       return;
     }
-    auto pkt = wire::decode(frame, wire::Dir::C2S);
-    if (!pkt) { trace("in s=" + std::to_string(s.idx) + " " + entry.name + " not interpreted by the sim"); continue; }
-    handle_frame(s, *pkt);
+    if (!handled_packet(entry.name)) { trace("in s=" + std::to_string(s.idx) + " " + entry.name + " not interpreted by the sim"); continue; }
+    netproto::DecodedPacket decoded;
+    if (const netproto::CodecErrc e = codec_->try_decode(frame, netproto::Direction::ClientToServer, decoded); e != netproto::CodecErrc::kOk) {
+      drop_session(s, std::string("malformed ") + entry.name + ": " + netproto::to_string(e));
+      return;
+    }
+    handle_frame(s, wire::make_packet(std::move(decoded), frame, r.opcode));
   }
+}
+
+// The client packets the sim answers (names are netproto's). Any other packet of the catalog is legal on the wire,
+// is gated and counted like the rest, and then ignored.
+bool Sim::handled_packet(const std::string& name) {
+  static const std::set<std::string> names = {"CZ_ENTER", "CZ_NOTIFY_ACTORINIT", "CZ_REQUEST_MOVE", "CZ_REQUEST_CHAT", "CZ_CONTACTNPC",
+                                              "CZ_REQUEST_TIME", "CZ_REQ_NEXT_SCRIPT", "CZ_CHOOSE_MENU", "CZ_CLOSE_DIALOG",
+                                              "CZ_INPUT_EDITDLG", "CZ_INPUT_EDITDLGSTR", "CZ_REQUEST_ACT2", "CZ_USE_SKILL2"};
+  return names.count(name) != 0;
 }
 
 void Sim::handle_frame(Session& s, const wire::Packet& p) {
@@ -224,28 +237,25 @@ void Sim::handle_frame(Session& s, const wire::Packet& p) {
   if (p.name == "CZ_REQUEST_MOVE") return on_walk(s, p);
   if (p.name == "CZ_REQUEST_CHAT") return on_chat(s, p);
   if (p.name == "CZ_CONTACTNPC") return on_click_npc(s, p);
-  if (p.name == "CZ_REQUEST_TIME") return send(s, wire::zc_notify_time(server_tick()));
+  if (p.name == "CZ_REQUEST_TIME") return send(s, "ZC_NOTIFY_TIME", {{"time", wire::I(server_tick())}});
   if (p.name == "CZ_REQ_NEXT_SCRIPT" || p.name == "CZ_CHOOSE_MENU" || p.name == "CZ_CLOSE_DIALOG" || p.name == "CZ_INPUT_EDITDLG" ||
       p.name == "CZ_INPUT_EDITDLGSTR")
     return on_dialogue_reply(s, p);
   if (p.name == "CZ_REQUEST_ACT2") return on_act(s, p);
-  if (p.name == "CZ_USE_SKILL") return on_skill(s, p);
+  if (p.name == "CZ_USE_SKILL2") return on_skill(s, p);
 }
 
 void Sim::on_connect(Session& s, const wire::Packet& p) {
-  netproto::ConnectPacket cp;
-  cp.account_id = p.num("aid");
-  cp.char_id = p.num("cid");
-  cp.login_id1 = static_cast<uint32_t>(p.num("login_id1"));
-  cp.client_tick = static_cast<uint32_t>(p.num("tick"));
-  cp.sex = static_cast<uint8_t>(p.num("sex"));
+  const auto parsed = netproto::connect_packet_from(p);  // the catalog's CZ_ENTER members, nothing hard-coded here
+  if (!parsed) { drop_session(s, "connect refused"); return; }
+  const netproto::ConnectPacket cp = *parsed;
   bool already = false;
   for (auto& o : sessions_)
     if (o->online && o->aid == static_cast<uint32_t>(cp.account_id) && o->idx != s.idx) already = true;
-  const auto expected = static_cast<size_t>(wire::find(0x0436, wire::Dir::C2S)->len);
+  const auto expected = static_cast<size_t>(c2s_.at(p.opcode).length.fixed_size);
   auto err = netproto::validate_connect(p.raw.size(), expected, cp, already);
   if (err != netproto::ConnectError::kNone) {
-    if (err != netproto::ConnectError::kAlreadyLoggedIn) send(s, wire::zc_refuse_enter(netproto::refusal_code(err)));
+    if (err != netproto::ConnectError::kAlreadyLoggedIn) send(s, "ZC_REFUSE_ENTER", {{"errorCode", wire::I(netproto::refusal_code(err))}});
     drop_session(s, "connect refused");
     return;
   }
@@ -276,7 +286,8 @@ void Sim::on_connect(Session& s, const wire::Packet& p) {
   s.online = true;
   s.phase = netproto::Phase::PreMapLoad;
   trace("connect s=" + std::to_string(s.idx) + " aid=" + std::to_string(s.aid) + " gid=" + std::to_string(s.gid));
-  send(s, wire::zc_accept_enter(server_tick(), static_cast<uint16_t>(x), static_cast<uint16_t>(y), 0));
+  send(s, "ZC_ACCEPT_ENTER", {{"startTime", wire::I(server_tick())}, {"posDir", netproto::Pos3{static_cast<uint16_t>(x), static_cast<uint16_t>(y), 0}},
+                               {"xSize", wire::I(5)}, {"ySize", wire::I(5)}, {"font", wire::I(0)}});
 }
 
 void Sim::on_actorinit(Session& s) {
@@ -292,21 +303,23 @@ void Sim::on_actorinit(Session& s) {
 void Sim::on_walk(Session& s, const wire::Packet& p) {
   Unit* u = unit_of_gid(s.gid);
   if (!u) return;
-  const int x = static_cast<int>(p.num("x")), y = static_cast<int>(p.num("y"));
+  const netproto::Pos3 dest = p.pos3("pos");
+  const int x = dest.x, y = dest.y;
   auto pos = position_of(s.gid);
   if (!grid_->in_bounds(x, y) || !movement_->request_walk(u->ent, {x, y}).accepted) {
-    send(s, wire::zc_stopmove(s.gid, static_cast<uint16_t>(pos->x), static_cast<uint16_t>(pos->y)));  // legacy: clif_fixpos
+    send(s, "ZC_STOPMOVE", {{"AID", wire::I(s.gid)}, {"xPos", wire::I(pos->x)}, {"yPos", wire::I(pos->y)}});  // legacy: clif_fixpos
     return;
   }
   if (!movement_->walking(u->ent)) return;  // already there
   u->dest = {x, y};
   u->walking = true;
   if (std::find(walkers_.begin(), walkers_.end(), s.gid) == walkers_.end()) walkers_.push_back(s.gid);
-  send(s, wire::zc_notify_playermove(server_tick(), static_cast<uint16_t>(pos->x), static_cast<uint16_t>(pos->y),
-                                     static_cast<uint16_t>(x), static_cast<uint16_t>(y)));
+  send(s, "ZC_NOTIFY_PLAYERMOVE",
+       {{"moveStartTime", wire::I(server_tick())},
+        {"moveData", netproto::Pos6{static_cast<uint16_t>(pos->x), static_cast<uint16_t>(pos->y), static_cast<uint16_t>(x), static_cast<uint16_t>(y), 8, 8}}});
   std::vector<uint32_t> watchers(u->view.begin(), u->view.end());
   std::sort(watchers.begin(), watchers.end());
-  wire::Bytes f = wire::zc_notify_moveentry(actor_of(*u, true));
+  wire::Bytes f = wire::actor_frame(actor_of(*u, true), true);
   for (uint32_t g : watchers)
     if (Session* vs = session_of_gid(g)) send(*vs, f);
 }
@@ -314,7 +327,7 @@ void Sim::on_walk(Session& s, const wire::Packet& p) {
 void Sim::on_chat(Session& s, const wire::Packet& p) {
   Unit* u = unit_of_gid(s.gid);
   if (!u) return;
-  const std::string text = p.text("text");
+  const std::string text = p.text("tail");
   const std::string prefix = s.name + " : ";
   if (text.rfind(prefix, 0) != 0) {  // legacy clif_parse_GlobalMessage: a message not prefixed with the speaker is dropped
     trace("chat dropped (not prefixed with the speaker) s=" + std::to_string(s.idx));
@@ -324,10 +337,10 @@ void Sim::on_chat(Session& s, const wire::Packet& p) {
     HookResult r = dispatch("sim:chat", s.gid);
     if (r.cancelled) return;
   }
-  send(s, wire::zc_notify_playerchat(text));
+  send(s, "OPAQUE_008E", {{"payload", wire::chat_tail(text)}});  // 0x008e: length-only in the legacy tables
   std::vector<uint32_t> watchers(u->view.begin(), u->view.end());
   std::sort(watchers.begin(), watchers.end());
-  wire::Bytes f = wire::zc_notify_chat(s.gid, text);
+  wire::Bytes f = wire::frame("ZC_NOTIFY_CHAT", {{"GID", wire::I(s.gid)}, {"Message", text}});
   for (uint32_t g : watchers)
     if (Session* vs = session_of_gid(g)) send(*vs, f);
 }
@@ -355,8 +368,7 @@ wire::Actor Sim::actor_of(const Unit& u, bool walking_form) const {
 
 void Sim::send_appear(Session& to, const Unit& who) {
   if (to.phase != netproto::Phase::InWorld) return;
-  if (who.walking) send(to, wire::zc_notify_moveentry(actor_of(who, true)));
-  else send(to, wire::zc_notify_standentry(actor_of(who, false)));
+  send(to, wire::actor_frame(actor_of(who, who.walking), who.walking));
 }
 
 void Sim::update_view(uint32_t gid) {
@@ -388,10 +400,10 @@ void Sim::update_view(uint32_t gid) {
   for (uint32_t g : lost) {
     u->view.erase(g);
     Unit* v = unit_of_gid(g);
-    if (me) send(*me, wire::zc_notify_vanish(g, 0));
+    if (me) send(*me, "ZC_NOTIFY_VANISH", {{"gid", wire::I(g)}, {"type", wire::I(0)}});
     if (v) {
       v->view.erase(gid);
-      if (Session* vs = session_of_gid(g)) send(*vs, wire::zc_notify_vanish(gid, 0));
+      if (Session* vs = session_of_gid(g)) send(*vs, "ZC_NOTIFY_VANISH", {{"gid", wire::I(gid)}, {"type", wire::I(0)}});
     }
   }
 }
@@ -421,7 +433,7 @@ void Sim::after_tick_walk_stops() {
     if (!u) continue;
     u->walking = false;
     auto pos = position_of(g);
-    wire::Bytes f = wire::zc_stopmove(g, static_cast<uint16_t>(pos->x), static_cast<uint16_t>(pos->y));
+    wire::Bytes f = wire::frame("ZC_STOPMOVE", {{"AID", wire::I(g)}, {"xPos", wire::I(pos->x)}, {"yPos", wire::I(pos->y)}});
     if (Session* me = session_of_gid(g)) send(*me, f);
     std::vector<uint32_t> watchers(u->view.begin(), u->view.end());
     std::sort(watchers.begin(), watchers.end());
@@ -446,7 +458,7 @@ void Sim::tell_runtime_dialogue_ended(Session& s) {
 
 void Sim::end_dialogue(Session& s, bool notify_client) {
   if (!s.dlg_active) return;
-  if (notify_client) send(s, wire::zc_close_dialog(s.dlg_npc));
+  if (notify_client) send(s, "ZC_CLOSE_DIALOG", {{"npcId", wire::I(s.dlg_npc)}});
   s.dlg_active = false;
   s.dlg_sandbox.reset();
 }
@@ -463,19 +475,21 @@ void Sim::present_dialogue(Session& s, const script_host::DialogueState& st) {
   s.dlg_pending = st.pending;
   const uint32_t npc = s.dlg_npc;
   if (auto* say = std::get_if<script_host::SayRequest>(&st.pending)) {
-    send(s, wire::zc_say_dialog(npc, say->text));
-    send(s, wire::zc_wait_dialog(npc));
+    send(s, "ZC_SAY_DIALOG", {{"NpcID", wire::I(npc)}, {"message", say->text}});
+    send(s, "ZC_WAIT_DIALOG", {{"NpcID", wire::I(npc)}});
   } else if (auto* ch = std::get_if<script_host::ChooseRequest>(&st.pending)) {
-    send(s, wire::zc_menu_list(npc, ch->options));
+    std::string joined;  // the options, each followed by ':' (clif_scriptmenu)
+    for (const auto& o : ch->options) joined += o + ":";
+    send(s, "ZC_MENU_LIST", {{"npcId", wire::I(npc)}, {"menu", joined}});
   } else if (auto* in = std::get_if<script_host::InputRequest>(&st.pending)) {
-    if (!in->prompt.empty()) send(s, wire::zc_say_dialog(npc, in->prompt));
-    send(s, wire::zc_open_editdlgstr(npc));
+    if (!in->prompt.empty()) send(s, "ZC_SAY_DIALOG", {{"NpcID", wire::I(npc)}, {"message", in->prompt}});
+    send(s, "ZC_OPEN_EDITDLGSTR", {{"npcId", wire::I(npc)}});
   }  // WaitRequest: the client sees nothing; the timer wakes the dialogue
 }
 
 void Sim::on_click_npc(Session& s, const wire::Packet& p) {
   Unit* me = unit_of_gid(s.gid);
-  Unit* npc = unit_of_gid(static_cast<uint32_t>(p.num("gid")));
+  Unit* npc = unit_of_gid(static_cast<uint32_t>(p.num("AID")));  // PACKET_CZ_CONTACTNPC::AID is the npc's id
   if (!me || !npc || npc->kind != 1) return;
   if (!me->view.count(npc->gid)) { trace("npc click outside the view ignored"); return; }
   if (s.dlg_active) { trace("npc click ignored: dialogue already open"); return; }
@@ -508,17 +522,19 @@ void Sim::on_click_npc(Session& s, const wire::Packet& p) {
 
 void Sim::on_dialogue_reply(Session& s, const wire::Packet& p) {
   if (!s.dlg_active) { trace("dialogue reply without a dialogue ignored: " + p.name); return; }
-  if (static_cast<uint32_t>(p.num("gid")) != s.dlg_npc) { trace("dialogue reply for another npc ignored"); return; }
+  // the npc id member differs per packet in the legacy sources: f2 (handler-derived), npc_id, GID
+  const uint32_t npc_id = static_cast<uint32_t>(p.name == "CZ_REQ_NEXT_SCRIPT" ? p.num("f2") : p.name == "CZ_CHOOSE_MENU" ? p.num("npc_id") : p.num("GID"));
+  if (npc_id != s.dlg_npc) { trace("dialogue reply for another npc ignored"); return; }
   script_host::DialogueResponse resp;
-  if (p.name == "CZ_CLOSE_DIALOG" || (p.name == "CZ_CHOOSE_MENU" && p.num("choice") == 255)) {
+  if (p.name == "CZ_CLOSE_DIALOG" || (p.name == "CZ_CHOOSE_MENU" && p.num("select") == 255)) {
     dialogues_->on_disconnect(s.gid);
     tell_runtime_dialogue_ended(s);
     end_dialogue(s, true);
     return;
   }
-  if (p.name == "CZ_CHOOSE_MENU") resp.choice = p.num("choice");
+  if (p.name == "CZ_CHOOSE_MENU") resp.choice = p.num("select");
   else if (p.name == "CZ_INPUT_EDITDLG") resp.text = std::to_string(p.num("value"));
-  else if (p.name == "CZ_INPUT_EDITDLGSTR") resp.text = p.text("text");
+  else if (p.name == "CZ_INPUT_EDITDLGSTR") resp.text = p.text("value");
   // CZ_REQ_NEXT_SCRIPT: empty response
   try {
     log_capture_.clear();
@@ -563,14 +579,16 @@ Sim::DialogueInfo Sim::dialogue_of(uint32_t player_gid) const {
 // ---- combat ----------------------------------------------------------------------------------------------------------
 void Sim::on_act(Session& s, const wire::Packet& p) {
   Unit* me = unit_of_gid(s.gid);
-  Unit* t = unit_of_gid(static_cast<uint32_t>(p.num("gid")));
-  const int64_t action = p.num("action");
+  Unit* t = unit_of_gid(static_cast<uint32_t>(p.num("f2")));  // handler-derived members: target id, action
+  const int64_t action = p.num("f6");
   if (!me || !t || (action != 0 && action != 7)) return;
   if (!me->view.count(t->gid)) { trace("attack on a unit outside the view ignored"); return; }
   AttackResult r = basic_attack(me->gid, t->gid);
   if (!r.ok) return;
-  wire::Bytes f = wire::zc_notify_act(me->gid, t->gid, server_tick(), 0, 0, static_cast<int32_t>(r.damage),
-                                      static_cast<uint16_t>(r.div), static_cast<uint8_t>(r.type), static_cast<int32_t>(r.damage2));
+  wire::Bytes f = wire::frame("ZC_NOTIFY_ACT", {{"srcID", wire::I(me->gid)}, {"targetID", wire::I(t->gid)}, {"serverTick", wire::I(static_cast<int32_t>(server_tick()))},
+                                                {"srcSpeed", wire::I(0)}, {"dmgSpeed", wire::I(0)}, {"damage", wire::I(static_cast<int32_t>(r.damage))},
+                                                {"isSPDamage", wire::I(0)}, {"div", wire::I(static_cast<uint16_t>(r.div))},
+                                                {"type", wire::I(static_cast<uint8_t>(r.type))}, {"damage2", wire::I(static_cast<int32_t>(r.damage2))}});
   send(s, f);
   std::vector<uint32_t> watchers(me->view.begin(), me->view.end());
   std::sort(watchers.begin(), watchers.end());
@@ -581,7 +599,7 @@ void Sim::on_act(Session& s, const wire::Packet& p) {
 void Sim::on_skill(Session& s, const wire::Packet& p) {
   // The ruleset packages implement the basic weapon attack only; skill formulas raise NOT_IMPLEMENTED
   // (ruleset-prerenewal scripts/rules/skill.luau). The sim reports that instead of inventing damage.
-  trace("skill " + std::to_string(p.num("skill")) + " lv " + std::to_string(p.num("level")) + " from s=" + std::to_string(s.idx) +
+  trace("skill " + std::to_string(p.num("f4")) + " lv " + std::to_string(p.num("f2")) + " from s=" + std::to_string(s.idx) +
         ": no skill pipeline in the loaded ruleset (basic attack only)");
   unsupported_skill_casts_++;
 }

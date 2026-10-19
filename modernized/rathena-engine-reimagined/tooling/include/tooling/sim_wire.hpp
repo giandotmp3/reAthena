@@ -1,25 +1,18 @@
 #pragma once
-// The wire vocabulary rathena-sim speaks (client build re/20211103), at codec level: framed byte
-// buffers, no sockets.
+// The wire vocabulary rathena-sim speaks (client build re/20211103), at codec level: framed byte buffers, no
+// sockets. There is NO codec in this file: every frame is encoded and decoded by netproto's CodecSet over the full
+// generated catalog of the real client (1,186 packets), names and field names are the catalog's (the legacy
+// struct members: AID, NpcID, PosDir, ...; `LEGACY_IDLE_UNIT` / `LEGACY_UNIT_WALKING` for 0x09ff / 0x09fd,
+// `CZ_USE_SKILL2` for 0x0438, `OPAQUE_008E` for 0x008e, handler-derived members f2/f4/f6 where the legacy handler
+// has no variable). The client side of a session is netproto::SimClient (see sim_player.hpp).
 //
-// Where each number comes from:
-//   origin "spec"          the packet is in netproto/proto/client_packets.yaml (9 packets);
-//                          opcode, length and gate are taken from the generated catalog.
-//   origin "legacy-db"     opcode and length are the legacy packet DB's answer for this target
-//                          (netproto/proto/legacy_20211103.yaml); the spec has no entry for it, and
-//                          for handler-parsed packets no field layout either. The sim writes the
-//                          fields at the offsets the legacy handler reads (the `pos` list) and
-//                          documents the meaning; field TYPES are the sim's reading of
-//                          src/map/clif.cpp, not netproto data.
-//   origin "legacy-struct" a typed struct in the legacy DB (or packets_struct.hpp) that the spec
-//                          does not list yet.
-// tests/test_sim_wire.cpp cross-checks every opcode and length against legacy_20211103.yaml.
+// What is left here is glue: the shared codec set, the event type SimPlayer hands to tests and scenarios, and
+// tiny builders (`frame`, `chat_tail`) that cut the ceremony of filling a DecodedPacket.
 #include <cstdint>
-#include <map>
-#include <optional>
+#include <initializer_list>
+#include <memory>
 #include <string>
-#include <string_view>
-#include <variant>
+#include <utility>
 #include <vector>
 
 #include "netproto/codec_set.hpp"
@@ -28,61 +21,46 @@
 
 namespace tooling::sim::wire {
 
-using netproto::ByteView;
 using netproto::Bytes;
+using netproto::ByteView;
+using netproto::DecodedPacket;
+using netproto::FieldValue;
 
-enum class Dir : uint8_t { C2S, S2C };
+/// The one codec set of the sim (re/20211103, full catalog), built once per process; immutable.
+const std::shared_ptr<const netproto::CodecSet>& codecs();
 
-struct Def {
-  uint16_t opcode;
-  const char* name;
-  int len;  // total bytes, or -1: variable, u16 length at offset 2
-  Dir dir;
-  netproto::Phase gate;
-  const char* origin;
-};
-const std::vector<Def>& defs();
-const Def* find(uint16_t opcode, Dir d);
-const Def* find_name(std::string_view name);
-
-// Decoded packet: a name plus integer / string fields (names below).
-using FieldValue = std::variant<int64_t, std::string>;
-using Fields = std::map<std::string, FieldValue>;
-struct Packet {
-  std::string name;
+/// A packet the sim saw: netproto's decoded packet (`name`, `fields`, `repeats`) plus the frame it came from.
+struct Packet : netproto::DecodedPacket {
   uint16_t opcode = 0;
-  Fields fields;
   Bytes raw;  // the whole frame
   int64_t at_ms = 0;
+  /// Integer field `k` (netproto's name), `dflt` when absent or not an integer.
   int64_t num(const std::string& k, int64_t dflt = 0) const;
+  /// Text of a string field, or of a raw tail / payload up to its first NUL; empty when absent.
   std::string text(const std::string& k) const;
+  netproto::Pos3 pos3(const std::string& k) const;  // zeros when absent
+  netproto::Pos6 pos6(const std::string& k) const;
 };
+Packet make_packet(netproto::DecodedPacket p, ByteView frame, uint16_t opcode);
 
-// Frame table for peek_frame on one direction (spec packets from `spec`, the rest from defs()).
-netproto::FrameTable frame_table(Dir d, const netproto::CodecSet& spec);
+using Fields = std::initializer_list<std::pair<const char*, FieldValue>>;
+inline FieldValue I(int64_t v) { return v; }
 
-// ---- little-endian helpers ---------------------------------------------------------------
-void put16(Bytes& b, size_t at, uint32_t v);
-void put32(Bytes& b, size_t at, uint32_t v);
-uint32_t get16(ByteView b, size_t at);
-uint32_t get32(ByteView b, size_t at);
+/// Encodes packet `name` with these values through netproto's codec. Throws netproto::CodecError.
+Bytes frame(const std::string& name, Fields fields);
+/// CZ_REQUEST_CHAT's `tail` is a raw tail in the catalog (handler-derived): the text plus its NUL.
+Bytes chat_tail(const std::string& text);
 
-// ---- client to server ----------------------------------------------------------------------
-Bytes cz_enter(uint32_t aid, uint32_t cid, uint32_t login_id1, uint32_t tick, uint8_t sex);
-Bytes cz_notify_actorinit();
-Bytes cz_request_move(uint16_t x, uint16_t y, uint8_t dir);
-Bytes cz_request_time(uint32_t tick);
-Bytes cz_request_chat(std::string_view text);
-Bytes cz_contactnpc(uint32_t npc_gid, uint8_t type);
-Bytes cz_req_next_script(uint32_t npc_gid);
-Bytes cz_choose_menu(uint32_t npc_gid, uint8_t choice);
-Bytes cz_close_dialog(uint32_t npc_gid);
-Bytes cz_input_editdlg(uint32_t npc_gid, int32_t value);
-Bytes cz_input_editdlgstr(uint32_t npc_gid, std::string_view text);
-Bytes cz_request_act(uint32_t target_gid, uint8_t action);
-Bytes cz_use_skill(uint16_t level, uint16_t skill_id, uint32_t target_gid);
+/// Splits a byte stream into frames with `table`. `consumed` bytes were used; a malformed length or unknown
+/// opcode sets `error` (the session must be dropped).
+struct Split {
+  std::vector<Bytes> frames;
+  size_t consumed = 0;
+  std::string error;
+};
+Split split_frames(ByteView stream, const netproto::FrameTable& table);
 
-// ---- server to client ----------------------------------------------------------------------
+// A unit as the two entry packets describe it (the sim's reading of its own world, not a layout).
 struct Actor {
   uint32_t gid = 0;
   uint8_t object_type = 0;  // 0 player, 5 mob, 6 npc (clif_bl_type)
@@ -96,35 +74,7 @@ struct Actor {
   uint16_t to_x = 0, to_y = 0;  // walking packet only
   uint32_t move_start = 0;      // walking packet only
 };
-Bytes zc_accept_enter(uint32_t tick, uint16_t x, uint16_t y, uint8_t dir);
-Bytes zc_refuse_enter(uint8_t code);
-Bytes zc_notify_time(uint32_t tick);
-Bytes zc_notify_playermove(uint32_t tick, uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1);
-Bytes zc_stopmove(uint32_t gid, uint16_t x, uint16_t y);
-Bytes zc_notify_vanish(uint32_t gid, uint8_t type);
-Bytes zc_notify_standentry(const Actor& a);   // 0x09ff, 108 bytes
-Bytes zc_notify_moveentry(const Actor& a);    // 0x09fd, 114 bytes
-Bytes zc_notify_chat(uint32_t gid, std::string_view msg);
-Bytes zc_notify_playerchat(std::string_view msg);
-Bytes zc_say_dialog(uint32_t npc_gid, std::string_view text);
-Bytes zc_wait_dialog(uint32_t npc_gid);
-Bytes zc_close_dialog(uint32_t npc_gid);
-Bytes zc_menu_list(uint32_t npc_gid, const std::vector<std::string>& options);
-Bytes zc_open_editdlgstr(uint32_t npc_gid);
-Bytes zc_notify_act(uint32_t src, uint32_t dst, uint32_t tick, int32_t src_speed, int32_t dmg_speed, int32_t damage,
-                    uint16_t div, uint8_t type, int32_t damage2);
-
-// Decodes one complete frame (as delimited by peek_frame) of direction `d`. nullopt for an
-// opcode the sim does not interpret (it is still a legal frame: callers keep the raw bytes).
-std::optional<Packet> decode(ByteView frame, Dir d);
-
-// Splits a byte stream into frames with the given table. `consumed` bytes were used; a
-// malformed length or unknown opcode sets `error` (the session must be dropped).
-struct Split {
-  std::vector<Bytes> frames;
-  size_t consumed = 0;
-  std::string error;
-};
-Split split_frames(ByteView stream, const netproto::FrameTable& table);
+/// LEGACY_IDLE_UNIT (0x09ff, 108 bytes) when !walking, LEGACY_UNIT_WALKING (0x09fd, 114 bytes) otherwise.
+Bytes actor_frame(const Actor& a, bool walking);
 
 }  // namespace tooling::sim::wire

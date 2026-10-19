@@ -92,7 +92,7 @@ add_library(sim_netproto STATIC
 target_include_directories(sim_netproto SYSTEM PUBLIC ${ENGINE_ROOT}/netproto/include)
 target_compile_options(sim_netproto PRIVATE ${_unit_warn})
 
-# The netproto catalog of the real spec is generated exactly as netproto's own build does
+# The full netproto catalog of the real client (1,186 packets) is generated exactly as netproto's own build does
 # (Python 3 + PyYAML), into this build tree; nothing is written inside the netproto unit.
 execute_process(COMMAND ${Python3_EXECUTABLE} -I -c "import yaml"
                 RESULT_VARIABLE _yaml_rc OUTPUT_QUIET ERROR_QUIET)
@@ -101,15 +101,15 @@ if(NOT _yaml_rc EQUAL 0)
 endif()
 set(SIM_GEN_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
 set(NETPROTO_CODEGEN ${ENGINE_ROOT}/netproto/tools/codegen/netproto_codegen.py)
-set(NETPROTO_SPEC ${ENGINE_ROOT}/netproto/proto/client_packets.yaml)
+set(NETPROTO_CATALOG ${ENGINE_ROOT}/netproto/proto/packets_re_20211103.yaml)
 add_custom_command(
-  OUTPUT ${SIM_GEN_DIR}/catalog_client_packets.hpp
-  COMMAND ${Python3_EXECUTABLE} -I ${NETPROTO_CODEGEN} --proto ${NETPROTO_SPEC}
-          --emit-catalog --client re/20211103 --out ${SIM_GEN_DIR}
-  DEPENDS ${NETPROTO_SPEC} ${NETPROTO_CODEGEN}
-  COMMENT "rathena-sim: netproto catalog from client_packets.yaml"
+  OUTPUT ${SIM_GEN_DIR}/catalog_packets_re_20211103.hpp
+  COMMAND ${Python3_EXECUTABLE} -I ${NETPROTO_CODEGEN} --proto ${NETPROTO_CATALOG}
+          --emit-catalog --out ${SIM_GEN_DIR}
+  DEPENDS ${NETPROTO_CATALOG} ${NETPROTO_CODEGEN}
+  COMMENT "rathena-sim: netproto catalog from packets_re_20211103.yaml"
   VERBATIM)
-add_custom_target(sim_generated DEPENDS ${SIM_GEN_DIR}/catalog_client_packets.hpp)
+add_custom_target(sim_generated DEPENDS ${SIM_GEN_DIR}/catalog_packets_re_20211103.hpp)
 
 # The Luau helpers embedded into the binary (scenario prelude), regenerated when the file changes.
 set(SIM_PRELUDE_SRC ${CMAKE_CURRENT_SOURCE_DIR}/sim/scenario_prelude.luau)

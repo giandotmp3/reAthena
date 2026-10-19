@@ -1,10 +1,12 @@
 #include "tooling/sim_player.hpp"
 
 #include <algorithm>
+#include <iterator>
 
 namespace tooling::sim {
 
-SimPlayer::SimPlayer(Sim& sim, int session, std::string name) : sim_(sim), session_(session), name_(std::move(name)) {}
+SimPlayer::SimPlayer(Sim& sim, int session, std::string name)
+    : sim_(sim), session_(session), name_(std::move(name)), client_(sim.codec_ptr(), std::nullopt) {}
 
 uint32_t SimPlayer::aid() const { return sim_.session(session_).aid; }
 uint32_t SimPlayer::gid() const { return sim_.session(session_).gid; }
@@ -17,22 +19,34 @@ std::string SimPlayer::disconnect_reason() const { return sim_.session(session_)
 
 void SimPlayer::send_frame(const wire::Bytes& f) { sim_.client_send(session_, f); }
 void SimPlayer::send_raw(const wire::Bytes& frame) { send_frame(frame); }
+void SimPlayer::send_packet(const wire::DecodedPacket& p) {
+  // A refused or banned client is closed (SimClient::send throws); the server dropped the session anyway, so a
+  // late packet is still encoded and handed to the dead session, which ignores it (as the sim always did).
+  send_frame(client_.closed() ? sim_.codecs().encode(p) : client_.send(p));
+}
+void SimPlayer::send_packet(const std::string& name, wire::Fields fields) {
+  wire::DecodedPacket p;
+  p.name = name;
+  for (const auto& [k, v] : fields) p.fields[k] = v;
+  send_packet(p);
+}
 
 // ---- connect --------------------------------------------------------------------------------------------
 void SimPlayer::begin_connect() {
   const uint32_t login_id1 = sim_.rng().derive("login:" + name_).next();
-  send_frame(wire::cz_enter(aid(), aid(), login_id1, sim_.server_tick(), 1));
+  send_packet("CZ_ENTER", {{"account_id", wire::I(aid())}, {"char_id", wire::I(aid())}, {"login_id1", wire::I(login_id1)},
+                           {"client_tick", wire::I(sim_.server_tick())}, {"sex", wire::I(1)}});
 }
 
 void SimPlayer::finish_connect() {
   auto acc = wait_for("accept", 2000);
   if (!acc) {
-    if (auto ref = wait_for("refuse", 0)) throw SimError(name_ + ": connect refused (code " + std::to_string(ref->num("code")) + ")");
+    if (auto ref = wait_for("refuse", 0)) throw SimError(name_ + ": connect refused (code " + std::to_string(ref->num("errorCode")) + ")");
     throw SimError(name_ + ": no ZC_ACCEPT_ENTER within 2000 ms; inbox: " + describe_inbox());
   }
   accepted_ = true;
-  known_pos_ = engine::Point{static_cast<int32_t>(acc->num("x")), static_cast<int32_t>(acc->num("y"))};
-  send_frame(wire::cz_notify_actorinit());
+  known_pos_ = engine::Point{acc->pos3("posDir").x, acc->pos3("posDir").y};
+  send_packet("CZ_NOTIFY_ACTORINIT", {});
   if (!sim_.run_until([&] { return connected(); }, 2000)) throw SimError(name_ + ": the world did not open after ZC_ACCEPT_ENTER");
 }
 
@@ -59,8 +73,8 @@ void SimPlayer::connect_all(Sim& sim, const std::vector<SimPlayer*>& players) {
     auto acc = p->wait_for("accept", 0);
     if (!acc) throw SimError(p->name() + ": connect refused or unanswered; inbox: " + p->describe_inbox());
     p->accepted_ = true;
-    p->known_pos_ = engine::Point{static_cast<int32_t>(acc->num("x")), static_cast<int32_t>(acc->num("y"))};
-    p->send_frame(wire::cz_notify_actorinit());
+    p->known_pos_ = engine::Point{acc->pos3("posDir").x, acc->pos3("posDir").y};
+    p->send_packet("CZ_NOTIFY_ACTORINIT", {});
   }
   if (!sim.run_until(
           [&] {
@@ -73,21 +87,25 @@ void SimPlayer::connect_all(Sim& sim, const std::vector<SimPlayer*>& players) {
 }
 
 // ---- actions ---------------------------------------------------------------------------------------------
-void SimPlayer::walk(int x, int y) { send_frame(wire::cz_request_move(static_cast<uint16_t>(x), static_cast<uint16_t>(y), 0)); }
-void SimPlayer::say(const std::string& text) { send_frame(wire::cz_request_chat(name_ + " : " + text)); }
-void SimPlayer::click_npc(const std::string& npc_name) { click_npc_gid(sim_.npc_gid(npc_name)); }
-void SimPlayer::click_npc_gid(uint32_t npc_gid) { send_frame(wire::cz_contactnpc(npc_gid, 1)); }
-void SimPlayer::answer(int choice) {
-  send_frame(wire::cz_choose_menu(sim_.session(session_).dlg_npc, static_cast<uint8_t>(choice)));
+void SimPlayer::walk(int x, int y) {
+  send_packet("CZ_REQUEST_MOVE", {{"pos", netproto::Pos3{static_cast<uint16_t>(x), static_cast<uint16_t>(y), 0}}});
 }
-void SimPlayer::next() { send_frame(wire::cz_req_next_script(sim_.session(session_).dlg_npc)); }
-void SimPlayer::input(const std::string& text) { send_frame(wire::cz_input_editdlgstr(sim_.session(session_).dlg_npc, text)); }
-void SimPlayer::input_number(int32_t v) { send_frame(wire::cz_input_editdlg(sim_.session(session_).dlg_npc, v)); }
-void SimPlayer::close_dialog() { send_frame(wire::cz_close_dialog(sim_.session(session_).dlg_npc)); }
-void SimPlayer::ping() { send_frame(wire::cz_request_time(sim_.server_tick())); }
-void SimPlayer::attack(uint32_t target_gid) { send_frame(wire::cz_request_act(target_gid, 0)); }
+void SimPlayer::say(const std::string& text) { send_packet("CZ_REQUEST_CHAT", {{"tail", wire::chat_tail(name_ + " : " + text)}}); }
+void SimPlayer::click_npc(const std::string& npc_name) { click_npc_gid(sim_.npc_gid(npc_name)); }
+void SimPlayer::click_npc_gid(uint32_t npc_gid) { send_packet("CZ_CONTACTNPC", {{"AID", wire::I(npc_gid)}, {"type", wire::I(1)}}); }
+void SimPlayer::answer(int choice) {
+  send_packet("CZ_CHOOSE_MENU", {{"npc_id", wire::I(sim_.session(session_).dlg_npc)}, {"select", wire::I(static_cast<uint8_t>(choice))}});
+}
+void SimPlayer::next() { send_packet("CZ_REQ_NEXT_SCRIPT", {{"f2", wire::I(sim_.session(session_).dlg_npc)}}); }
+void SimPlayer::input(const std::string& text) {
+  send_packet("CZ_INPUT_EDITDLGSTR", {{"GID", wire::I(sim_.session(session_).dlg_npc)}, {"value", text}});
+}
+void SimPlayer::input_number(int32_t v) { send_packet("CZ_INPUT_EDITDLG", {{"GID", wire::I(sim_.session(session_).dlg_npc)}, {"value", wire::I(v)}}); }
+void SimPlayer::close_dialog() { send_packet("CZ_CLOSE_DIALOG", {{"GID", wire::I(sim_.session(session_).dlg_npc)}}); }
+void SimPlayer::ping() { send_packet("CZ_REQUEST_TIME", {{"client_tick", wire::I(sim_.server_tick())}}); }
+void SimPlayer::attack(uint32_t target_gid) { send_packet("CZ_REQUEST_ACT2", {{"f2", wire::I(target_gid)}, {"f6", wire::I(0)}}); }
 void SimPlayer::cast(const std::string& skill_id, uint32_t target_gid, uint16_t level) {
-  send_frame(wire::cz_use_skill(level, sim_.skill_client_id(skill_id), target_gid));
+  send_packet("CZ_USE_SKILL2", {{"f2", wire::I(level)}, {"f4", wire::I(sim_.skill_client_id(skill_id))}, {"f6", wire::I(target_gid)}});
 }
 void SimPlayer::disconnect() { sim_.client_close(session_); }
 
@@ -98,27 +116,26 @@ void SimPlayer::pump() {
   rx_.insert(rx_.end(), in.begin(), in.end());
   auto sp = wire::split_frames(rx_, sim_.s2c_table());
   rx_.erase(rx_.begin(), rx_.begin() + static_cast<std::ptrdiff_t>(sp.consumed));
+  std::string error = sp.error;
   for (auto& f : sp.frames) {
-    auto pkt = wire::decode(f, wire::Dir::S2C);
-    Event e;
-    if (pkt) e = std::move(*pkt);
-    else {
-      e.opcode = static_cast<uint16_t>(wire::get16(f, 0));
-      auto it = sim_.s2c_table().find(e.opcode);
-      e.name = it != sim_.s2c_table().end() ? it->second.name : "OP_" + std::to_string(e.opcode);
-      e.raw = f;
+    // one complete frame at a time, so the event keeps its bytes; the SimClient decodes it and tracks the phase
+    auto got = client_.receive(f);
+    if (got.empty()) {
+      if (error.empty()) error = client_.closed() ? client_.close_reason() : "undecodable server frame";
+      break;
     }
+    Event e = wire::make_packet(std::move(got.front()), f, static_cast<uint16_t>(f[0] | (f[1] << 8)));
     e.at_ms = sim_.now_ms();
     feed_state(e);
-    inbox_.push_back(e);
-    history_.push_back(std::move(e));
+    history_.push_back(e);
+    inbox_.push_back(std::move(e));
     if (history_.size() > history_cap_) history_.pop_front();
     if (inbox_.size() > history_cap_) inbox_.pop_front();
   }
-  if (!sp.error.empty()) {
+  if (!error.empty()) {
     Event e;
     e.name = "protocol_error";
-    e.fields["error"] = sp.error;
+    e.fields["error"] = error;
     e.at_ms = sim_.now_ms();
     inbox_.push_back(e);
     history_.push_back(e);
@@ -127,13 +144,13 @@ void SimPlayer::pump() {
 
 void SimPlayer::feed_state(const Event& e) {
   if (e.name == "ZC_ACCEPT_ENTER") {
-    known_pos_ = engine::Point{static_cast<int32_t>(e.num("x")), static_cast<int32_t>(e.num("y"))};
-  } else if (e.name == "ZC_NOTIFY_STANDENTRY11" || e.name == "ZC_NOTIFY_MOVEENTRY11") {
-    seen_.insert(static_cast<uint32_t>(e.num("gid")));
+    known_pos_ = engine::Point{e.pos3("posDir").x, e.pos3("posDir").y};
+  } else if (e.name == "LEGACY_IDLE_UNIT" || e.name == "LEGACY_UNIT_WALKING") {
+    seen_.insert(static_cast<uint32_t>(e.num("GID")));
   } else if (e.name == "ZC_NOTIFY_VANISH") {
     seen_.erase(static_cast<uint32_t>(e.num("gid")));
-  } else if (e.name == "ZC_STOPMOVE" && static_cast<uint32_t>(e.num("gid")) == gid()) {
-    known_pos_ = engine::Point{static_cast<int32_t>(e.num("x")), static_cast<int32_t>(e.num("y"))};
+  } else if (e.name == "ZC_STOPMOVE" && static_cast<uint32_t>(e.num("AID")) == gid()) {
+    known_pos_ = engine::Point{static_cast<int32_t>(e.num("xPos")), static_cast<int32_t>(e.num("yPos"))};
   }
 }
 
@@ -141,8 +158,8 @@ std::string SimPlayer::alias(const std::string& n) {
   static const std::map<std::string, std::string> a = {
       {"accept", "ZC_ACCEPT_ENTER"},        {"refuse", "ZC_REFUSE_ENTER"},       {"time", "ZC_NOTIFY_TIME"},
       {"move", "ZC_NOTIFY_PLAYERMOVE"},     {"stop", "ZC_STOPMOVE"},             {"vanish", "ZC_NOTIFY_VANISH"},
-      {"standing", "ZC_NOTIFY_STANDENTRY11"}, {"moving", "ZC_NOTIFY_MOVEENTRY11"}, {"chat", "ZC_NOTIFY_CHAT"},
-      {"chat_self", "ZC_NOTIFY_PLAYERCHAT"}, {"say", "ZC_SAY_DIALOG"},            {"next", "ZC_WAIT_DIALOG"},
+      {"standing", "LEGACY_IDLE_UNIT"},     {"moving", "LEGACY_UNIT_WALKING"},   {"chat", "ZC_NOTIFY_CHAT"},
+      {"chat_self", "OPAQUE_008E"},         {"say", "ZC_SAY_DIALOG"},            {"next", "ZC_WAIT_DIALOG"},
       {"close", "ZC_CLOSE_DIALOG"},         {"menu", "ZC_MENU_LIST"},            {"input", "ZC_OPEN_EDITDLGSTR"},
       {"damage", "ZC_NOTIFY_ACT"}};
   auto it = a.find(n);
@@ -150,12 +167,12 @@ std::string SimPlayer::alias(const std::string& n) {
 }
 
 bool SimPlayer::matches(const Event& e, const std::string& want) const {
-  if (want == "appear") return e.name == "ZC_NOTIFY_STANDENTRY11" || e.name == "ZC_NOTIFY_MOVEENTRY11";
+  if (want == "appear") return e.name == "LEGACY_IDLE_UNIT" || e.name == "LEGACY_UNIT_WALKING";
   return e.name == want || e.name == alias(want);
 }
 
 std::vector<SimPlayer::Event> SimPlayer::drain_received() {
-  std::vector<Event> out(inbox_.begin(), inbox_.end());
+  std::vector<Event> out(std::make_move_iterator(inbox_.begin()), std::make_move_iterator(inbox_.end()));
   inbox_.clear();
   return out;
 }

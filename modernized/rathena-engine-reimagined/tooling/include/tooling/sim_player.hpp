@@ -1,7 +1,7 @@
 #pragma once
 // SimPlayer: a headless client that speaks netproto frames to the sim's world/session boundary.
-// Everything it does is a byte frame (see sim_wire.hpp); everything it learns arrives as a decoded
-// server frame ("event"). No sockets, no gateway.
+// Everything it does is a byte frame encoded by netproto::SimClient; everything it learns arrives as a frame
+// decoded by the same client ("event", see sim_wire.hpp for the names). No sockets, no gateway.
 #include <cstdint>
 #include <deque>
 #include <optional>
@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "netproto/sim_client.hpp"
 #include "tooling/sim_world.hpp"
 
 namespace tooling::sim {
@@ -43,7 +44,7 @@ class SimPlayer {
   void close_dialog();              // CZ_CLOSE_DIALOG
   void ping();                      // CZ_REQUEST_TIME
   void attack(uint32_t target_gid); // CZ_REQUEST_ACT2, action 0
-  void cast(const std::string& skill_id, uint32_t target_gid, uint16_t level = 1);  // CZ_USE_SKILL
+  void cast(const std::string& skill_id, uint32_t target_gid, uint16_t level = 1);  // CZ_USE_SKILL2
   void send_raw(const wire::Bytes& frame);  // any bytes (tests: out-of-phase packets, bad lengths)
   void disconnect();
 
@@ -67,7 +68,7 @@ class SimPlayer {
   const std::set<uint32_t>& visible() const { return seen_; }
   std::optional<engine::Point> position() const;   // authoritative position (server), for assertions
   std::optional<engine::Point> known_position() const { return known_pos_; }  // from the last frames received
-  // Maps "say" -> ZC_SAY_DIALOG, "menu" -> ZC_MENU_LIST, "damage" -> ZC_NOTIFY_ACT, ... (see .cpp).
+  // Maps "say" -> ZC_SAY_DIALOG, "menu" -> ZC_MENU_LIST, "damage" -> ZC_NOTIFY_ACT, "standing" -> LEGACY_IDLE_UNIT, ... (see .cpp).
   static std::string alias(const std::string& name);
 
   // Called by Sim after every tick: decodes the server bytes into events.
@@ -78,10 +79,13 @@ class SimPlayer {
   void feed_state(const Event& e);
   bool matches(const Event& e, const std::string& want) const;
   void send_frame(const wire::Bytes& f);
+  void send_packet(const wire::DecodedPacket& p);  // encoded by the SimClient
+  void send_packet(const std::string& name, wire::Fields fields);
 
   Sim& sim_;
   int session_;
   std::string name_;
+  netproto::SimClient client_;   // the client half of the session: encode, phase tracking, server-frame decode
   wire::Bytes rx_;
   std::deque<Event> inbox_, history_;
   std::set<uint32_t> seen_;

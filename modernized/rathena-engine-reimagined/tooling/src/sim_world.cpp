@@ -11,7 +11,6 @@
 #include "rathena/persist/script_host_adapter.hpp"
 #include "rathena/persist/service.hpp"
 #include "rathena/persist/sqlite_connection.hpp"
-#include "generated/catalog_client_packets.hpp"
 #include "tooling/sim_player.hpp"
 #include "tooling/sim_world.hpp"
 
@@ -407,11 +406,10 @@ void Sim::build_world() {
   hooks.moved = [this](engine::EntityId e, engine::Point from, engine::Point to) { unit_moved(e, from, to); };
   movement_ = std::make_unique<engine::MovementSystem>(reg_, *grid_, *spatial_, *timers_, std::move(hooks));
 
-  // netproto: the codec set of the real spec for the default client build
-  codec_ = std::make_unique<netproto::CodecSet>(
-      netproto::CodecSet::build(netproto::generated::client_packets_catalog(), {20211103, netproto::Flavour::Re}));
-  c2s_ = wire::frame_table(wire::Dir::C2S, *codec_);
-  s2c_ = wire::frame_table(wire::Dir::S2C, *codec_);
+  // netproto: the codec set of the full catalog of the default client build (shared, immutable)
+  codec_ = wire::codecs();
+  c2s_ = codec_->frames();           // client-to-server frames: anything else is an unknown opcode and a disconnect
+  s2c_ = codec_->server_frames();    // typed server packets and the length-only frames
 
   script_host::DialogueConfig dc;
   dc.token_seed = cfg_.seed ? cfg_.seed : 1;

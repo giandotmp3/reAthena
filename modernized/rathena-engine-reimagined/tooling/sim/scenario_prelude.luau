@@ -297,7 +297,7 @@ function Player:wait_stop(timeout_ms)
 		if left <= 0 then return nil end
 		local e = self:wait_for("stop", left)
 		if not e then return nil end
-		if e.gid == self.gid then return e end
+		if e.AID == self.gid then return e end
 	end
 end
 function Player:expect_stop(timeout_ms)

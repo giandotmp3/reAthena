@@ -20,11 +20,11 @@ sim.assert_eq(unknown:info().reason, "unknown opcode", "unknown opcode disconnec
 local bad_account = sim.player { name = "bad_account", connect = false }
 bad_account:send_raw("3604" .. "05000000" .. "05000000" .. "01000000" .. "00000000" .. "00000000" .. "01")
 local refusal = bad_account:expect("refuse", 200)
-sim.assert_eq(refusal.code, 2, "account id below the legal range: refusal code 2 (0x0074)")
+sim.assert_eq(refusal.errorCode, 2, "account id below the legal range: refusal code 2 (0x0074)")
 
 local bad_sex = sim.player { name = "bad_sex", connect = false }
 bad_sex:send_raw("3604" .. "c0c62d00" .. "c0c62d00" .. "01000000" .. "00000000" .. "00000000" .. "07")
-sim.assert_eq(bad_sex:expect("refuse", 200).code, 6, "sex byte outside 0..1: refusal code 6")
+sim.assert_eq(bad_sex:expect("refuse", 200).errorCode, 6, "sex byte outside 0..1: refusal code 6")
 
 -- a client that really connects can then use in-world packets
 local ok = sim.player { name = "ok", x = 20, y = 20 }

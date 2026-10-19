@@ -45,14 +45,24 @@ std::string trim(const std::string& s) {
 
 Val event_val(const wire::Packet& e) {
   VMap m;
+  // netproto's field names, as the legacy structs spell them. Integers are numbers, strings and raw tails are text,
+  // a packed position is a table: {x, y, dir} (pos3) or {x0, y0, x1, y1, sx, sy} (pos6). A field that has the name of
+  // one of the four event keys below (LEGACY_IDLE_UNIT.name is the unit's name) is exposed as `f_<name>`.
+  for (const auto& [key, v] : e.fields) {
+    const bool meta = key == "name" || key == "opcode" || key == "at" || key == "bytes";
+    const std::string k = meta ? "f_" + key : key;
+    if (auto* i = std::get_if<int64_t>(&v)) m[k] = static_cast<double>(*i);
+    else if (auto* str = std::get_if<std::string>(&v)) m[k] = *str;
+    else if (std::holds_alternative<netproto::Bytes>(v)) m[k] = e.text(key);
+    else if (auto* p3 = std::get_if<netproto::Pos3>(&v)) m[k] = Val(VMap{{"x", Val(p3->x)}, {"y", Val(p3->y)}, {"dir", Val(p3->dir)}});
+    else if (auto* p6 = std::get_if<netproto::Pos6>(&v))
+      m[k] = Val(VMap{{"x0", Val(p6->x0)}, {"y0", Val(p6->y0)}, {"x1", Val(p6->x1)}, {"y1", Val(p6->y1)}, {"sx", Val(p6->sx0)}, {"sy", Val(p6->sy0)}});
+    else if (auto* d = std::get_if<double>(&v)) m[k] = *d;
+  }
   m["name"] = e.name;
   m["opcode"] = static_cast<double>(e.opcode);
   m["at"] = static_cast<double>(e.at_ms);
   m["bytes"] = static_cast<double>(e.raw.size());
-  for (const auto& [k, v] : e.fields) {
-    if (auto* i = std::get_if<int64_t>(&v)) m[k] = static_cast<double>(*i);
-    else m[k] = std::get<std::string>(v);
-  }
   return Val(std::move(m));
 }
 
@@ -203,7 +213,7 @@ struct Host {
     };
     cmd["p_walk"] = [this](const VArr& a) { P(a.at(0)).walk(static_cast<int>(a.at(1).i64()), static_cast<int>(a.at(2).i64())); return Val(); };
     cmd["p_say"] = [this](const VArr& a) { P(a.at(0)).say(a.at(1).str()); return Val(); };
-    cmd["p_say_raw"] = [this](const VArr& a) { P(a.at(0)).send_raw(wire::cz_request_chat(a.at(1).str())); return Val(); };
+    cmd["p_say_raw"] = [this](const VArr& a) { P(a.at(0)).send_raw(wire::frame("CZ_REQUEST_CHAT", {{"tail", wire::chat_tail(a.at(1).str())}})); return Val(); };
     cmd["p_click_npc"] = [this](const VArr& a) { P(a.at(0)).click_npc(a.at(1).str()); return Val(); };
     cmd["p_answer"] = [this](const VArr& a) { P(a.at(0)).answer(static_cast<int>(a.at(1).i64())); return Val(); };
     cmd["p_next"] = [this](const VArr& a) { P(a.at(0)).next(); return Val(); };

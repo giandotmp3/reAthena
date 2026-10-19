@@ -5,6 +5,14 @@
 
 using namespace tooling::sim;
 
+namespace {
+// CZ_ENTER (0x0436, 23 bytes) through netproto's codec, with the catalog's member names
+wire::Bytes enter_frame(uint32_t aid, uint32_t cid, uint32_t login_id1, uint32_t tick, uint8_t sex) {
+  return wire::frame("CZ_ENTER", {{"account_id", wire::I(aid)}, {"char_id", wire::I(cid)}, {"login_id1", wire::I(login_id1)},
+                                   {"client_tick", wire::I(tick)}, {"sex", wire::I(sex)}});
+}
+}  // namespace
+
 TEST("TL-SIM-010", players_connect_with_the_netproto_handshake_and_enter_the_world) {
   auto sim = simtest::make_sim({"rathena.base"});
   auto& a = simtest::add(*sim, "alice", 50, 50);
@@ -24,8 +32,8 @@ TEST("TL-SIM-011", two_players_in_range_see_each_other_and_stop_seeing_each_othe
   CHECK(b.wait_for("appear", 200).has_value());
   CHECK(a.sees(b.gid()) && b.sees(a.gid()));
   // the standing-entry frame carries the name and the cell (struct packet_idle_unit, 108 bytes)
-  auto ev = a.last("ZC_NOTIFY_STANDENTRY11");
-  CHECK(ev && ev->raw.size() == 108 && ev->text("actor") == "bob" && ev->num("x") == 105 && ev->num("y") == 100);
+  auto ev = a.last("LEGACY_IDLE_UNIT");    // 0x09ff: the catalog's name (no legacy source names it)
+  CHECK(ev && ev->raw.size() == 108 && ev->text("name") == "bob" && ev->pos3("PosDir").x == 105 && ev->pos3("PosDir").y == 100);
   // b walks 30 cells east: out of the 14-cell view of a
   b.walk(135, 100);
   CHECK(a.wait_for("vanish", 8000).has_value());
@@ -44,15 +52,15 @@ TEST("TL-SIM-012", walking_takes_one_step_timer_per_cell_and_others_in_view_get_
   const int64_t t0 = sim->now_ms();
   a.walk(107, 100);  // 7 cells at 150 ms
   auto mv = a.expect("move", 200);
-  CHECK(mv.num("x0") == 100 && mv.num("x1") == 107 && mv.num("y1") == 100);
+  CHECK(mv.pos6("moveData").x0 == 100 && mv.pos6("moveData").x1 == 107 && mv.pos6("moveData").y1 == 100);
   auto stop = a.expect("stop", 3000);
-  CHECK(stop.num("x") == 107);
+  CHECK(stop.num("xPos") == 107);
   const int64_t took = sim->now_ms() - t0;
   if (!(took >= 7 * 150 && took <= 7 * 150 + 80)) throw CheckFailure("took " + std::to_string(took));  // engine-core step timers, quantised by the 20 ms tick
   // b saw it start (the walking form of the unit entry) and stop
-  auto bm = b.expect("ZC_NOTIFY_MOVEENTRY11", 100);
-  CHECK(bm.num("gid") == a.gid() && bm.num("to_x") == 107);
-  CHECK(b.expect("stop", 3000).num("x") == 107);
+  auto bm = b.expect("LEGACY_UNIT_WALKING", 100);   // 0x09fd
+  CHECK(bm.num("GID") == a.gid() && bm.pos6("MoveData").x1 == 107);
+  CHECK(b.expect("stop", 3000).num("xPos") == 107);
 }
 
 TEST("TL-SIM-013", chat_reaches_players_in_view_and_echoes_to_the_speaker_only) {
@@ -63,8 +71,8 @@ TEST("TL-SIM-013", chat_reaches_players_in_view_and_echoes_to_the_speaker_only) 
   a.drain_received(); b.drain_received(); far.drain_received();
   a.say("hello there");
   auto heard = b.expect("chat", 200);
-  CHECK(heard.num("gid") == a.gid() && heard.text("text") == "alice : hello there");
-  CHECK(a.expect("chat_self", 200).text("text") == "alice : hello there");
+  CHECK(heard.num("GID") == a.gid() && heard.text("Message") == "alice : hello there");
+  CHECK(a.expect("chat_self", 200).text("payload") == "alice : hello there");   // 0x008e: OPAQUE_008E, a length-only frame
   CHECK(far.expect_none("chat", 200));
   CHECK(a.count("chat") == 0);  // the speaker gets the PLAYERCHAT echo, not the area packet
 }
@@ -78,13 +86,13 @@ TEST("BR-MAP-059", a_packet_outside_its_session_phase_disconnects_and_unknown_op
     ps.name = "early";
     ps.connect = false;
     auto& p = sim->add_player(ps);
-    p.send_raw(wire::cz_request_move(10, 10, 0));
+    p.send_raw(wire::frame("CZ_REQUEST_MOVE", {{"pos", netproto::Pos3{10, 10, 0}}}));
     sim->run_for(60);
     CHECK(p.disconnected() && p.disconnect_reason().find("not valid in this session phase") != std::string::npos);
   }
   {
     auto& p = simtest::add(*sim, "late", 60, 60);
-    p.send_raw(wire::cz_enter(p.aid(), p.aid(), 1, 0, 1));  // a second connect packet in-world
+    p.send_raw(enter_frame(p.aid(), p.aid(), 1, 0, 1));  // a second connect packet in-world
     sim->run_for(60);
     CHECK(p.disconnected());
   }
@@ -97,8 +105,8 @@ TEST("BR-MAP-059", a_packet_outside_its_session_phase_disconnects_and_unknown_op
   }
   {
     auto& p = simtest::add(*sim, "liar", 80, 80);
-    wire::Bytes f = wire::cz_request_chat("liar : x");
-    wire::put16(f, 2, 2);  // declared length below the 4-byte header
+    wire::Bytes f = wire::frame("CZ_REQUEST_CHAT", {{"tail", wire::chat_tail("liar : x")}});
+    f[2] = 2; f[3] = 0;  // declared length below the 4-byte header
     p.send_raw(f);
     sim->run_for(60);
     CHECK(p.disconnected() && p.disconnect_reason() == "invalid declared length");
@@ -125,20 +133,20 @@ TEST("BR-MAP-060", the_connect_packet_is_validated_before_anything_else) {
   ps.name = "badacct";
   ps.connect = false;
   auto& p = sim->add_player(ps);
-  p.send_raw(wire::cz_enter(5, 5, 1, 0, 1));  // account id below the legal range
+  p.send_raw(enter_frame(5, 5, 1, 0, 1));  // account id below the legal range
   auto ref = p.expect("refuse", 200);
-  CHECK(ref.num("code") == 2);
+  CHECK(ref.num("errorCode") == 2);
   CHECK(p.disconnected());
   // a sex byte other than 0/1
   ps.name = "badsex";
   auto& q = sim->add_player(ps);
-  q.send_raw(wire::cz_enter(q.aid(), q.aid(), 1, 0, 7));
-  CHECK(q.expect("refuse", 200).num("code") == 6);
+  q.send_raw(enter_frame(q.aid(), q.aid(), 1, 0, 7));
+  CHECK(q.expect("refuse", 200).num("errorCode") == 6);
   // the same account twice: the second session gets no answer at all (legacy sends nothing)
   auto& first = simtest::add(*sim, "first", 20, 20);
   ps.name = "dup";
   auto& dup = sim->add_player(ps);
-  dup.send_raw(wire::cz_enter(first.aid(), first.aid(), 1, 0, 1));
+  dup.send_raw(enter_frame(first.aid(), first.aid(), 1, 0, 1));
   sim->run_for(100);
   CHECK(dup.drain_received().empty() && dup.disconnected());
 }
@@ -213,19 +221,19 @@ TEST("TL-SIM-017", npc_dialogue_input_and_persistent_variables_and_disconnect_ca
     return v ? std::get<int64_t>(*v) : int64_t(0);
   };
   p.click_npc("Counter");
-  CHECK(p.expect("say", 300).text("text") == "visit 1");
+  CHECK(p.expect("say", 300).text("message") == "visit 1");
   p.expect("next", 100);
   p.next();
   p.expect("input", 300);              // ZC_OPEN_EDITDLGSTR
   p.input("42");
-  CHECK(p.expect("say", 300).text("text") == "got 42");
+  CHECK(p.expect("say", 300).text("message") == "got 42");
   p.expect("next", 100);
   p.next();
   p.expect("close", 300);
   CHECK(visits() == 1);                // the character variable lives in the persistence-backed KV store
   // second visit: the counter continues; then the client hangs up in the middle of the dialogue
   p.click_npc("Counter");
-  CHECK(p.expect("say", 300).text("text") == "visit 2");
+  CHECK(p.expect("say", 300).text("message") == "visit 2");
   CHECK(sim->dialogue_of(p.gid()).active);
   const uint32_t gid = p.gid();
   p.disconnect();

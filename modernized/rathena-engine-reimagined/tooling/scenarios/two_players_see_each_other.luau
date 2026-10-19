@@ -17,16 +17,16 @@ sim.assert_pos(bob, 121, 100)
 
 -- they came into view while walking: both were told about the other
 local ev = alice:expect("appear", 10)
-sim.assert_eq(ev.name == "ZC_NOTIFY_STANDENTRY11" or ev.name == "ZC_NOTIFY_MOVEENTRY11", true, "appear packet")
-sim.assert_eq(ev.gid, bob.gid, "alice was told about bob")
+sim.assert_eq(ev.name == "LEGACY_IDLE_UNIT" or ev.name == "LEGACY_UNIT_WALKING", true, "appear packet")
+sim.assert_eq(ev.GID, bob.gid, "alice was told about bob")
 sim.assert_sees(alice, bob)
 sim.assert_sees(bob, alice)
 
 -- chat reaches the other player in view, with the speaker's name
 alice:say("hello bob")
 local heard = bob:expect("chat", 200)
-sim.assert_eq(heard.text, "alice : hello bob", "chat text")
-sim.assert_eq(heard.gid, alice.gid, "chat speaker")
+sim.assert_eq(heard.Message, "alice : hello bob", "chat text")
+sim.assert_eq(heard.GID, alice.gid, "chat speaker")
 
 -- bob walks out of view
 bob:walk(145, 100)

@@ -79,7 +79,7 @@ enable_testing()
 add_executable(gateway_tests
   tests/main.cpp tests/test_pure.cpp tests/test_login.cpp tests/test_char.cpp tests/test_security.cpp
   tests/test_crypto.cpp tests/test_hasher.cpp tests/test_login_ext.cpp tests/test_char_ext.cpp
-  tests/test_wire.cpp tests/test_runtime.cpp tests/test_failure_modes.cpp tests/test_persist.cpp)
+  tests/test_wire.cpp tests/test_wire_netproto.cpp tests/test_runtime.cpp tests/test_failure_modes.cpp tests/test_persist.cpp)
 target_link_libraries(gateway_tests PRIVATE gateway)
 target_compile_options(gateway_tests PRIVATE ${_warn})
 target_compile_definitions(gateway_tests PRIVATE GATEWAY_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"

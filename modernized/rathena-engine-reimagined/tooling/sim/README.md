@@ -54,34 +54,49 @@ ruleset package". Ruleset staging options: `golden` (None/Subset/Full; the recor
 
 ## SimPlayer and the wire
 
-`SimPlayer` (C++: `include/tooling/sim_player.hpp`; Luau: `sim.player{}`) builds the byte frames a client would send
+`SimPlayer` (C++: `include/tooling/sim_player.hpp`; Luau: `sim.player{}`) sends the byte frames a client would send
 and decodes the frames the server sends. No sockets. Everything between the two is `Sim::client_send/client_take`.
 
-| Direction | Packets (opcode, length) | Origin |
-|---|---|---|
-| client to server | CZ_ENTER 0x0436/23, CZ_NOTIFY_ACTORINIT 0x007d/2, CZ_REQUEST_MOVE 0x035f/5, CZ_REQUEST_TIME 0x0360/6, CZ_REQUEST_CHAT 0x00f3/var, CZ_CONTACTNPC 0x0090/7 | in the netproto spec (`client_packets.yaml`); opcode, length, gate come from the generated catalog |
-| client to server | CZ_REQ_NEXT_SCRIPT 0x00b9/6, CZ_CHOOSE_MENU 0x00b8/7, CZ_REQUEST_ACT2 0x0437/7, CZ_USE_SKILL 0x0438/10 | legacy packet DB only (handler-parsed, `fields: unknown` in netproto) |
-| client to server | CZ_CLOSE_DIALOG 0x0146/6, CZ_INPUT_EDITDLG 0x0143/10, CZ_INPUT_EDITDLGSTR 0x01d5/var | typed structs in the legacy DB, not in the spec |
-| server to client | ZC_NOTIFY_TIME 0x007f/6, ZC_NOTIFY_PLAYERMOVE 0x0087/12 | in the spec |
-| server to client | ZC_ACCEPT_ENTER 0x02eb/13, ZC_REFUSE_ENTER 0x0074/3, ZC_STOPMOVE 0x0088/10, ZC_NOTIFY_VANISH 0x0080/7, ZC_NOTIFY_CHAT 0x008d, ZC_SAY_DIALOG 0x00b4, ZC_WAIT_DIALOG 0x00b5/6, ZC_CLOSE_DIALOG 0x00b6/6, ZC_MENU_LIST 0x00b7, ZC_OPEN_EDITDLGSTR 0x01d4/6, ZC_NOTIFY_ACT 0x08c8/34 | typed structs in the legacy DB, not in the spec |
-| server to client | ZC_NOTIFY_STANDENTRY11 0x09ff/108, ZC_NOTIFY_MOVEENTRY11 0x09fd/114, ZC_NOTIFY_PLAYERCHAT 0x008e | untyped in the DB; layout of the two entry packets read from `struct packet_idle_unit` / `packet_unit_walking` in `src/map/packets_struct.hpp` (RE flavour, PACKETVER 20211103) |
+The sim has **no codec of its own**. Frames are encoded and decoded by netproto's `CodecSet` over the full generated
+catalog of the real client (`proto/packets_re_20211103.yaml`, 1,186 packets, generated into the build tree by netproto's
+codegen); the client half of a session is `netproto::SimClient` (encode, phase tracking), the server half peeks frames
+with the catalog's client table and gates them with `gate_packet`. Names and member names are the catalog's, i.e. the
+legacy struct members. These 29 packets are the ones the sim speaks (tests/test_sim_wire.cpp pins each opcode and
+length against the catalog and against `netproto/proto/legacy_20211103.yaml`, and each frame byte for byte against what the
+retired private codec produced):
 
-`tests/test_sim_wire.cpp` checks every opcode and length of this table against `netproto/proto/legacy_20211103.yaml`
-and the eight spec packets against the generated catalog (a changed length fails the test; verified by mutation).
+| Direction | Packets (opcode, length) and members the sim uses |
+|---|---|
+| client to server | `CZ_ENTER` 0x0436/23 (`account_id char_id login_id1 client_tick sex`), `CZ_NOTIFY_ACTORINIT` 0x007d/2, `CZ_REQUEST_MOVE` 0x035f/5 (`pos`), `CZ_REQUEST_TIME` 0x0360/6 (`client_tick`), `CZ_REQUEST_CHAT` 0x00f3/var (`tail`: text + NUL), `CZ_CONTACTNPC` 0x0090/7 (`AID type`) |
+| client to server | `CZ_REQ_NEXT_SCRIPT` 0x00b9/6 (`f2`), `CZ_CHOOSE_MENU` 0x00b8/7 (`npc_id select`), `CZ_CLOSE_DIALOG` 0x0146/6 (`GID`), `CZ_INPUT_EDITDLG` 0x0143/10 (`GID value`), `CZ_INPUT_EDITDLGSTR` 0x01d5/var (`GID value`), `CZ_REQUEST_ACT2` 0x0437/7 (`f2` target, `f6` action), `CZ_USE_SKILL2` 0x0438/10 (`f2` level, `f4` skill, `f6` target) |
+| server to client | `ZC_ACCEPT_ENTER` 0x02eb/13 (`startTime posDir xSize ySize font`), `ZC_REFUSE_ENTER` 0x0074/3 (`errorCode`), `ZC_NOTIFY_TIME` 0x007f/6 (`time`), `ZC_NOTIFY_PLAYERMOVE` 0x0087/12 (`moveStartTime moveData`), `ZC_STOPMOVE` 0x0088/10 (`AID xPos yPos`), `ZC_NOTIFY_VANISH` 0x0080/7 (`gid type`), `ZC_NOTIFY_ACT` 0x08c8/34 (`srcID targetID serverTick srcSpeed dmgSpeed damage isSPDamage div type damage2`) |
+| server to client | `ZC_NOTIFY_CHAT` 0x008d/var (`GID Message`), `ZC_SAY_DIALOG` 0x00b4/var (`NpcID message`), `ZC_WAIT_DIALOG` 0x00b5/6 (`NpcID`), `ZC_CLOSE_DIALOG` 0x00b6/6 (`npcId`), `ZC_MENU_LIST` 0x00b7/var (`npcId menu`), `ZC_OPEN_EDITDLGSTR` 0x01d4/6 (`npcId`) |
+| server to client | `LEGACY_IDLE_UNIT` 0x09ff/108 and `LEGACY_UNIT_WALKING` 0x09fd/114 (`struct packet_idle_unit` / `packet_unit_walking`; no legacy source names them: `objecttype AID GID speed job sex PosDir|MoveData moveStartTime xSize ySize clevel maxHP HP name`), `OPAQUE_008E` 0x008e/var (length-only in the legacy tables: `payload` = text + NUL) |
+
+Any other client packet of the catalog is legal on the wire, gated and counted, and then ignored (trace line "not
+interpreted by the sim"); an opcode that is not a client packet of the catalog is an unknown opcode and a disconnect.
+
+**Events.** `SimPlayer::Event` is `wire::Packet`: netproto's decoded packet (`name`, `fields`, `repeats`) plus `opcode`,
+`raw` and `at_ms`. C++ reads `num("AID")`, `text("Message")`, `pos3("PosDir")`, `pos6("moveData")`. A Luau event table has
+the same member names as fields; a pos3 is a table `{x, y, dir}`, a pos6 `{x0, y0, x1, y1, sx, sy}`, strings and raw
+tails are text, and a member that shares a name with one of the four event keys (`name`, `opcode`, `at`, `bytes`) is
+exposed as `f_<name>` (so `LEGACY_IDLE_UNIT.name` is `f_name`).
 
 **Limitations, stated plainly.**
-- For the handler-parsed packets the spec has offsets (`pos[]`) but no types. The sim writes the fields where
-  the legacy handler reads them and gives them the meaning the handler gives them (read from `clif.cpp`); that is the
-  sim's reading, not netproto data. CZ_REQUEST_MOVE carries netproto's packed pos3 because `clif_parse_WalkToXY`
-  reads it with `RFIFOPOS`.
-- Opcode obfuscation, the other 154 shuffle blocks, the login server (CA_LOGIN), flood guard, version negotiation,
-  compression and real timing/latency are not simulated. There is one client build, `re/20211103`.
-- `CodecSet::decode/encode` and `SimClient` in netproto are still stubs, so the sim has its own small codec
-  (`sim_wire.cpp`) for the packets above and uses netproto for framing, gating, packing and the catalog.
+- For handler-parsed packets netproto derives the member names from the handler: where the legacy handler assigns a read
+  straight into a call there is no variable to name it after, and the catalog says `f2`, `f6` (see the table). The sim gives
+  them the meaning the handler gives them (read from `clif.cpp`). CZ_REQUEST_MOVE carries netproto's packed pos3 because
+  `clif_parse_WalkToXY` reads it with `RFIFOPOS`; a coordinate above 1023 cannot be encoded (netproto refuses it, the retired
+  codec masked it).
+- Opcode obfuscation (SimClient supports it; the sim runs unkeyed), the login server (CA_LOGIN), flood guard, version
+  negotiation, compression and real timing/latency are not simulated. There is one client build, `re/20211103`.
 - ZC_STOPMOVE on arrival and ZC_NOTIFY_VANISH type 3 on logout are the sim's conventions (legacy sends a stop packet
-  only when a walk is interrupted).
-- `cast` sends CZ_USE_SKILL; the ruleset packages have no skill formulas, so nothing comes back (test TL-SIM-003 stays
+  only when a walk is interrupted). ZC_REFUSE_ENTER (0x0074) is the sim's answer to a bad connect packet; the legacy server
+  writes a 23-byte 0x006a there (`clif.cpp:10685`), which is what the gateway sends.
+- `cast` sends CZ_USE_SKILL2; the ruleset packages have no skill formulas, so nothing comes back (test TL-SIM-003 stays
   pending, strengthened to require a damage frame).
+- Speed: encoding and decoding go through netproto's `std::map`-based `DecodedPacket`; the 200-player load run costs
+  about 0.027-0.030 wall s per virtual s in Release (0.014 with the retired codec). The trace hash is unchanged.
 
 ### What a SimPlayer can do
 
@@ -90,8 +105,9 @@ and the eight spec packets against the generated catalog (a changed length fails
 `input_number(n)`, `close_dialog()`, `ping()`, `attack(gid)`, `cast(skill, gid, lv)`, `send_raw(bytes)`, `disconnect()`;
 `wait_for(event, timeout_ms)` advances virtual time until an unconsumed event arrives (or times out, returning nothing),
 `expect(...)` throws naming the inbox, `expect_none(...)`, `drain_received()`, `last()`, `count()`, `sees(gid)`.
-Event names are packet names or aliases (`say`, `next`, `menu`, `input`, `close`, `move`, `stop`, `appear`, `standing`,
-`moving`, `vanish`, `chat`, `chat_self`, `damage`, `accept`, `refuse`, `time`).
+Event names are packet names or aliases (`say`, `next`, `menu`, `input`, `close`, `move`, `stop`, `appear`, `standing`
+= LEGACY_IDLE_UNIT, `moving` = LEGACY_UNIT_WALKING, `vanish`, `chat`, `chat_self` = OPAQUE_008E, `damage`, `accept`,
+`refuse`, `time`).
 
 The server side of the boundary (`sim_server.cpp`): netproto gating decides who may send what; a walk is
 `MovementSystem::request_walk`; the area broadcast is a 14-cell Chebyshev query on the spatial index with symmetric

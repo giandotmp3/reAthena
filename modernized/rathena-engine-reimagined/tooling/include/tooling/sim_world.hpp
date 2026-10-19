@@ -269,6 +269,7 @@ class Sim {
   wire::Bytes client_take(int session);
   Session& session(int idx) { return *sessions_.at(static_cast<size_t>(idx)); }
   const netproto::CodecSet& codecs() const { return *codec_; }
+  const std::shared_ptr<const netproto::CodecSet>& codec_ptr() const { return codec_; }
   const netproto::FrameTable& c2s_table() const { return c2s_; }
   const netproto::FrameTable& s2c_table() const { return s2c_; }
   uint32_t server_tick() const { return static_cast<uint32_t>(clock_.now()); }
@@ -285,8 +286,10 @@ class Sim {
 
   // server side (sim_server.cpp)
   void process_inbound(Session& s);
+  static bool handled_packet(const std::string& name);
   void handle_frame(Session& s, const wire::Packet& p);
   void send(Session& s, const wire::Bytes& frame);
+  void send(Session& s, const std::string& packet, wire::Fields fields) { send(s, wire::frame(packet, fields)); }
   void drop_session(Session& s, const std::string& why);
   void on_connect(Session& s, const wire::Packet& p);
   void on_actorinit(Session& s);
@@ -343,7 +346,7 @@ class Sim {
   std::unique_ptr<engine::MapGrid> grid_;
   std::unique_ptr<engine::SpatialIndex> spatial_;
   std::unique_ptr<engine::MovementSystem> movement_;
-  std::unique_ptr<netproto::CodecSet> codec_;
+  std::shared_ptr<const netproto::CodecSet> codec_;
   netproto::FrameTable c2s_, s2c_;
   std::unique_ptr<script_host::DialogueManager> dialogues_;
   std::vector<std::unique_ptr<Session>> sessions_;

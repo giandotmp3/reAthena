@@ -15,5 +15,5 @@ sim.assert_true(mallory:connected(), "the forger is not disconnected")
 
 mallory:say("an honest message")                         -- the same client, correctly framed
 local heard = victim:expect("chat", 300)
-sim.assert_eq(heard.text, "mallory : an honest message", "the honest message arrives with the real name")
-sim.assert_eq(heard.gid, mallory.gid, "and the real speaker id")
+sim.assert_eq(heard.Message, "mallory : an honest message", "the honest message arrives with the real name")
+sim.assert_eq(heard.GID, mallory.gid, "and the real speaker id")

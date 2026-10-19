@@ -99,26 +99,8 @@ target_compile_definitions(netproto_tests PRIVATE
 netproto_strict(netproto_tests)
 add_test(NAME acceptance COMMAND netproto_tests)
 
-# Compatibility with the gateway's and the sim's PRIVATE codecs. Their sources are compiled read-only into this
-# test binary (nothing of theirs is modified or copied); the test proves byte-identical frames, so the later
-# migration to netproto is mechanical. Skipped when the sibling units are not checked out.
-set(NETPROTO_GATEWAY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../gateway)
-set(NETPROTO_TOOLING_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../tooling)
-if(EXISTS ${NETPROTO_GATEWAY_DIR}/src/wire.cpp AND EXISTS ${NETPROTO_TOOLING_DIR}/src/sim_wire.cpp)
-  add_executable(netproto_compat_tests
-    tests/main.cpp
-    tests/compat/test_gateway_compat.cpp
-    tests/compat/test_sim_compat.cpp
-    ${NETPROTO_GATEWAY_DIR}/src/wire.cpp
-    ${NETPROTO_TOOLING_DIR}/src/sim_wire.cpp)
-  add_dependencies(netproto_compat_tests netproto_generated)
-  target_include_directories(netproto_compat_tests PRIVATE ${NETPROTO_GEN_DIR}/.. ${NETPROTO_GATEWAY_DIR}/include
-                                                           ${NETPROTO_TOOLING_DIR}/include tests tests/compat)
-  target_link_libraries(netproto_compat_tests PRIVATE netproto)
-  netproto_strict(netproto_compat_tests)
-  target_compile_definitions(netproto_compat_tests PRIVATE NETPROTO_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
-  add_test(NAME compat COMMAND netproto_compat_tests)
-endif()
+# (The byte-identity compat tests against the gateway's and the sim's former private codecs were removed after both units
+# migrated onto this codec; the gateway has golden tests against the real legacy structs through netproto instead.)
 
 # The YAML reader against PyYAML on every proto file.
 add_executable(netproto_yaml_dump tests/yaml_dump.cpp)

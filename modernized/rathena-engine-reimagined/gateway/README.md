@@ -17,7 +17,7 @@ place that holds them (production binds `rathena.base` there).
 | `persist_adapter.hpp` | `PersistAccountStore`, `PersistCharacterStore`, `PersistRegistryPurger` over `persistence/` (reads through `RecordStore`/`KvStore`, writes through `WriteBehindService` and its bounded WAL) |
 | `services.hpp` | `LoginService`, `AccountAdmin`, `CharService` |
 | `hasher.hpp`, `crypto.hpp` | `Argon2idHasher`, `Pbkdf2Sha256Hasher`, `LayeredHasher`, bounded `HashPool` / `PooledHasher`; MD5, SHA-256, HMAC, PBKDF2, base64 |
-| `wire.hpp`, `packet_handlers.hpp` | `PacketCodec` over netproto's catalog; `LoginConnection`, `CharConnection`, `WorldConnection` |
+| `wire.hpp`, `packet_handlers.hpp` | `PacketCodec`: a seam over netproto's `CodecSet` and its full 1,186-packet catalog (no interpreter of its own); `LoginConnection`, `CharConnection`, `WorldConnection` |
 | `runtime.hpp`, `role.hpp`, `config.hpp` | gateway-owned IO queue and threads, rate limiter, strand; `--role` and config parsing |
 | `rules.hpp` | pure rules (unchanged from the scaffold) |
 
@@ -87,7 +87,35 @@ Changed on purpose (each has a test):
 No socket listener (accept loop, TLS, per-connection read/write): the handlers take bytes and return frames.
 `main.cpp` is a bring-up skeleton. IP bans are in memory. The DNSBL resolver and the login/char audit sink are
 interfaces with test doubles only. The packet layer targets `re/20211103`; main flavour (19-byte `0x0436`),
-the `0x0841` accessible-map flow and pre-2011 PIN-less clients are not covered. netproto's `CodecSet::decode`
-/ `encode` are stubs, so `PacketCodec` interprets netproto's `FieldSpec` model itself (see `wire.hpp`).
+the `0x0841` accessible-map flow and pre-2011 PIN-less clients are not covered. There is no private codec: `PacketCodec`
+is a seam over netproto's `CodecSet` and its full catalog (see "netproto findings").
 The world-side executor of the delete cleanup plan and of `AccountEvent` broadcasts does not exist yet; the
 gateway hands both over through `WorldBus`.
+
+## netproto findings and how the gateway settled them
+
+The gateway's former private codec was proven against netproto's by byte-identity tests, which also listed where the two
+disagreed. The legacy headers decide each case:
+
+| Finding | Verdict | In the gateway |
+|---|---|---|
+| Refusal of an invalid connect packet was `ZC_REFUSE_ENTER` on 0x006a, 3 bytes | wrong both ways: `clif_parse_WantToConnection` (`clif.cpp:10685`) writes opcode 0x006a with `packet_len(0x6a)` = 23 bytes and the code at byte 2; `ZC_REFUSE_ENTER` is 0x0074 / 3 bytes and the legacy server never sends it; `clif_authfail_fd` (`clif.cpp:829`) sends `SC_NOTIFY_BAN` 0x0081 / 3 bytes | the refusal is the 23-byte 0x006a (the catalog lists it as the length-only `OPAQUE_006A`, `wire::kConnectRefusal`; unused bytes are zero, the legacy left them unset), auth failure stays `SC_NOTIFY_BAN` (`errorCode`) |
+| `CHARACTER_INFO.level`, `.bIsChangedCharName` read unsigned | `int16` in the struct | signed `i16` from the catalog |
+| `CA_SSO_LOGIN_REQ.token` raw | `char token[]`, text | string tail (decode cuts at the NUL; `safestrncpy` to 31 bytes is kept) |
+| `AC_ACK_HASH.salt` raw | `char salt[]`, **but** `loginclif.cpp:363-367` sends `4 + md5keylen` bytes with no terminator, while netproto's string tails always end in a NUL | kept as a raw tail (no NUL) through `kRawFields`; with a NUL a client that sizes the key by `packetLength` would hash a 21-byte salt |
+| `PACKET_TC_RESULT` fixed(34) | has a `packetLength` word | variable (header 34), length written |
+| `encode` silently cut long strings; `memcpy(dst, nullptr, 0)` for an empty raw tail (wire.cpp:401); `array_len` ignored | defects | netproto's encode refuses a string that does not fit with its NUL, an embedded NUL, an unknown field name; empty tails encode without `memcpy`; arrays are honoured. Handler-owned display text (server name 20, map names 16, character names 24, dates 20) is cut by `wire::fit`, never client input |
+| Field names (`auth_code`, `result`, `error`, `new`) | the legacy struct members are `login_id1`, `errorCode`, `new_`, `character.*` | renamed everywhere |
+
+`kRawFields` (in `wire.cpp`) is the only difference from netproto's catalog: seven fixed `char[N]` members the legacy code
+copies as raw, unterminated bytes are typed `raw`, not `string`: `CA_EXE_HASHCHECK.hash` (an MD5 digest; a NUL byte would cut it,
+and a string-typed hash would reject about 6% of real clients), the PIN fields and `CH_DELETE_CHAR3.birthdate` (4 and 6 bytes with
+no room for a NUL, so a string encode of a full field is refused), and `AC_ACK_HASH.salt`. A test proves the catalog is netproto's
+except exactly these seven, and the gateway fails to start if netproto drops one of them. The fix belongs in netproto's catalog.
+
+Gating: the gate of a frame is the `gate` column of the catalog's client table (`peek_frame` -> `FrameEntry::gate` ->
+`gate_packet(session phase, gate)`), nothing else. Each listener starts in `PreSession`, where only the connect packet of
+its server is accepted; the char listener moves to `PreMapLoad` after a good `CH_ENTER`; the world listener moves to
+`PreMapLoad` after a good `CZ_ENTER` and to `InWorld` after `CZ_NOTIFY_ACTORINIT` (`HandlerResult::map_loaded`). A packet in
+the wrong phase, an opcode that is not a client packet of the catalog (including server packets and length-only frames) and a
+bad declared length each disconnect. Tests walk all 338 client opcodes through all three listeners.
