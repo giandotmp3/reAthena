@@ -49,8 +49,9 @@ def run_luau(args):
     entry = "tests/status_golden_report" if "--status-report" in args else "tests/golden_report" if "--report" in args else "tests/main"
     out = ROOT / "build" / "bundle_tests.luau"
     subprocess.run([sys.executable, "-I", str(TOOLS / "bundle_luau.py"), entry, str(out)], check=True, stdout=subprocess.DEVNULL)
-    extra_args = ["full"] if "--full" in args else []   # (--status-report --full: every status, not only the mismatching ones)
-    rc = subprocess.run([exe, str(out)] + extra_args, cwd=ROOT).returncode
+    if "--full" in args:  # (--status-report --full: every status, not only the mismatching ones; the Luau CLI passes no script args)
+        out.write_text(out.read_text().replace("(...)\n", '("full")\n'))
+    rc = subprocess.run([exe, str(out)], cwd=ROOT).returncode
     if entry == "tests/main":  # the extra suite (tests/extra.luau) runs after the main one, in its own process
         out2 = ROOT / "build" / "bundle_extra.luau"
         subprocess.run([sys.executable, "-I", str(TOOLS / "bundle_luau.py"), "tests/extra", str(out2)], check=True, stdout=subprocess.DEVNULL)

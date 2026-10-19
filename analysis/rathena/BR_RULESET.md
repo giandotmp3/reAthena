@@ -1,6 +1,6 @@
 # BR-RULESET: rules a Luau script ruleset must own (not in AI_NATIVE_SPEC.md)
 
-> **Corrections found by golden-trace replay against the real code:** 018 and 032 are corrected inline below (PRE). The renewal corrections (019, 034, 025, 010, 032 in ATK parts, 002, 006, 027, 039, 102) are in `modernized/rathena-engine-reimagined/ruleset-renewal/docs/BR_RULESET_CORRECTIONS.md`; treat that file as authoritative where it differs from the text below.
+> **Corrections found by golden-trace replay against the real code:** 018 and 032 are corrected inline below (PRE). The renewal corrections (019, 034, 025, 010, 032 in ATK parts, 002, 006, 027, 039, 102) are in `modernized/rathena-engine-reimagined/ruleset-renewal/docs/BR_RULESET_CORRECTIONS.md`; treat that file as authoritative where it differs from the text below. Status-layer corrections (051, 065-069, 071, 075, 077) are in `ruleset-prerenewal/docs/BR_RULESET_CORRECTIONS.md` and the status section of `ruleset-renewal/docs/BR_RULESET_CORRECTIONS.md`.
 
 Scope: `src/map/battle.cpp`, `status.cpp`, `skill.cpp`, `pc.cpp`, `script.cpp`, `mob.cpp`, and the `db/` schemas. All paths are under `/home/user/reAthena`. I did not write any files.
 

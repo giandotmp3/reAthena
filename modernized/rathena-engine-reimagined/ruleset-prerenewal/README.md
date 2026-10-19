@@ -43,7 +43,7 @@ stage list (`attrs.luau`). 319 statuses are defined (`defs/*.luau` first draft g
 maintained by hand together with `defs_hand.luau`); every contribution carries `at = status.cpp line`, the citation and the evaluation order.
 `speed.luau`, `aspd.luau`, `mode.luau`, `maxhp.luau`, `states.luau`, `scripted.luau`, `chain.luau` (`status_calc_bl_main`), `recalc.luau`,
 `engine_model.luau` (the same value from engine-core `Contribution{source, tag, value}` records), `ops.luau`, `consts.luau` (generated from the
-legacy build). `docs/STATUS_FIELDS.md` answers Q-F (names of `val1..val4`). Golden: `conformance/golden/status_pre.jsonl.gz` (13,100 cases recorded from
+legacy build). `docs/STATUS_FIELDS.md` answers Q-F (names of `val1..val4`). Golden: `conformance/golden/status_pre.jsonl.gz` (13,124 cases recorded from
 the real code, strict `PRERE` build; `conformance/golden_gen/gen_status_cases.py`), replayed by `tests/acceptance/status_golden_test.luau`
 (`python3 -I tools/run_tests.py --luau X --status-report` prints the match rate by function, category and status, and the contribution coverage).
 `tools/mutation_status.py --luau X` breaks the Luau in 45 ways; every mutant must fail the replay.

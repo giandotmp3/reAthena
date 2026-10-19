@@ -506,6 +506,15 @@ def gen_state(g, dbstates, n_per):
             cant = {c: R.choice([0, 1]) for c in CANT}
             u = {"sk": {"RG_TUNNELDRIVE": R.choice([0, 0, 3])}} if ut == "pc" else {}
             g.add("state", "state", ut, 0, sc, u, None, {"changed": st, "start": start, "cant": cant})
+    # Dancing + Longing: every song class (ordinary, Moonlit Serenade 395, Hermode's 488) x both changed statuses x start/end x the old flag
+    for song in (100, 395, 488):
+        for ch in ("DANCING", "LONGING"):
+            for start in (0, 1):
+                for old_move in (0, 1):
+                    sc = {"DANCING": [song, 0, 0, 1], "LONGING": [2, 0, 0, 0]}
+                    cant = {c: 0 for c in CANT}
+                    cant["move"] = old_move
+                    g.add("state", "state", "mob", 0, sc, {}, None, {"changed": ch, "start": start, "cant": cant})
 
 
 CHAIN_FIELDS = ["str", "agi", "vit", "int", "dex", "luk", "batk", "rhw_atk", "rhw_atk2", "lhw_atk", "lhw_atk2", "rhw_ele", "lhw_ele", "hit", "flee",

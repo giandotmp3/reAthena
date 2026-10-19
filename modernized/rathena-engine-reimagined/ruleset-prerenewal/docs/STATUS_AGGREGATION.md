@@ -42,8 +42,8 @@ attribute fold -- `chain.luau` is the Luau counterpart of the recalculation grap
 
 ## 2. Coverage and result
 
-Golden: `conformance/golden/status_pre.jsonl.gz`, **13,100 cases** recorded from the real functions (strict pre-renewal build, a fresh build regenerates the file byte for byte),
-**13,100 / 13,100 match** (every output compared, no tolerance). Replay 0.3 s (23 us / case); the extra suite incl. all status tests runs in 2.5 s.
+Golden: `conformance/golden/status_pre.jsonl.gz`, **13,124 cases** recorded from the real functions (strict pre-renewal build, a fresh build regenerates the file byte for byte),
+**13,124 / 13,124 match** (every output compared, no tolerance). Replay 0.3 s (23 us / case); the extra suite incl. all status tests runs in 2.5 s.
 
 | Case `fn` | Legacy function (status.cpp line) | statuses it reads | cases | matched |
 |---|---|---|---|---|
@@ -87,12 +87,12 @@ Golden: `conformance/golden/status_pre.jsonl.gz`, **13,100 cases** recorded from
 | `speed` | status_calc_speed 8039 | 63 | 1420 | 1420 |
 | `spl` | status_calc_spl 7256 (") | 2 | 147 | 147 |
 | `sta` | status_calc_sta 7216 (") | 2 | 147 | 147 |
-| `state` | status_calc_state 5592 | - | 500 | 500 |
+| `state` | status_calc_state 5592 | - | 524 | 524 |
 | `str` | status_calc_str 6773 | 24 | 241 | 241 |
 | `vit` | status_calc_vit 6921 | 19 | 226 | 226 |
 | `watk` | status_calc_watk 7360 | 32 | 423 | 423 |
 | `wis` | status_calc_wis 7236 (") | 2 | 147 | 147 |
-| **total** | | **319 distinct** | **13,100** | **13,100** |
+| **total** | | **319 distinct** | **13,124** | **13,124** |
 
 * 319 statuses are defined; **all 319** appear in at least one case (435 statuses in all, the others are state / script carriers). Match rate by function and by status:
   `docs/STATUS_GOLDEN_REPORT.txt` (`python3 -I tools/run_tests.py --luau X --status-report --full`).

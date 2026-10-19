@@ -49,8 +49,8 @@ TEST("BR-RULESET-119", prerenewal_golden_cases_all_match_the_real_legacy_code_th
   CHECK(r.categories.size() >= 30);
   CHECK(r.load_order.size() == 2 && r.load_order[0] == "rathena.base" && r.load_order[1] == "ruleset.prerenewal");
   CHECK(r.generation == 1);
-  // the package's own suite under the sim host: 96 pass / 86 expected-failure, the unit's documented figures
-  CHECK(r.suite_ran && r.suite_pass == 96 && r.suite_xfail == 86 && r.suite_fail == 0 && r.suite_xpass == 0);
+  // the package suite under the sim host: 106 pass / 76 expected-failure (96/86 before the status layer converted ten pending rules)
+  CHECK(r.suite_ran && r.suite_pass == 106 && r.suite_xfail == 76 && r.suite_fail == 0 && r.suite_xpass == 0);
   CHECK(r.ok());
   std::printf("      prerenewal: %llu/%llu golden, suite %llu pass / %llu xfail, load %.0f ms, replay %.0f ms (%.1f us/case)\n",
               static_cast<unsigned long long>(r.golden_matched), static_cast<unsigned long long>(r.golden_total),
