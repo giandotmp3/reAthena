@@ -8,6 +8,7 @@
 // rules::char_packet_allowed; at most `frames_per_cycle` frames are processed per pump (netproto
 // CycleBudget): the rest stay buffered for the next cycle, delayed and not dropped.
 #include <functional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -22,6 +23,7 @@ struct HandlerResult {
   std::string note;               // why, for logs and tests
   // World connect only:
   bool world_entered = false;
+  bool map_loaded = false;        // CZ_NOTIFY_ACTORINIT accepted: the session is in-world from now on
   AccountId account_id = 0;
   CharId char_id = 0;
 };
@@ -54,7 +56,15 @@ class ConnectionBase {
  protected:
   virtual void on_frame(const netproto::DecodedPacket& p, std::uint16_t opcode, HandlerResult& r) = 0;
   virtual netproto::Phase session_phase() const = 0;
-  void send(HandlerResult& r, const netproto::DecodedPacket& p) { r.out.push_back(codec_.encode(p)); }
+  /// Encoding a reply cannot fail for a well-formed handler; if it does (a value that does not fit) it is an internal
+  /// error of ours, not a malformed client packet.
+  void send(HandlerResult& r, const netproto::DecodedPacket& p) {
+    try {
+      r.out.push_back(codec_.encode(p));
+    } catch (const wire::WireError& e) {
+      throw std::logic_error(e.what());
+    }
+  }
   void drop(HandlerResult& r, const std::string& why) { r.disconnect = true; r.note = why; closed_ = true; }
   /// A service threw StoreUnavailable (database down / writes refused) or HashOverloaded: answer
   /// "server closed" (SC_NOTIFY_BAN 1) and disconnect. Never lets an exception reach the IO thread.
@@ -106,7 +116,7 @@ class CharConnection : public ConnectionBase {
   void send_char_list(HandlerResult& r, const EnterOutcome& e);
   void send_pin_wire(HandlerResult& r, int wire_state);
   netproto::DecodedPacket char_row_packet(const std::string& name, const std::vector<Character>& cs);
-  void fill_row(std::map<std::string, netproto::FieldValue>& row, const Character& c);
+  void fill_row(std::map<std::string, netproto::FieldValue>& row, const Character& c, const std::string& prefix = {});
   Rng& rng_;
   CharService& svc_;
   const GatewayConfig& cfg_;

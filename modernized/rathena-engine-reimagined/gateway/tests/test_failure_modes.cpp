@@ -296,7 +296,7 @@ TEST("ARCH-FAIL-DB", database_down_refuses_logins_and_char_select_with_a_clear_c
   LoginConnection lc(codec, login, e.cfg, "192.0.2.10", ServerListEntry{}, [] { return 0; });
   auto lp = codec.encode([&] { auto p = wire::make("CA_LOGIN"); wire::set_str(p, "username", "fakeuser"); wire::set_str(p, "password", kFakePass); return p; }());
   auto lr = lc.feed(lp);
-  CHECK(lr.out.size() == 1 && codec.decode_s2c(lr.out[0]).name == "SC_NOTIFY_BAN" && wire::get_int(codec.decode_s2c(lr.out[0]), "result") == 1);
+  CHECK(lr.out.size() == 1 && codec.decode_s2c(lr.out[0]).name == "SC_NOTIFY_BAN" && wire::get_int(codec.decode_s2c(lr.out[0]), "errorCode") == 1);
   CharConnection cc(codec, chr, e.cfg, e.rng, 1, "192.0.2.10", ServerListEntry{});
   e.tickets.issue({a.id, 11, 22, Sex::Male, e.clock.now(), 0, AuthStage::Login});
   auto ep = codec.encode([&] { auto p = wire::make("CH_ENTER"); wire::set_int(p, "account_id", a.id); wire::set_int(p, "login_id1", 11); wire::set_int(p, "login_id2", 22); wire::set_int(p, "sex", 1); return p; }());

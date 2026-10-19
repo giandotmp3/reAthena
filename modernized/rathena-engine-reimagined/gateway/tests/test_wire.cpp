@@ -80,19 +80,22 @@ struct Net {
 }  // namespace
 
 // ---- netproto facts the gateway builds on -------------------------------------------------------------------
-TEST("CAP-24", real_catalog_login_and_connect_packets_and_overlay_offsets) {
+TEST("CAP-24", real_catalog_login_and_connect_packets_are_typed_and_read_the_offsets_the_legacy_handler_reads) {
   Net n;
   const auto* login = n.codec.resolved("CA_LOGIN");
-  CHECK(login && login->version->opcode == 0x0064 && login->version->length.fixed_size == 55 && !login->version->fields_known);
+  CHECK(login && login->version->opcode == 0x0064 && login->version->length.fixed_size == 55 && login->version->fields_known &&
+        login->version->source == "common-struct");                            // a typed legacy struct, no gateway overlay any more
   const auto* enter = n.codec.resolved("CZ_ENTER");
   CHECK(enter && enter->version->opcode == 0x0436 && enter->version->length.fixed_size == 23);   // RE flavour, not 19
-  // the field types are the gateway's overlay; their offsets must be exactly the offsets the legacy handler reads
-  std::vector<std::uint16_t> offs;
+  CHECK(enter->version->fields_known && enter->version->source == "handler-derived");
+  std::vector<std::uint16_t> offs;                                              // the catalog's field offsets are the offsets the handler reads
   for (const auto& f : n.codec.fields_of("CZ_ENTER")) offs.push_back(f.offset);
   CHECK(offs == enter->version->handler_offsets);
   CHECK(n.codec.version().to_string() == "re/20211103");
   CHECK(*n.codec.set().opcode_of("CZ_ENTER", netproto::Direction::ClientToServer) == 0x0436);
   CHECK(n.codec.set().name_of(0x0064) == std::string("CA_LOGIN"));
+  CHECK(n.codec.set().packet_count() == 1186);                                  // the whole catalog, not a subset
+  CHECK(n.codec.has_packet("ZC_NOTIFY_PLAYERMOVE") && !n.codec.has_packet("NO_SUCH_PACKET"));
 }
 
 TEST("CAP-24", declared_lengths_match_the_legacy_packet_table_where_it_lists_the_packet) {
@@ -106,21 +109,51 @@ TEST("CAP-24", declared_lengths_match_the_legacy_packet_table_where_it_lists_the
   }
 }
 
+namespace {
+// every packet the three listeners send or receive
+const std::vector<std::string>& gateway_packets() {
+  static const std::vector<std::string> v = {
+      "CA_LOGIN", "CA_LOGIN2", "CA_LOGIN3", "CA_LOGIN4", "CA_LOGIN_PCBANG", "CA_LOGIN_CHANNEL", "CA_SSO_LOGIN_REQ", "CA_REQ_HASH",
+      "CA_EXE_HASHCHECK", "CA_CONNECT_INFO_CHANGED", "CT_AUTH", "AC_REFUSE_LOGIN", "AC_ACK_HASH", "TC_RESULT", "AC_ACCEPT_LOGIN",
+      "SC_NOTIFY_BAN", "CH_ENTER", "PING", "CH_CHARLIST_REQ", "CH_SELECT_CHAR", "CH_MAKE_CHAR", "CH_DELETE_CHAR",
+      "CH_DELETE_CHAR3_RESERVED", "CH_DELETE_CHAR3", "CH_DELETE_CHAR3_CANCEL", "CH_SECOND_PASSWD_ACK", "CH_MAKE_SECOND_PASSWD",
+      "CH_EDIT_SECOND_PASSWD", "CH_AVAILABLE_SECOND_PASSWD", "CH_REQ_IS_VALID_CHARNAME", "CH_REQ_CHANGE_CHARNAME",
+      "CH_REQ_CHANGE_CHARACTER_SLOT", "HC_REFUSE_ENTER", "HC_ACCEPT_ENTER", "HC_ACK_CHARINFO_PER_PAGE", "HC_ACCEPT_ENTER2",
+      "HC_CHARLIST_NOTIFY", "HC_BLOCK_CHARACTER", "HC_ACCEPT_MAKECHAR", "HC_REFUSE_MAKECHAR", "HC_ACCEPT_DELETECHAR",
+      "HC_REFUSE_DELETECHAR", "HC_DELETE_CHAR3_RESERVED", "HC_DELETE_CHAR3", "HC_DELETE_CHAR3_CANCEL", "HC_SECOND_PASSWD_LOGIN",
+      "HC_NOTIFY_ZONESVR", "HC_ACK_IS_VALID_CHARNAME", "HC_ACK_CHANGE_CHARNAME", "HC_ACK_CHANGE_CHARACTER_SLOT",
+      "CZ_ENTER", "CZ_NOTIFY_ACTORINIT", "OPAQUE_006A"};
+  return v;
+}
+std::size_t extent(const netproto::FieldSpec& f) {
+  using netproto::FieldType;
+  switch (f.type) {
+    case FieldType::U8: case FieldType::I8: return 1u * f.array_len;
+    case FieldType::U16: case FieldType::I16: return 2u * f.array_len;
+    case FieldType::U32: case FieldType::I32: case FieldType::F32: return 4u * f.array_len;
+    case FieldType::U64: case FieldType::I64: return 8u * f.array_len;
+    case FieldType::Pos3: return 3;
+    case FieldType::Pos6: return 6;
+    default: return f.width;   // string / raw (0 = a tail)
+  }
+}
+}  // namespace
+
 TEST("CAP-24", every_gateway_layout_fits_its_length_without_overlap_and_row_geometry_is_legacys) {
   Net n;
-  for (const auto& rp : n.codec.catalog().resolve(n.codec.version())) {
-    const std::string& name = rp.def->name;
-    if (name.rfind("CZ_", 0) == 0 && name != "CZ_ENTER") continue;      // map packets are not ours
-    const auto& lr = rp.version->length;
+  CHECK(gateway_packets().size() == 53);
+  for (const std::string& name : gateway_packets()) {
+    const auto* rp = n.codec.resolved(name);
+    CHECK(rp != nullptr);
+    const auto& lr = rp->version->length;
     const std::size_t limit = lr.kind == netproto::LengthKind::Fixed ? lr.fixed_size : lr.header_size;
-    std::vector<std::pair<int, int>> spans;
+    std::vector<std::pair<std::size_t, std::size_t>> spans;
     for (const auto& f : n.codec.fields_of(name)) {
-      if (f.name.rfind("[].", 0) == 0) continue;
-      int w = f.type == netproto::FieldType::U8 ? 1 : f.type == netproto::FieldType::U16 ? 2 : f.type == netproto::FieldType::I64 ? 8
-              : (f.type == netproto::FieldType::FixedString || f.type == netproto::FieldType::Raw) ? f.width : 4;
-      if (f.type == netproto::FieldType::Raw && f.width == 0) continue;   // tail
+      if (netproto::is_row_field(f)) continue;
+      const std::size_t w = extent(f);
+      if (w == 0) { CHECK(f.offset == limit); continue; }   // a tail starts where the header ends
       spans.push_back({f.offset, f.offset + w});
-      CHECK(static_cast<std::size_t>(f.offset + w) <= limit);
+      CHECK(f.offset + w <= limit);
     }
     std::sort(spans.begin(), spans.end());
     for (std::size_t i = 1; i < spans.size(); ++i) CHECK(spans[i].first >= spans[i - 1].second);
@@ -129,7 +162,7 @@ TEST("CAP-24", every_gateway_layout_fits_its_length_without_overlap_and_row_geom
   const auto* ent = n.codec.resolved("HC_ACCEPT_ENTER");
   CHECK(ent->version->length.header_size == 27 && ent->version->length.repeat->stride == 175 && wire::kCharInfoSize == 175);
   std::map<std::string, int> off;
-  for (const auto& f : n.codec.fields_of("HC_ACCEPT_ENTER")) if (f.name.rfind("[].", 0) == 0) off[f.name.substr(3)] = f.offset;
+  for (const auto& f : n.codec.fields_of("HC_ACCEPT_ENTER")) if (netproto::is_row_field(f)) off[f.name] = f.offset;
   CHECK(off["GID"] == 0 && off["hp"] == 50 && off["level"] == 92 && off["name"] == 108 && off["Str"] == 132 &&
         off["CharNum"] == 138 && off["mapName"] == 142 && off["DelRevDate"] == 158 && off["sex"] == 174);
   const auto* acc = n.codec.resolved("AC_ACCEPT_LOGIN");
@@ -144,10 +177,10 @@ TEST("CAP-24", decode_encode_roundtrip_and_malformed_input) {
   CHECK(d.name == "CA_LOGIN" && get_str(d, "username") == "fakeuser" && get_str(d, "password") == "Fake-Pass-1" && I(d, "version") == 20211103);
   CHECK(n.codec.encode(d) == f);
   Bytes enter = n.pkt("CZ_ENTER", [](DecodedPacket& p) { set_int(p, "account_id", 2000001); set_int(p, "char_id", 150001);
-                                                          set_int(p, "auth_code", 0xdeadbeef); set_int(p, "client_tick", 77); set_int(p, "sex", 1); });
+                                                          set_int(p, "login_id1", 0xdeadbeef); set_int(p, "client_tick", 77); set_int(p, "sex", 1); });
   CHECK(enter.size() == 23 && enter[0] == 0x36 && enter[1] == 0x04);
   auto de = n.codec.decode(enter);
-  CHECK(I(de, "auth_code") == 0xdeadbeef && I(de, "sex") == 1 && I(de, "account_id") == 2000001);
+  CHECK(I(de, "login_id1") == 0xdeadbeef && I(de, "sex") == 1 && I(de, "account_id") == 2000001);
   bool threw = false;
   try { n.codec.decode(Bytes(f.begin(), f.end() - 1)); } catch (const WireError&) { threw = true; }
   CHECK(threw);                                                           // truncated frame
@@ -158,9 +191,41 @@ TEST("CAP-24", decode_encode_roundtrip_and_malformed_input) {
   try { (void)n.codec.encode(make("NO_SUCH_PACKET")); } catch (const WireError&) { threw = true; }
   CHECK(threw);
   auto s = make("AC_REFUSE_LOGIN");
-  set_int(s, "error", 6); set_str(s, "unblock_time", std::string(40, 'x'));   // over-long string is truncated, NUL terminated
+  set_int(s, "error", 6); set_str(s, "unblock_time", std::string(19, 'x'));   // the longest text that still has room for its NUL
   Bytes sb = n.codec.encode(s);
-  CHECK(sb.size() == 26 && sb[25] == 0 && sb[0] == 0x3e && sb[1] == 0x08);
+  CHECK(sb.size() == 26 && sb[25] == 0 && sb[24] == 'x' && sb[0] == 0x3e && sb[1] == 0x08);
+  // an over-long string is REFUSED, never cut (the legacy safestrncpy cut silently; the private codec copied that)
+  for (std::size_t len : {20u, 21u, 40u}) {
+    set_str(s, "unblock_time", std::string(len, 'x'));
+    threw = false;
+    try { (void)n.codec.encode(s); } catch (const WireError& e) { threw = std::string(e.what()).find("does not fit") != std::string::npos; }
+    CHECK(threw);
+  }
+  {
+    auto l = make("CA_LOGIN");
+    set_str(l, "username", std::string(24, 'u'));
+    threw = false;
+    try { (void)n.codec.encode(l); } catch (const WireError&) { threw = true; }
+    CHECK(threw);
+    set_str(l, "username", std::string(23, 'u'));
+    CHECK(n.codec.encode(l)[6 + 22] == 'u' && n.codec.encode(l)[6 + 23] == 0);
+  }
+  // a NUL inside a string would end it early on the wire: refused as well
+  {
+    auto l = make("CA_LOGIN");
+    set_str(l, "username", std::string("a\0b", 3));
+    threw = false;
+    try { (void)n.codec.encode(l); } catch (const WireError&) { threw = true; }
+    CHECK(threw);
+  }
+  // an unknown field name is an error, not a silent drop
+  {
+    auto l = make("CA_LOGIN");
+    set_int(l, "nope", 1);
+    threw = false;
+    try { (void)n.codec.encode(l); } catch (const WireError&) { threw = true; }
+    CHECK(threw);
+  }
 }
 
 // ---- login listener ------------------------------------------------------------------------------------------------
@@ -263,22 +328,24 @@ TEST("BR-LOGIN-002", sso_and_otp_packets) {
   Net n;
   n.e.add_account();
   auto lc = n.login_conn();
-  Bytes tok(kFakePass, kFakePass + std::strlen(kFakePass));
-  tok.push_back(0);
+  // the token is a `char token[]` string tail: the encoder puts the NUL after it, the decoder cuts at it
+  const std::size_t toklen = std::strlen(kFakePass) + 1;
   auto sso = n.pkt("CA_SSO_LOGIN_REQ", [&](DecodedPacket& p) {
-    set_int(p, "version", 20211103); set_str(p, "username", "fakeuser"); set_bytes(p, "token", tok); });
-  CHECK(sso.size() == 92 + tok.size() && (sso[2] | sso[3] << 8) == static_cast<int>(sso.size()));
+    set_int(p, "version", 20211103); set_str(p, "username", "fakeuser"); set_str(p, "token", kFakePass); });
+  CHECK(sso.size() == 92 + toklen && (sso[2] | sso[3] << 8) == static_cast<int>(sso.size()) && sso.back() == 0);
+  CHECK(get_str(n.codec.decode(sso), "token") == kFakePass);
   auto r = lc->feed(sso);
   CHECK(r.out.size() == 1 && r.out[0][0] == 0xc4);
   // wrong token => 1
   n.e.dir.erase(2000001);
-  Bytes bad(5, 'x');
-  auto r2 = lc->feed(n.pkt("CA_SSO_LOGIN_REQ", [&](DecodedPacket& p) { set_str(p, "username", "fakeuser"); set_bytes(p, "token", bad); }));
+  auto r2 = lc->feed(n.pkt("CA_SSO_LOGIN_REQ", [&](DecodedPacket& p) { set_str(p, "username", "fakeuser"); set_str(p, "token", "xxxxx"); }));
   CHECK(I(n.codec.decode_s2c(r2.out[0]), "error") == 1);
   // OTP: fixed "normal login" answer, grants nothing
   auto r3 = lc->feed(n.pkt("CT_AUTH"));
   auto t = n.codec.decode_s2c(r3.out[0]);
   CHECK(t.name == "TC_RESULT" && I(t, "type") == 0 && get_str(t, "unknown1") == "S1000");
+  // PACKET_TC_RESULT has a packetLength word (variable in the legacy header): 34 bytes, the length at offset 2
+  CHECK(r3.out[0].size() == 34 && (r3.out[0][2] | r3.out[0][3] << 8) == 34 && n.codec.resolved("TC_RESULT")->version->length.kind == netproto::LengthKind::Variable);
   CHECK(!n.e.dir.find(2000001).has_value());
 }
 
@@ -304,11 +371,11 @@ TEST("BR-LOGIN-011", ban_refusal_carries_the_unblock_date_and_other_refusal_pack
   u.unban_time = 0; n.e.accounts.update(u);
   n.e.bus.up = false;
   auto c = n.codec.decode_s2c(lc->feed(n.login_pkt("fakeuser", kFakePass)).out[0]);
-  CHECK(c.name == "SC_NOTIFY_BAN" && I(c, "result") == 1);                       // world down: "server closed"
+  CHECK(c.name == "SC_NOTIFY_BAN" && I(c, "errorCode") == 1);                       // world down: "server closed"
   n.e.bus.up = true;
   n.e.dir.mark({2000001, 0, 5, n.e.clock.now()});
   auto d = n.codec.decode_s2c(lc->feed(n.login_pkt("fakeuser", kFakePass)).out[0]);
-  CHECK(d.name == "SC_NOTIFY_BAN" && I(d, "result") == 8 && n.e.bus.kicks.size() == 1);
+  CHECK(d.name == "SC_NOTIFY_BAN" && I(d, "errorCode") == 8 && n.e.bus.kicks.size() == 1);
   auto e = n.codec.decode_s2c(lc->feed(n.login_pkt("nobody", "x")).out[0]);
   CHECK(e.name == "AC_REFUSE_LOGIN" && I(e, "error") == 0 && get_str(e, "unblock_time").empty());
 }
@@ -493,7 +560,8 @@ TEST("BR-CHAR-001", make_char_packet_accept_and_refuse_codes) {
       set_int(p, "job", job); set_int(p, "sex", sex); }));
   };
   auto ok = n.codec.decode_s2c(make_pkt("Bobby", 0).out[0]);
-  CHECK(ok.name == "HC_ACCEPT_MAKECHAR" && get_str(ok, "name") == "Bobby" && I(ok, "maxhp") == 40 && I(ok, "maxsp") == 11 && I(ok, "CharNum") == 0);
+  CHECK(ok.name == "HC_ACCEPT_MAKECHAR" && get_str(ok, "character.name") == "Bobby" && I(ok, "character.maxhp") == 40 &&
+        I(ok, "character.maxsp") == 11 && I(ok, "character.CharNum") == 0);
   auto stored = n.e.chars.list_by_account(a.id).at(0);
   CHECK(stored.extra.at("client.hair_style") == 4 && stored.extra.at("client.hair_color") == 3);
   CHECK(I(n.codec.decode_s2c(make_pkt("Bobby", 1).out[0]), "error") == 0x00);       // exists (-1)
@@ -592,7 +660,7 @@ TEST("BR-CHAR-026", enter_refusals_over_the_wire_use_the_right_packets) {
   n.e.dir.mark({a.id, 0, 5, n.e.clock.now()});
   auto cc3 = n.char_conn(3);
   auto dup = enter_with(a.id, I(acc, "login_id1"), I(acc, "login_id2"), 1, *cc3);
-  CHECK(dup.disconnect && n.codec.decode_s2c(dup.out[1]).name == "SC_NOTIFY_BAN" && I(n.codec.decode_s2c(dup.out[1]), "result") == 8);
+  CHECK(dup.disconnect && n.codec.decode_s2c(dup.out[1]).name == "SC_NOTIFY_BAN" && I(n.codec.decode_s2c(dup.out[1]), "errorCode") == 8);
 }
 
 TEST("BR-CHAR-015", select_answers_for_missing_and_closed_cases) {
@@ -607,7 +675,7 @@ TEST("BR-CHAR-015", select_answers_for_missing_and_closed_cases) {
   CHECK(none.name == "HC_REFUSE_ENTER" && I(none, "error") == 0);
   n.e.bus.up = false;
   auto closed = n.codec.decode_s2c(sel(0).out[0]);
-  CHECK(closed.name == "SC_NOTIFY_BAN" && I(closed, "result") == 1);
+  CHECK(closed.name == "SC_NOTIFY_BAN" && I(closed, "errorCode") == 1);
   n.e.bus.up = true;
   CHECK(n.codec.decode_s2c(sel(0).out[0]).name == "HC_NOTIFY_ZONESVR");
   (void)c;
@@ -635,16 +703,20 @@ TEST("BR-CHAR-031", world_connect_packet_full_handoff_and_refusals) {
   n.enter(*cc, acc);
   CHECK(cc->feed(n.pkt("CH_SELECT_CHAR", [](DecodedPacket& p) { set_int(p, "slot", 0); })).out.size() == 1);
   auto connect = [&](WorldConnection& w, std::int64_t aid, std::int64_t cid, std::int64_t auth, std::int64_t sex) {
-    return w.feed(n.pkt("CZ_ENTER", [&](DecodedPacket& p) { set_int(p, "account_id", aid); set_int(p, "char_id", cid); set_int(p, "auth_code", auth); set_int(p, "client_tick", 5); set_int(p, "sex", sex); }));
+    return w.feed(n.pkt("CZ_ENTER", [&](DecodedPacket& p) { set_int(p, "account_id", aid); set_int(p, "char_id", cid); set_int(p, "login_id1", auth); set_int(p, "client_tick", 5); set_int(p, "sex", sex); }));
   };
   {  // BR-MAP-060 checks come first
     WorldConnection w(n.codec, n.e.chr);
     auto r = connect(w, 5, c, I(acc, "login_id1"), 1);
-    CHECK(r.disconnect && n.codec.decode_s2c(r.out[0]).name == "ZC_REFUSE_ENTER" && I(n.codec.decode_s2c(r.out[0]), "error") == 2);
+    // clif_parse_WantToConnection answers on opcode 0x006a with packet_len(0x6a) = 23 bytes and the code at byte 2
+    // (src/map/clif.cpp:10685): neither ZC_REFUSE_ENTER (0x0074, 3 bytes) nor a 3-byte 0x006a
+    CHECK(r.disconnect && r.out.size() == 1 && r.out[0].size() == 23 && r.out[0][0] == 0x6a && r.out[0][1] == 0x00 && r.out[0][2] == 2);
+    CHECK(std::all_of(r.out[0].begin() + 3, r.out[0].end(), [](std::uint8_t b) { return b == 0; }));   // the legacy left these unset; we send zeros
+    CHECK(n.codec.decode_s2c(r.out[0]).name == std::string(wire::kConnectRefusal));
     WorldConnection w2(n.codec, n.e.chr);
-    CHECK(I(n.codec.decode_s2c(connect(w2, a.id, 0, I(acc, "login_id1"), 1).out[0]), "error") == 3);
+    CHECK(connect(w2, a.id, 0, I(acc, "login_id1"), 1).out.at(0).at(2) == 3);
     WorldConnection w3(n.codec, n.e.chr);
-    CHECK(I(n.codec.decode_s2c(connect(w3, a.id, c, I(acc, "login_id1"), 7).out[0]), "error") == 6);
+    CHECK(connect(w3, a.id, c, I(acc, "login_id1"), 7).out.at(0).at(2) == 6);
   }
   {  // phase gate: the load-end ack before the connect packet is out of phase
     WorldConnection w(n.codec, n.e.chr);
@@ -653,7 +725,7 @@ TEST("BR-CHAR-031", world_connect_packet_full_handoff_and_refusals) {
   {  // wrong auth code: SC_NOTIFY_BAN(0) and disconnect; the right code afterwards still works (ticket not burnt)
     WorldConnection w(n.codec, n.e.chr);
     auto r = connect(w, a.id, c, I(acc, "login_id1") + 1, 1);
-    CHECK(r.disconnect && n.codec.decode_s2c(r.out[0]).name == "SC_NOTIFY_BAN" && I(n.codec.decode_s2c(r.out[0]), "result") == 0);
+    CHECK(r.disconnect && n.codec.decode_s2c(r.out[0]).name == "SC_NOTIFY_BAN" && I(n.codec.decode_s2c(r.out[0]), "errorCode") == 0);
   }
   WorldConnection w(n.codec, n.e.chr);
   auto ok = connect(w, a.id, c, I(acc, "login_id1"), 1);
@@ -671,7 +743,7 @@ TEST("BR-CHAR-031", login_ids_presented_straight_to_the_world_do_not_bypass_char
   auto acc = n.do_login();
   WorldConnection w(n.codec, n.e.chr);
   auto r = w.feed(n.pkt("CZ_ENTER", [&](DecodedPacket& p) { set_int(p, "account_id", a.id); set_int(p, "char_id", c);
-                                                         set_int(p, "auth_code", I(acc, "login_id1")); set_int(p, "sex", 1); }));
+                                                         set_int(p, "login_id1", I(acc, "login_id1")); set_int(p, "sex", 1); }));
   CHECK(r.disconnect && !r.world_entered);
 }
 

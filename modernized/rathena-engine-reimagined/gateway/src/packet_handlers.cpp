@@ -43,7 +43,7 @@ const LanSubnet* lan_subnet_for(std::uint32_t client_ip, const std::vector<LanSu
 // ---- base: framing, gating, budget -------------------------------------------------------------------
 void ConnectionBase::service_error(HandlerResult& r, Reason why) {
   DecodedPacket p = make("SC_NOTIFY_BAN");
-  set_int(p, "result", refuse::ServerClosed);
+  set_int(p, "errorCode", refuse::ServerClosed);
   send(r, p);
   drop(r, why == Reason::Overloaded ? "overloaded" : "database unavailable");
 }
@@ -70,7 +70,7 @@ HandlerResult ConnectionBase::pump() {
     if (!budget_.try_consume()) break;  // the rest waits for the next cycle
     Bytes frame(buf_.begin(), buf_.begin() + fr.length);
     buf_.erase(buf_.begin(), buf_.begin() + fr.length);
-    const auto gate = codec_.gate_of(fr.opcode);
+    const auto gate = codec_.gate_of(fr.opcode);  // the gate column of netproto's catalog, nothing else decides
     if (!gate || netproto::gate_packet(session_phase(), *gate) != netproto::GateDecision::kAllow) {
       drop(r, "packet not allowed in this phase");
       break;
@@ -116,7 +116,7 @@ void LoginConnection::do_login(const LoginRequest& req, HandlerResult& r) {
       case Reason::GroupGate: case Reason::WorldDown: case Reason::AlreadyOnline: case Reason::DatabaseDown:
       case Reason::Overloaded: case Reason::RateLimited: case Reason::Internal: {
         DecodedPacket p = make("SC_NOTIFY_BAN");  // logclif_sent_auth_result: 1 closed, 8 still online
-        set_int(p, "result", o.refusal_code);
+        set_int(p, "errorCode", o.refusal_code);
         send(r, p);
         return;
       }
@@ -137,10 +137,10 @@ void LoginConnection::do_login(const LoginRequest& req, HandlerResult& r) {
   const LanSubnet* lan = lan_subnet_for(ipv4_, lan_);
   row["ip"] = static_cast<std::int64_t>(ip_le(lan ? lan->ip : server_.ip));
   row["port"] = static_cast<std::int64_t>(server_.port);
-  row["name"] = server_.name;
+  row["name"] = fit(server_.name, 20);  // char name[20]: operator text, cut like legacy safestrncpy
   row["users"] = static_cast<std::int64_t>(population_code(users_ ? users_() : 0, th_));
   row["type"] = static_cast<std::int64_t>(server_.type);
-  row["new"] = static_cast<std::int64_t>(server_.is_new);
+  row["new_"] = static_cast<std::int64_t>(server_.is_new);  // the legacy member (`new` is a C++ keyword)
   p.repeats.push_back(std::move(row));
   send(r, p);
 }
@@ -169,10 +169,7 @@ void LoginConnection::on_frame(const DecodedPacket& p, std::uint16_t, HandlerRes
   } else if (n == "CA_SSO_LOGIN_REQ") {
     req.kind = LoginKind::Sso;
     req.userid = get_str(p, "username");
-    Bytes tok = get_bytes(p, "token");
-    std::string t(tok.begin(), tok.end());
-    t = t.substr(0, t.find('\0'));
-    req.secret = t.substr(0, 31);  // PASSWD_LENGTH - 1, like safestrncpy in legacy
+    req.secret = get_str(p, "token").substr(0, 31);  // string tail up to its NUL; PASSWD_LENGTH - 1, like safestrncpy in legacy
     do_login(req, r);
   } else if (n == "CA_REQ_HASH") {
     md5key_ = svc_.make_challenge_salt(20);
@@ -224,11 +221,11 @@ rules::CharPacket category_of(const std::string& n) {
 }
 }  // namespace
 
-void CharConnection::fill_row(std::map<std::string, FieldValue>& row, const Character& c) {
-  auto I = [&](const char* k, std::int64_t v) { row[k] = v; };
+void CharConnection::fill_row(std::map<std::string, FieldValue>& row, const Character& c, const std::string& prefix) {
+  auto I = [&](const char* k, std::int64_t v) { row[prefix + k] = v; };
   I("GID", c.id);
   I("level", c.base_level);
-  row["name"] = c.name;
+  row[prefix + "name"] = fit(c.name, 24);
   I("Str", c.str); I("Agi", c.agi); I("Vit", c.vit); I("Int", c.int_); I("Dex", c.dex); I("Luk", c.luk);
   I("CharNum", c.slot);
   I("hp", c.max_hp); I("maxhp", c.max_hp); I("sp", c.max_sp); I("maxsp", c.max_sp);
@@ -236,7 +233,7 @@ void CharConnection::fill_row(std::map<std::string, FieldValue>& row, const Char
   I("chr_slot_changeCnt", c.slot_moves);
   I("chr_name_changeCnt", c.rename_counter);
   I("sex", wire::sex_to_wire(c.sex));
-  row["mapName"] = map_name_of_ ? map_name_of_(c) : std::string();
+  row[prefix + "mapName"] = fit(map_name_of_ ? map_name_of_(c) : std::string(), 16);
   I("DelRevDate", c.delete_date ? c.delete_date - svc_.now() : 0);   // remaining seconds, like the legacy field
 }
 
@@ -297,7 +294,7 @@ void CharConnection::send_char_list(HandlerResult& r, const EnterOutcome& e) {
     if (c.unban_time > now) {
       std::map<std::string, FieldValue> row;
       row["CID"] = static_cast<std::int64_t>(c.id);
-      row["unblock_time"] = format_time(c.unban_time);
+      row["unblock_time"] = fit(format_time(c.unban_time), 20);
       blk.repeats.push_back(std::move(row));
     }
   }
@@ -327,7 +324,7 @@ void CharConnection::on_frame(const DecodedPacket& p, std::uint16_t, HandlerResu
     if (!e.ok) {
       if (e.via_notify_ban) {
         DecodedPacket b = make("SC_NOTIFY_BAN");
-        set_int(b, "result", e.refusal_code);
+        set_int(b, "errorCode", e.refusal_code);
         send(r, b);
       } else {
         DecodedPacket b = make("HC_REFUSE_ENTER");
@@ -393,13 +390,13 @@ void CharConnection::on_frame(const DecodedPacket& p, std::uint16_t, HandlerResu
   if (n == "CH_SELECT_CHAR") {
     const SelectOutcome o = svc_.select(cs_, static_cast<int>(get_int(p, "slot")));
     if (!o.ok) {
-      if (o.code == 1) { DecodedPacket b = make("SC_NOTIFY_BAN"); set_int(b, "result", 1); send(r, b); }
+      if (o.code == 1) { DecodedPacket b = make("SC_NOTIFY_BAN"); set_int(b, "errorCode", 1); send(r, b); }
       else { DecodedPacket b = make("HC_REFUSE_ENTER"); set_int(b, "error", 0); send(r, b); }
       return;
     }
     DecodedPacket z = make("HC_NOTIFY_ZONESVR");
     set_int(z, "CID", o.ch.id);
-    set_str(z, "mapname", map_name_of_ ? map_name_of_(o.ch) : std::string());
+    set_str(z, "mapname", fit(map_name_of_ ? map_name_of_(o.ch) : std::string(), 16));
     set_int(z, "ip", ip_le(world_.ip));
     set_int(z, "port", world_.port);
     send(r, z);
@@ -424,9 +421,7 @@ void CharConnection::on_frame(const DecodedPacket& p, std::uint16_t, HandlerResu
       return;
     }
     DecodedPacket b = make("HC_ACCEPT_MAKECHAR");
-    std::map<std::string, FieldValue> row;
-    fill_row(row, o.ch);
-    b.fields = row;
+    fill_row(b.fields, o.ch, "character.");  // PACKET_HC_ACCEPT_MAKECHAR embeds the CHARACTER_INFO as `character`
     send(r, b);
     return;
   }
@@ -518,20 +513,25 @@ void CharConnection::on_frame(const DecodedPacket& p, std::uint16_t, HandlerResu
 
 // ---- world connect --------------------------------------------------------------------------------------
 void WorldConnection::on_frame(const DecodedPacket& p, std::uint16_t, HandlerResult& r) {
+  if (p.name == "CZ_NOTIFY_ACTORINIT") {  // gate PreMapLoad: only reachable after the connect packet was accepted
+    phase_ = netproto::Phase::InWorld;     // the map is loaded; from here on the in-world gate admits the packets
+    r.map_loaded = true;
+    return;
+  }
   if (p.name != "CZ_ENTER") { if (!authed_) drop(r, "unexpected packet before world connect"); return; }
-  netproto::ConnectPacket cp;
-  cp.account_id = get_int(p, "account_id");
-  cp.char_id = get_int(p, "char_id");
-  cp.login_id1 = static_cast<std::uint32_t>(get_int(p, "auth_code"));
-  cp.client_tick = static_cast<std::uint32_t>(get_int(p, "client_tick"));
-  cp.sex = static_cast<std::uint8_t>(get_int(p, "sex"));
+  const std::optional<netproto::ConnectPacket> parsed = netproto::connect_packet_from(p);  // names from the catalog
+  if (!parsed) { drop(r, "malformed connect packet"); return; }
+  const netproto::ConnectPacket cp = *parsed;
   const auto* res = codec_.resolved("CZ_ENTER");
   const std::size_t expected = res->version->length.fixed_size;
   const netproto::ConnectError err = netproto::validate_connect(expected, expected, cp, authed_);  // BR-MAP-060
   if (err == netproto::ConnectError::kAlreadyLoggedIn) return;  // ignored, like legacy
   if (err != netproto::ConnectError::kNone) {
-    DecodedPacket b = make("ZC_REFUSE_ENTER");
-    set_int(b, "error", netproto::refusal_code(err));
+    // clif_parse_WantToConnection: opcode 0x006a, packet_len(0x6a) = 23 bytes, the code at byte 2, the rest unused
+    DecodedPacket b = make(kConnectRefusal);
+    Bytes payload(21, 0);
+    payload[0] = netproto::refusal_code(err);
+    set_bytes(b, "payload", payload);
     send(r, b);
     drop(r, "invalid connect packet");
     return;
@@ -539,8 +539,8 @@ void WorldConnection::on_frame(const DecodedPacket& p, std::uint16_t, HandlerRes
   const Sex sex = cp.sex == 1 ? Sex::Male : Sex::Female;
   if (!svc_.authenticate_from_world(static_cast<AccountId>(cp.account_id), static_cast<CharId>(cp.char_id),
                                     cp.login_id1, &sex)) {
-    DecodedPacket b = make("SC_NOTIFY_BAN");  // clif_authfail_fd(fd, 0)
-    set_int(b, "result", 0);
+    DecodedPacket b = make("SC_NOTIFY_BAN");  // clif_authfail_fd(fd, 0): PACKET_SC_NOTIFY_BAN 0x0081
+    set_int(b, "errorCode", 0);
     send(r, b);
     drop(r, "world auth refused");
     return;
